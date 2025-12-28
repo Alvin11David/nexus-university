@@ -7,6 +7,9 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import Registration from "./pages/Registration";
+import Enrollment from "./pages/Enrollment";
+import Portal from "./pages/Portal";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +38,9 @@ function AppRoutes() {
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/registration" element={<ProtectedRoute><Registration /></ProtectedRoute>} />
+      <Route path="/enrollment" element={<ProtectedRoute><Enrollment /></ProtectedRoute>} />
+      <Route path="/portal" element={<ProtectedRoute><Portal /></ProtectedRoute>} />
       <Route path="/courses" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/live" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
