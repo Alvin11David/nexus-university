@@ -1,0 +1,243 @@
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { BookOpen, Clock, CheckCircle2, XCircle, AlertCircle, Plus, Calendar, ChevronRight, Loader2, GraduationCap } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Header } from '@/components/layout/Header';
+import { BottomNav } from '@/components/layout/BottomNav';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Enrollment {
+  id: string;
+  course_id: string;
+  status: 'pending' | 'approved' | 'rejected' | 'completed';
+  enrolled_at: string;
+  grade: number | null;
+  course?: {
+    id: string;
+    code: string;
+    title: string;
+    credits: number;
+    semester: string;
+  };
+}
+
+const statusConfig = {
+  pending: { icon: Clock, color: 'bg-amber-500/10 text-amber-600', label: 'Pending Approval' },
+  approved: { icon: CheckCircle2, color: 'bg-emerald-500/10 text-emerald-600', label: 'Approved' },
+  rejected: { icon: XCircle, color: 'bg-destructive/10 text-destructive', label: 'Rejected' },
+  completed: { icon: CheckCircle2, color: 'bg-primary/10 text-primary', label: 'Completed' },
+};
+
+export default function Enrollment() {
+  const { user } = useAuth();
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSemester, setSelectedSemester] = useState<string>('all');
+
+  useEffect(() => {
+    if (user) fetchEnrollments();
+  }, [user]);
+
+  const fetchEnrollments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+          *,
+          course:courses(id, code, title, credits, semester)
+        `)
+        .eq('student_id', user?.id)
+        .order('enrolled_at', { ascending: false });
+
+      if (error) throw error;
+      setEnrollments(data || []);
+    } catch (error) {
+      console.error('Error fetching enrollments:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const semesters = [...new Set(enrollments.map(e => e.course?.semester).filter(Boolean))];
+  
+  const filteredEnrollments = enrollments.filter(e => 
+    selectedSemester === 'all' || e.course?.semester === selectedSemester
+  );
+
+  const stats = {
+    total: enrollments.length,
+    approved: enrollments.filter(e => e.status === 'approved').length,
+    pending: enrollments.filter(e => e.status === 'pending').length,
+    credits: enrollments
+      .filter(e => e.status === 'approved' || e.status === 'completed')
+      .reduce((acc, e) => acc + (e.course?.credits || 0), 0),
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-secondary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-24 md:pb-8">
+      <Header />
+      
+      <main className="container py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-6xl mx-auto"
+        >
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                <GraduationCap className="h-4 w-4" />
+                <span>Academic</span>
+                <ChevronRight className="h-4 w-4" />
+                <span className="text-foreground">Enrollment Status</span>
+              </div>
+              <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground">
+                My Enrollments
+              </h1>
+            </div>
+            <Button asChild className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+              <Link to="/registration">
+                <Plus className="h-4 w-4 mr-2" />
+                Register Courses
+              </Link>
+            </Button>
+          </div>
+
+          {/* Stats Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            {[
+              { label: 'Total Courses', value: stats.total, icon: BookOpen },
+              { label: 'Approved', value: stats.approved, icon: CheckCircle2 },
+              { label: 'Pending', value: stats.pending, icon: Clock },
+              { label: 'Total Credits', value: stats.credits, icon: Calendar },
+            ].map((stat, i) => (
+              <motion.div
+                key={stat.label}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+              >
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <stat.icon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <p className="text-2xl font-bold">{stat.value}</p>
+                    <p className="text-sm text-muted-foreground">{stat.label}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Filter */}
+          <div className="flex items-center gap-4 mb-6">
+            <Select value={selectedSemester} onValueChange={setSelectedSemester}>
+              <SelectTrigger className="w-[200px]">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Semesters" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Semesters</SelectItem>
+                {semesters.map(sem => (
+                  <SelectItem key={sem} value={sem!}>{sem}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Enrollments List */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Enrolled Courses</span>
+                <Badge variant="outline">{filteredEnrollments.length} courses</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredEnrollments.length === 0 ? (
+                <div className="text-center py-12">
+                  <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="font-semibold text-lg mb-2">No enrollments yet</h3>
+                  <p className="text-muted-foreground mb-6">Start by registering for courses</p>
+                  <Button asChild>
+                    <Link to="/registration">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Browse Courses
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {filteredEnrollments.map((enrollment, i) => {
+                    const status = statusConfig[enrollment.status];
+                    const StatusIcon = status.icon;
+                    return (
+                      <motion.div
+                        key={enrollment.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="py-4 first:pt-0 last:pb-0"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-4 min-w-0">
+                            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                              <BookOpen className="h-6 w-6 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  {enrollment.course?.code}
+                                </Badge>
+                                <Badge className="bg-accent/10 text-accent hover:bg-accent/20 text-xs">
+                                  {enrollment.course?.credits} Credits
+                                </Badge>
+                              </div>
+                              <h3 className="font-medium mt-1 truncate">{enrollment.course?.title}</h3>
+                              <p className="text-sm text-muted-foreground">
+                                {enrollment.course?.semester} • Enrolled {new Date(enrollment.enrolled_at).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            {enrollment.grade !== null && (
+                              <div className="text-right">
+                                <p className="text-xs text-muted-foreground">Grade</p>
+                                <p className="font-bold text-lg">{enrollment.grade}%</p>
+                              </div>
+                            )}
+                            <Badge className={`${status.color} gap-1`}>
+                              <StatusIcon className="h-3 w-3" />
+                              {status.label}
+                            </Badge>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+      </main>
+      
+      <BottomNav />
+    </div>
+  );
+}
