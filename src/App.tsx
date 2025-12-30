@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Registration from "./pages/Registration";
 import Enrollment from "./pages/Enrollment";
 import Portal from "./pages/Portal";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,7 +47,7 @@ function AppRoutes() {
       <Route path="/profile" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/schedule" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/settings" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
