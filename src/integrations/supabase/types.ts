@@ -574,6 +574,44 @@ export type Database = {
         }
         Relationships: []
       }
+      otp_verifications: {
+        Row: {
+          created_at: string | null
+          email: string
+          expires_at: string
+          id: string
+          otp_code: string
+          student_record_id: string | null
+          verified: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          expires_at: string
+          id?: string
+          otp_code: string
+          student_record_id?: string | null
+          verified?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          otp_code?: string
+          student_record_id?: string | null
+          verified?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "otp_verifications_student_record_id_fkey"
+            columns: ["student_record_id"]
+            isOneToOne: false
+            referencedRelation: "student_records"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -626,7 +664,9 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          registration_number: string | null
           student_number: string | null
+          student_record_id: string | null
           updated_at: string
         }
         Insert: {
@@ -639,7 +679,9 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
+          registration_number?: string | null
           student_number?: string | null
+          student_record_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -652,10 +694,20 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          registration_number?: string | null
           student_number?: string | null
+          student_record_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_student_record_id_fkey"
+            columns: ["student_record_id"]
+            isOneToOne: false
+            referencedRelation: "student_records"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quiz_attempts: {
         Row: {
@@ -823,6 +875,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      student_records: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          full_name: string
+          id: string
+          is_registered: boolean | null
+          registration_number: string
+          student_number: string
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          is_registered?: boolean | null
+          registration_number: string
+          student_number: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_registered?: boolean | null
+          registration_number?: string
+          student_number?: string
+        }
+        Relationships: []
       }
       submissions: {
         Row: {
