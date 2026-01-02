@@ -1,19 +1,44 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Receipt, Copy, CheckCircle2, RefreshCw, Download, 
-  AlertCircle, Clock, Sparkles, CreditCard, Shield,
-  QrCode, Share2, Zap, ArrowRight, Layers, Eye
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Receipt,
+  Copy,
+  CheckCircle2,
+  RefreshCw,
+  Download,
+  AlertCircle,
+  Clock,
+  Sparkles,
+  CreditCard,
+  Shield,
+  QrCode,
+  Share2,
+  Zap,
+  ArrowRight,
+  Layers,
+  Eye,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface GeneratedPRN {
   id?: string;
@@ -38,15 +63,15 @@ interface Fee {
 export function GeneratePRNTab() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
-  const [amount, setAmount] = useState('');
-  const [purpose, setPurpose] = useState('');
+  const [amount, setAmount] = useState("");
+  const [purpose, setPurpose] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedPRN, setGeneratedPRN] = useState<GeneratedPRN | null>(null);
   const [copied, setCopied] = useState(false);
   const [recentPRNs, setRecentPRNs] = useState<GeneratedPRN[]>([]);
   const [showQR, setShowQR] = useState(false);
   const [fees, setFees] = useState<Fee[]>([]);
-  const [selectedFeeId, setSelectedFeeId] = useState<string>('');
+  const [selectedFeeId, setSelectedFeeId] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -59,35 +84,65 @@ export function GeneratePRNTab() {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('fees')
-        .select('*')
-        .eq('student_id', user?.id)
-        .order('due_date', { ascending: false });
+        .from("fees")
+        .select("*")
+        .eq("student_id", user?.id)
+        .order("due_date", { ascending: false });
 
       if (error) throw error;
       setFees(data || []);
     } catch (error) {
-      console.error('Error fetching fees:', error);
+      console.error("Error fetching fees:", error);
     } finally {
       setLoading(false);
     }
   };
 
   const purposes = [
-    { value: 'tuition', label: 'Tuition Fees', icon: '🎓', amount: 2500000 },
-    { value: 'functional', label: 'Functional Fees', icon: '⚡', amount: 500000 },
-    { value: 'retake', label: 'Retake Examination', icon: '📝', amount: 100000 },
-    { value: 'supplementary', label: 'Supplementary Exam', icon: '📋', amount: 150000 },
-    { value: 'transcript', label: 'Academic Transcript', icon: '📄', amount: 50000 },
-    { value: 'certificate', label: 'Certificate Collection', icon: '🏆', amount: 75000 },
-    { value: 'id_card', label: 'Student ID Card', icon: '🪪', amount: 25000 },
-    { value: 'library', label: 'Library Fine', icon: '📚', amount: 10000 },
-    { value: 'accommodation', label: 'Accommodation Fee', icon: '🏠', amount: 1200000 },
+    { value: "tuition", label: "Tuition Fees", icon: "🎓", amount: 2500000 },
+    {
+      value: "functional",
+      label: "Functional Fees",
+      icon: "⚡",
+      amount: 500000,
+    },
+    {
+      value: "retake",
+      label: "Retake Examination",
+      icon: "📝",
+      amount: 100000,
+    },
+    {
+      value: "supplementary",
+      label: "Supplementary Exam",
+      icon: "📋",
+      amount: 150000,
+    },
+    {
+      value: "transcript",
+      label: "Academic Transcript",
+      icon: "📄",
+      amount: 50000,
+    },
+    {
+      value: "certificate",
+      label: "Certificate Collection",
+      icon: "🏆",
+      amount: 75000,
+    },
+    { value: "id_card", label: "Student ID Card", icon: "🪪", amount: 25000 },
+    { value: "library", label: "Library Fine", icon: "📚", amount: 10000 },
+    {
+      value: "accommodation",
+      label: "Accommodation Fee",
+      icon: "🏠",
+      amount: 1200000,
+    },
   ];
 
   const handlePurposeChange = (value: string) => {
     setPurpose(value);
-    const selectedPurpose = purposes.find(p => p.value === value);
+    const selectedPurpose = purposes.find((p) => p.value === value);
     if (selectedPurpose) {
       setAmount(selectedPurpose.amount.toString());
     }
@@ -98,35 +153,117 @@ export function GeneratePRNTab() {
       toast({
         title: "Missing Information",
         description: "Please enter an amount and select a purpose",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
     setIsGenerating(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    const prefix = purpose.substring(0, 3).toUpperCase();
-    
-    const newPRN: GeneratedPRN = {
-      code: `PRN-${prefix}-${timestamp}-${random}`,
-      amount: parseFloat(amount),
-      purpose: purposes.find(p => p.value === purpose)?.label || purpose,
-      generatedAt: new Date(),
-      expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-    };
-    
-    setGeneratedPRN(newPRN);
-    setRecentPRNs(prev => [newPRN, ...prev.slice(0, 4)]);
-    setIsGenerating(false);
-    
-    toast({
-      title: "PRN Generated Successfully",
-      description: "Your payment reference number is ready",
-    });
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const timestamp = Date.now().toString(36).toUpperCase();
+      const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const prefix = purpose.substring(0, 3).toUpperCase();
+      const prnCode = `PRN-${prefix}-${timestamp}-${random}`;
+      const parsedAmount = parseFloat(amount);
+
+      // If a fee is selected, create a payment record
+      let paymentId: string | undefined;
+      if (selectedFeeId && user?.id) {
+        const selectedFee = fees.find((f) => f.id === selectedFeeId);
+        if (!selectedFee) {
+          throw new Error("Fee not found");
+        }
+
+        // Check if payment amount exceeds remaining balance
+        const remainingBalance = selectedFee.amount - selectedFee.paid_amount;
+        if (parsedAmount > remainingBalance) {
+          toast({
+            title: "Invalid Amount",
+            description: `Amount exceeds remaining balance (UGX ${remainingBalance.toLocaleString()})`,
+            variant: "destructive",
+          });
+          setIsGenerating(false);
+          return;
+        }
+
+        // Create payment record in database
+        const { data: paymentData, error: paymentError } = await supabase
+          .from("payments")
+          .insert({
+            fee_id: selectedFeeId,
+            student_id: user.id,
+            amount: parsedAmount,
+            payment_method: "PRN",
+            transaction_ref: prnCode,
+            status: "completed",
+            paid_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (paymentError) throw paymentError;
+        paymentId = paymentData?.id;
+
+        // Update the fee's paid_amount
+        const newPaidAmount = selectedFee.paid_amount + parsedAmount;
+        const { error: updateError } = await supabase
+          .from("fees")
+          .update({
+            paid_amount: newPaidAmount,
+          })
+          .eq("id", selectedFeeId);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: "Payment Recorded Successfully",
+          description: `Payment of UGX ${parsedAmount.toLocaleString()} has been recorded and your fees updated`,
+        });
+      } else {
+        // If no fee selected, just create the PRN reference
+        toast({
+          title: "PRN Generated Successfully",
+          description: "Your payment reference number is ready",
+        });
+      }
+
+      const purposeLabel =
+        purposes.find((p) => p.value === purpose)?.label || purpose;
+
+      const newPRN: GeneratedPRN = {
+        id: paymentId,
+        code: prnCode,
+        amount: parsedAmount,
+        purpose: purposeLabel,
+        generatedAt: new Date(),
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+        fee_id: selectedFeeId,
+        status: "completed",
+      };
+
+      setGeneratedPRN(newPRN);
+      setRecentPRNs((prev) => [newPRN, ...prev.slice(0, 4)]);
+
+      // Reset form
+      setAmount("");
+      setPurpose("");
+      setSelectedFeeId("");
+
+      // Refresh fees to show updated paid amounts
+      await fetchFees();
+    } catch (error) {
+      console.error("Error generating PRN:", error);
+      toast({
+        title: "Error",
+        description: "Failed to generate PRN. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const copyToClipboard = () => {
@@ -140,7 +277,7 @@ export function GeneratePRNTab() {
 
   const downloadPRN = () => {
     if (!generatedPRN) return;
-    
+
     const content = `
 ═══════════════════════════════════════════════════════════════
                     PAYMENT REFERENCE NUMBER (PRN)
@@ -154,7 +291,7 @@ export function GeneratePRNTab() {
     Expires:         ${generatedPRN.expiresAt.toLocaleString()}
     
     Student:         ${profile?.full_name}
-    Student Number:  ${profile?.student_number || 'N/A'}
+    Student Number:  ${profile?.student_number || "N/A"}
 
 ═══════════════════════════════════════════════════════════════
     
@@ -166,18 +303,18 @@ export function GeneratePRNTab() {
 
 ═══════════════════════════════════════════════════════════════
     `.trim();
-    
-    const blob = new Blob([content], { type: 'text/plain' });
+
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `PRN-${generatedPRN.code}.txt`;
     a.click();
   };
 
   const formatAmount = (value: string) => {
-    const num = parseInt(value.replace(/,/g, ''));
-    if (isNaN(num)) return '';
+    const num = parseInt(value.replace(/,/g, ""));
+    if (isNaN(num)) return "";
     return num.toLocaleString();
   };
 
@@ -185,12 +322,12 @@ export function GeneratePRNTab() {
     <div className="relative">
       {/* Ambient Background Effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <motion.div 
+        <motion.div
           className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-secondary/20 to-accent/20 rounded-full blur-3xl"
           animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
           transition={{ duration: 8, repeat: Infinity }}
         />
-        <motion.div 
+        <motion.div
           className="absolute -bottom-40 -left-40 w-96 h-96 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full blur-3xl"
           animate={{ scale: [1.2, 1, 1.2], opacity: [0.2, 0.4, 0.2] }}
           transition={{ duration: 10, repeat: Infinity }}
@@ -213,7 +350,11 @@ export function GeneratePRNTab() {
               <div className="absolute top-4 right-4">
                 <motion.div
                   animate={{ y: [0, -10, 0] }}
-                  transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" as const }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "easeInOut" as const,
+                  }}
                 >
                   <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-secondary via-accent to-secondary shadow-lg shadow-secondary/30 flex items-center justify-center">
                     <Receipt className="h-8 w-8 text-secondary-foreground" />
@@ -231,7 +372,8 @@ export function GeneratePRNTab() {
                     Generate PRN
                   </CardTitle>
                   <CardDescription className="text-base">
-                    Create a payment reference number for university fees and services
+                    Create a payment reference number for university fees and
+                    services
                   </CardDescription>
                 </div>
               </CardHeader>
@@ -251,13 +393,15 @@ export function GeneratePRNTab() {
                         transition={{ delay: i * 0.05 }}
                         onClick={() => handlePurposeChange(p.value)}
                         className={`relative p-4 rounded-2xl border-2 transition-all duration-300 text-left group ${
-                          purpose === p.value 
-                            ? 'border-secondary bg-secondary/10 shadow-lg shadow-secondary/20' 
-                            : 'border-border hover:border-secondary/50 hover:bg-muted/50'
+                          purpose === p.value
+                            ? "border-secondary bg-secondary/10 shadow-lg shadow-secondary/20"
+                            : "border-border hover:border-secondary/50 hover:bg-muted/50"
                         }`}
                       >
                         <span className="text-2xl mb-2 block">{p.icon}</span>
-                        <span className="text-xs font-medium block truncate">{p.label}</span>
+                        <span className="text-xs font-medium block truncate">
+                          {p.label}
+                        </span>
                         {purpose === p.value && (
                           <motion.div
                             layoutId="selected"
@@ -268,6 +412,93 @@ export function GeneratePRNTab() {
                     ))}
                   </div>
                 </div>
+
+                {/* Fee Selection - Link to Student Fees */}
+                {fees.length > 0 && (
+                  <div className="space-y-3 p-4 rounded-2xl bg-muted/30 border border-border">
+                    <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                      Pay Towards Outstanding Fee (Optional)
+                    </Label>
+                    <Select
+                      value={selectedFeeId}
+                      onValueChange={setSelectedFeeId}
+                    >
+                      <SelectTrigger className="rounded-xl border-2 h-12">
+                        <SelectValue placeholder="Select a fee to pay towards..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fees.map((fee) => {
+                          const remaining = fee.amount - fee.paid_amount;
+                          return (
+                            <SelectItem key={fee.id} value={fee.id}>
+                              <div className="flex items-center gap-4">
+                                <div>
+                                  <span className="font-medium">
+                                    {fee.description}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground ml-2">
+                                    ({fee.semester})
+                                  </span>
+                                </div>
+                                <span className="text-xs bg-muted px-2 py-1 rounded">
+                                  Remaining: UGX {remaining.toLocaleString()}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    {selectedFeeId && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="space-y-2 pt-2"
+                      >
+                        {fees.find((f) => f.id === selectedFeeId) && (
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Total Fee:
+                              </span>
+                              <span className="font-medium">
+                                UGX{" "}
+                                {fees
+                                  .find((f) => f.id === selectedFeeId)
+                                  ?.amount.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Already Paid:
+                              </span>
+                              <span className="font-medium text-emerald-600">
+                                UGX{" "}
+                                {fees
+                                  .find((f) => f.id === selectedFeeId)
+                                  ?.paid_amount.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between border-t pt-1">
+                              <span className="text-muted-foreground">
+                                Remaining Balance:
+                              </span>
+                              <span className="font-semibold text-lg">
+                                UGX{" "}
+                                {(
+                                  (fees.find((f) => f.id === selectedFeeId)
+                                    ?.amount || 0) -
+                                  (fees.find((f) => f.id === selectedFeeId)
+                                    ?.paid_amount || 0)
+                                ).toLocaleString()}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+                  </div>
+                )}
 
                 {/* Amount Input - Premium Style */}
                 <div className="space-y-3">
@@ -281,7 +512,9 @@ export function GeneratePRNTab() {
                     <Input
                       type="text"
                       value={formatAmount(amount)}
-                      onChange={(e) => setAmount(e.target.value.replace(/,/g, ''))}
+                      onChange={(e) =>
+                        setAmount(e.target.value.replace(/,/g, ""))
+                      }
                       className="h-20 pl-20 text-3xl font-bold text-right pr-6 border-2 rounded-2xl focus:border-secondary transition-colors"
                       placeholder="0"
                     />
@@ -289,7 +522,10 @@ export function GeneratePRNTab() {
                 </div>
 
                 {/* Generate Button - Premium */}
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
                   <Button
                     onClick={generatePRN}
                     disabled={isGenerating || !amount || !purpose}
@@ -299,7 +535,11 @@ export function GeneratePRNTab() {
                       <div className="flex items-center gap-3">
                         <motion.div
                           animate={{ rotate: 360 }}
-                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          transition={{
+                            duration: 1,
+                            repeat: Infinity,
+                            ease: "linear",
+                          }}
                         >
                           <RefreshCw className="h-6 w-6" />
                         </motion.div>
@@ -331,7 +571,7 @@ export function GeneratePRNTab() {
                   {/* Ticket Shape with Notches */}
                   <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-background rounded-full" />
                   <div className="absolute right-0 top-1/2 translate-x-1/2 -translate-y-1/2 w-8 h-8 bg-background rounded-full" />
-                  
+
                   <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 p-1 rounded-3xl shadow-2xl shadow-emerald-500/30">
                     <div className="bg-card rounded-[22px] p-8">
                       {/* Header */}
@@ -350,18 +590,46 @@ export function GeneratePRNTab() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            <Button variant="outline" size="icon" onClick={() => setShowQR(!showQR)} className="rounded-xl">
+                          <motion.div
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => setShowQR(!showQR)}
+                              className="rounded-xl"
+                            >
                               <QrCode className="h-4 w-4" />
                             </Button>
                           </motion.div>
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            <Button variant="outline" size="icon" onClick={copyToClipboard} className="rounded-xl">
-                              {copied ? <CheckCircle2 className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                          <motion.div
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={copyToClipboard}
+                              className="rounded-xl"
+                            >
+                              {copied ? (
+                                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
                             </Button>
                           </motion.div>
-                          <motion.div whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}>
-                            <Button variant="outline" size="icon" onClick={downloadPRN} className="rounded-xl">
+                          <motion.div
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                          >
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={downloadPRN}
+                              className="rounded-xl"
+                            >
                               <Download className="h-4 w-4" />
                             </Button>
                           </motion.div>
@@ -373,7 +641,7 @@ export function GeneratePRNTab() {
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
                           Your PRN Code
                         </p>
-                        <motion.p 
+                        <motion.p
                           className="font-mono text-2xl md:text-4xl font-black tracking-wider"
                           initial={{ scale: 0.9, opacity: 0 }}
                           animate={{ scale: 1, opacity: 1 }}
@@ -388,10 +656,27 @@ export function GeneratePRNTab() {
                       {/* Details Grid */}
                       <div className="grid grid-cols-2 gap-4">
                         {[
-                          { label: 'Amount', value: `UGX ${generatedPRN.amount.toLocaleString()}`, icon: Wallet },
-                          { label: 'Purpose', value: generatedPRN.purpose, icon: Layers },
-                          { label: 'Generated', value: generatedPRN.generatedAt.toLocaleTimeString(), icon: Clock },
-                          { label: 'Expires', value: generatedPRN.expiresAt.toLocaleString(), icon: AlertCircle },
+                          {
+                            label: "Amount",
+                            value: `UGX ${generatedPRN.amount.toLocaleString()}`,
+                            icon: Wallet,
+                          },
+                          {
+                            label: "Purpose",
+                            value: generatedPRN.purpose,
+                            icon: Layers,
+                          },
+                          {
+                            label: "Generated",
+                            value:
+                              generatedPRN.generatedAt.toLocaleTimeString(),
+                            icon: Clock,
+                          },
+                          {
+                            label: "Expires",
+                            value: generatedPRN.expiresAt.toLocaleString(),
+                            icon: AlertCircle,
+                          },
                         ].map((item, i) => (
                           <motion.div
                             key={item.label}
@@ -406,7 +691,11 @@ export function GeneratePRNTab() {
                                 {item.label}
                               </span>
                             </div>
-                            <p className={`font-semibold truncate ${item.label === 'Expires' ? 'text-amber-600' : ''}`}>
+                            <p
+                              className={`font-semibold truncate ${
+                                item.label === "Expires" ? "text-amber-600" : ""
+                              }`}
+                            >
                               {item.value}
                             </p>
                           </motion.div>
@@ -415,7 +704,10 @@ export function GeneratePRNTab() {
 
                       {/* Action Buttons */}
                       <div className="grid grid-cols-2 gap-4 mt-6">
-                        <Button variant="outline" className="h-12 rounded-xl gap-2">
+                        <Button
+                          variant="outline"
+                          className="h-12 rounded-xl gap-2"
+                        >
                           <Share2 className="h-4 w-4" />
                           Share PRN
                         </Button>
@@ -444,13 +736,15 @@ export function GeneratePRNTab() {
                     <Clock className="h-5 w-5 text-secondary" />
                     Recent PRNs
                   </CardTitle>
-                  <CardDescription>Your payment reference history</CardDescription>
+                  <CardDescription>
+                    Your payment reference history
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="relative">
                     {/* Timeline Line */}
                     <div className="absolute left-6 top-0 bottom-0 w-px bg-gradient-to-b from-secondary via-accent to-transparent" />
-                    
+
                     <div className="space-y-4">
                       {recentPRNs.map((prn, i) => (
                         <motion.div
@@ -462,17 +756,32 @@ export function GeneratePRNTab() {
                         >
                           {/* Timeline Dot */}
                           <div className="absolute left-4 h-4 w-4 rounded-full bg-secondary shadow-lg shadow-secondary/50" />
-                          
+
                           <div className="flex-1 p-4 rounded-2xl bg-muted/50 hover:bg-muted transition-colors border border-border/50 group">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="font-mono font-bold text-sm">{prn.code}</p>
-                                <p className="text-xs text-muted-foreground">{prn.purpose}</p>
+                                <p className="font-mono font-bold text-sm">
+                                  {prn.code}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {prn.purpose}
+                                </p>
                               </div>
                               <div className="text-right">
-                                <p className="font-bold">UGX {prn.amount.toLocaleString()}</p>
-                                <Badge variant={prn.expiresAt > new Date() ? "default" : "secondary"} className="text-xs">
-                                  {prn.expiresAt > new Date() ? 'Active' : 'Expired'}
+                                <p className="font-bold">
+                                  UGX {prn.amount.toLocaleString()}
+                                </p>
+                                <Badge
+                                  variant={
+                                    prn.expiresAt > new Date()
+                                      ? "default"
+                                      : "secondary"
+                                  }
+                                  className="text-xs"
+                                >
+                                  {prn.expiresAt > new Date()
+                                    ? "Active"
+                                    : "Expired"}
                                 </Badge>
                               </div>
                             </div>
@@ -505,7 +814,8 @@ export function GeneratePRNTab() {
                   <div>
                     <h4 className="font-bold text-lg mb-2">Important</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      PRNs expire after 48 hours. Complete your payment before expiry to avoid regeneration.
+                      PRNs expire after 48 hours. Complete your payment before
+                      expiry to avoid regeneration.
                     </p>
                   </div>
                 </div>
@@ -528,10 +838,26 @@ export function GeneratePRNTab() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {[
-                  { name: 'Mobile Money', desc: 'MTN MoMo, Airtel Money', color: 'from-yellow-500 to-amber-500' },
-                  { name: 'Bank Transfer', desc: 'All major banks', color: 'from-blue-500 to-indigo-500' },
-                  { name: 'Bank Branch', desc: 'Cash deposit', color: 'from-emerald-500 to-teal-500' },
-                  { name: 'Online Portal', desc: 'Visa/Mastercard', color: 'from-purple-500 to-pink-500' },
+                  {
+                    name: "Mobile Money",
+                    desc: "MTN MoMo, Airtel Money",
+                    color: "from-yellow-500 to-amber-500",
+                  },
+                  {
+                    name: "Bank Transfer",
+                    desc: "All major banks",
+                    color: "from-blue-500 to-indigo-500",
+                  },
+                  {
+                    name: "Bank Branch",
+                    desc: "Cash deposit",
+                    color: "from-emerald-500 to-teal-500",
+                  },
+                  {
+                    name: "Online Portal",
+                    desc: "Visa/Mastercard",
+                    color: "from-purple-500 to-pink-500",
+                  },
                 ].map((method, i) => (
                   <motion.div
                     key={method.name}
@@ -540,12 +866,16 @@ export function GeneratePRNTab() {
                     transition={{ delay: 0.4 + i * 0.1 }}
                     className="flex items-center gap-4 p-4 rounded-2xl bg-muted/50 hover:bg-muted transition-colors group cursor-pointer"
                   >
-                    <div className={`h-10 w-10 rounded-xl bg-gradient-to-br ${method.color} flex items-center justify-center shadow-lg`}>
+                    <div
+                      className={`h-10 w-10 rounded-xl bg-gradient-to-br ${method.color} flex items-center justify-center shadow-lg`}
+                    >
                       <Shield className="h-5 w-5 text-white" />
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-sm">{method.name}</p>
-                      <p className="text-xs text-muted-foreground">{method.desc}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {method.desc}
+                      </p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </motion.div>
@@ -569,7 +899,8 @@ export function GeneratePRNTab() {
                   <div>
                     <h4 className="font-bold text-lg mb-2">Processing Time</h4>
                     <p className="text-sm text-muted-foreground leading-relaxed">
-                      Payments reflect within 24-48 hours. Contact support if not updated after this period.
+                      Payments reflect within 24-48 hours. Contact support if
+                      not updated after this period.
                     </p>
                   </div>
                 </div>
@@ -584,7 +915,13 @@ export function GeneratePRNTab() {
 
 // Helper component for Wallet icon
 const Wallet = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
     <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
   </svg>
