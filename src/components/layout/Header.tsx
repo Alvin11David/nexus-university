@@ -12,6 +12,7 @@ import {
   Calendar,
   Settings,
   Mail,
+  Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,6 +83,7 @@ export function Header() {
     { label: "Courses", href: "/courses", icon: BookOpen },
     { label: "Schedule", href: "/schedule", icon: Calendar },
     { label: "Webmail", href: "/webmail", icon: Mail },
+    { label: "Results", href: "/results", icon: Trophy },
   ];
 
   return (

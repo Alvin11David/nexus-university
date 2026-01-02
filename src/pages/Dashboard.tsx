@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -17,6 +18,7 @@ import {
   MessageCircle,
   Sparkles,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -26,9 +28,47 @@ import { AnnouncementCard } from "@/components/dashboard/AnnouncementCard";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { useAuth } from "@/contexts/AuthContext";
 
+type ResultCourse = {
+  title: string;
+  code: string;
+  credits: number | null;
+};
+
+type ExamResultRow = {
+  id: string;
+  course_id: string;
+  academic_year: string;
+  semester: string;
+  marks: number;
+  grade: string | null;
+  grade_point: number | null;
+  courses?: ResultCourse;
+};
+
+type TermResult = {
+  term: string;
+  gpa: number;
+  totalCredits: number;
+  entries: Array<
+    ExamResultRow & { courseTitle: string; courseCode: string; credits: number }
+  >;
+};
+
 export default function Dashboard() {
-  const { user } = useAuth();
-  const firstName = user?.user_metadata?.full_name?.split(" ")[0] || "Student";
+  const { user, profile } = useAuth();
+  const displayName =
+    profile?.full_name || user?.user_metadata?.full_name || "Student";
+  const firstName = displayName.split(" ")[0];
+  const [stats, setStats] = useState({
+    enrolled: 0,
+    completed: 0,
+    assignments: 0,
+    liveMeets: 0,
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [resultsLoading, setResultsLoading] = useState(true);
+  const [termResults, setTermResults] = useState<TermResult[]>([]);
+  const [cgpa, setCgpa] = useState(0);
 
   const classroomCourses = [
     {
@@ -141,6 +181,149 @@ export default function Dashboard() {
     },
   ];
 
+  useEffect(() => {
+    if (!user) return;
+
+    const loadStats = async () => {
+      try {
+        setLoadingStats(true);
+
+        const { data: enrollments, error: enrollError } = await supabase
+          .from("enrollments")
+          .select("status, course_id")
+          .eq("student_id", user.id);
+
+        if (enrollError) throw enrollError;
+
+        const enrolledCourses = enrollments?.length || 0;
+        const completedCourses =
+          enrollments?.filter((e) => e.status === "completed").length || 0;
+
+        const courseIds = (enrollments || [])
+          .map((e) => e.course_id)
+          .filter(Boolean);
+
+        let pendingAssignments = 0;
+        if (courseIds.length) {
+          const { data: assignments, error: assignError } = await supabase
+            .from("assignments")
+            .select("id, due_date, course_id")
+            .in("course_id", courseIds)
+            .gte("due_date", new Date().toISOString());
+
+          if (assignError) throw assignError;
+
+          const assignmentIds = (assignments || []).map((a) => a.id);
+          let submissions: { assignment_id: string; status: string }[] = [];
+
+          if (assignmentIds.length) {
+            const { data: subs, error: subError } = await supabase
+              .from("submissions")
+              .select("assignment_id, status")
+              .eq("student_id", user.id)
+              .in("assignment_id", assignmentIds);
+
+            if (subError) throw subError;
+            submissions = subs || [];
+          }
+
+          pendingAssignments = (assignments || []).filter((a) => {
+            const submission = submissions.find(
+              (s) => s.assignment_id === a.id
+            );
+            return !submission || submission.status !== "submitted";
+          }).length;
+        }
+
+        setStats({
+          enrolled: enrolledCourses,
+          completed: completedCourses,
+          assignments: pendingAssignments,
+          liveMeets: meetSessions.filter((m) => m.isLive).length,
+        });
+      } catch (error) {
+        console.error("Error loading dashboard stats", error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
+    loadStats();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const loadResults = async () => {
+      try {
+        setResultsLoading(true);
+
+        const { data, error } = await supabase
+          .from("exam_results")
+          .select(
+            "id, course_id, academic_year, semester, marks, grade, grade_point, courses(title, code, credits)"
+          )
+          .eq("student_id", user.id)
+          .order("academic_year", { ascending: false })
+          .order("semester", { ascending: false });
+
+        if (error) throw error;
+
+        const normalized = (data as ExamResultRow[] | null)?.map((row) => ({
+          ...row,
+          courseTitle: row.courses?.title || "Course",
+          courseCode: row.courses?.code || "",
+          credits: row.courses?.credits || 3,
+        }));
+
+        const termMap = new Map<string, TermResult>();
+
+        (normalized || []).forEach((row) => {
+          const term = `${row.academic_year} · ${row.semester}`;
+          const existing = termMap.get(term) || {
+            term,
+            gpa: 0,
+            totalCredits: 0,
+            entries: [],
+          };
+
+          const credits = row.credits || 3;
+          const gradePoint = row.grade_point ?? 0;
+
+          existing.entries.push(row);
+          existing.totalCredits += credits;
+          existing.gpa += gradePoint * credits;
+
+          termMap.set(term, existing);
+        });
+
+        const terms = Array.from(termMap.values()).map((t) => ({
+          ...t,
+          gpa: t.totalCredits ? Number((t.gpa / t.totalCredits).toFixed(2)) : 0,
+        }));
+
+        // Compute CGPA
+        const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
+        const totalPoints = terms.reduce(
+          (sum, t) => sum + t.gpa * t.totalCredits,
+          0
+        );
+        const computedCgpa = totalCredits
+          ? Number((totalPoints / totalCredits).toFixed(2))
+          : 0;
+
+        setTermResults(terms);
+        setCgpa(computedCgpa);
+      } catch (err) {
+        console.error("Error loading exam results", err);
+      } finally {
+        setResultsLoading(false);
+      }
+    };
+
+    loadResults();
+  }, [user]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-20 md:pb-0 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-60">
@@ -194,35 +377,165 @@ export default function Dashboard() {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="Google Classrooms"
-            value="3"
+            title="Enrolled Courses"
+            value={loadingStats ? "…" : stats.enrolled.toString()}
             icon={Users}
             delay={0.1}
           />
           <StatCard
-            title="Assignments"
-            value="12"
-            subtitle="This month"
-            icon={BookOpen}
+            title="Completed"
+            value={loadingStats ? "…" : stats.completed.toString()}
+            subtitle="Courses"
+            icon={Trophy}
             variant="secondary"
             delay={0.2}
           />
           <StatCard
-            title="Live Meets"
-            value="2"
-            subtitle="Today"
-            icon={Video}
+            title="Pending Assignments"
+            value={loadingStats ? "…" : stats.assignments.toString()}
+            subtitle="Across classrooms"
+            icon={BookOpen}
             delay={0.3}
-            trend={{ value: 8, isPositive: true }}
           />
           <StatCard
-            title="GPA"
-            value="3.75"
-            subtitle="Current"
-            icon={TrendingUp}
+            title="Live Meets"
+            value={loadingStats ? "…" : stats.liveMeets.toString()}
+            subtitle="Happening now"
+            icon={Video}
             delay={0.4}
+            trend={{ value: stats.liveMeets, isPositive: true }}
           />
         </div>
+
+        {/* Results */}
+        <motion.div
+          id="results"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-6 shadow-2xl space-y-4"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/10 text-secondary text-xs font-semibold">
+                <Trophy className="h-4 w-4" /> View My Results
+              </div>
+              <h2 className="font-display text-xl font-semibold text-foreground">
+                Exam Results, GPA & CGPA
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Coursework, finals, and weighted GPA per semester. CGPA is
+                auto-computed across all results.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-center min-w-[110px]">
+                <p className="text-xs text-muted-foreground">CGPA</p>
+                <p className="text-2xl font-bold text-primary">
+                  {resultsLoading ? "…" : cgpa.toFixed(2)}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl bg-secondary/10 border border-secondary/20 text-center min-w-[110px]">
+                <p className="text-xs text-muted-foreground">Terms</p>
+                <p className="text-lg font-semibold text-secondary">
+                  {resultsLoading ? "…" : termResults.length}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {resultsLoading && (
+              <div className="col-span-full text-sm text-muted-foreground">
+                Loading results…
+              </div>
+            )}
+
+            {!resultsLoading && termResults.length === 0 && (
+              <div className="col-span-full text-sm text-muted-foreground">
+                No results available yet.
+              </div>
+            )}
+
+            {termResults.map((term, idx) => (
+              <motion.div
+                key={term.term}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: idx * 0.05 }}
+                className="rounded-2xl border border-border/60 bg-muted/30 p-4 space-y-3 shadow-lg"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Semester</p>
+                    <p className="font-semibold">{term.term}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">GPA</p>
+                    <p className="text-xl font-bold text-primary">
+                      {term.gpa.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="h-2 w-full rounded-full bg-border/60 overflow-hidden">
+                  <div
+                    className="h-2 bg-gradient-to-r from-primary via-secondary to-accent"
+                    style={{ width: `${Math.min(100, (term.gpa / 5) * 100)}%` }}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  {term.entries.map((res) => (
+                    <div
+                      key={res.id}
+                      className="p-3 rounded-xl border border-border/50 bg-card/70"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold">
+                            {res.courseTitle}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                            {res.courseCode}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] text-muted-foreground">
+                            Marks
+                          </p>
+                          <p className="text-lg font-bold">
+                            {res.marks.toFixed(1)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-muted-foreground">
+                        <span className="px-2 py-1 rounded-full bg-primary/10 text-primary font-semibold text-center">
+                          Grade: {res.grade || "N/A"}
+                        </span>
+                        <span className="px-2 py-1 rounded-full bg-secondary/10 text-secondary font-semibold text-center">
+                          GP: {res.grade_point?.toFixed(2) || "0.00"}
+                        </span>
+                        <span className="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold text-center">
+                          Credits: {res.credits}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 h-2 w-full rounded-full bg-border/60 overflow-hidden">
+                        <div
+                          className="h-2 bg-gradient-to-r from-emerald-500 to-primary"
+                          style={{
+                            width: `${Math.min(100, (res.marks / 100) * 100)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </motion.div>
 
         <div className="grid xl:grid-cols-3 gap-6">
           {/* Classrooms & Assignments */}

@@ -64,6 +64,10 @@ interface AuthContextType {
     email: string,
     otp: string
   ) => Promise<{ valid: boolean; error: Error | null }>;
+  resetPassword: (
+    identifier: string,
+    newPassword: string
+  ) => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -398,6 +402,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error };
   };
 
+  const resetPassword = async (
+    identifier: string,
+    newPassword: string
+  ): Promise<{ error: Error | null }> => {
+    try {
+      // Get the current user's session (after OTP verification)
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      if (!currentUser) {
+        return {
+          error: new Error("You must verify your identity first before resetting password"),
+        };
+      }
+
+      // Update the password using Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword,
+      });
+
+      if (error) {
+        return { error };
+      }
+
+      return { error: null };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err : new Error("Failed to reset password"),
+      };
+    }
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
@@ -417,6 +452,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         validateStudent,
         generateOTP,
         verifyOTP,
+        resetPassword,
       }}
     >
       {children}
