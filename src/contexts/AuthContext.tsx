@@ -1,6 +1,12 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Profile {
   id: string;
@@ -29,13 +35,35 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, registrationNumber?: string, studentNumber?: string) => Promise<{ error: Error | null }>;
-  signIn: (identifier: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithStudentId: (identifier: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    fullName: string,
+    registrationNumber?: string,
+    studentNumber?: string
+  ) => Promise<{ error: Error | null }>;
+  signIn: (
+    identifier: string,
+    password: string
+  ) => Promise<{ error: Error | null }>;
+  signInWithStudentId: (
+    identifier: string,
+    password: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  validateStudent: (registrationNumber: string, studentNumber: string, email: string) => Promise<{ data: StudentRecord | null; error: Error | null }>;
-  generateOTP: (email: string, studentRecordId: string) => Promise<{ otp: string; error: Error | null }>;
-  verifyOTP: (email: string, otp: string) => Promise<{ valid: boolean; error: Error | null }>;
+  validateStudent: (
+    registrationNumber: string,
+    studentNumber: string,
+    email: string
+  ) => Promise<{ data: StudentRecord | null; error: Error | null }>;
+  generateOTP: (
+    email: string,
+    studentRecordId: string
+  ) => Promise<{ otp: string; error: Error | null }>;
+  verifyOTP: (
+    email: string,
+    otp: string
+  ) => Promise<{ valid: boolean; error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -47,27 +75,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setLoading(false);
 
-        if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-        }
+      if (session?.user) {
+        setTimeout(() => {
+          fetchProfile(session.user.id);
+        }, 0);
+      } else {
+        setProfile(null);
       }
-    );
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
-      
+
       if (session?.user) {
         fetchProfile(session.user.id);
       }
@@ -78,24 +106,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
       .single();
-    
+
     if (data && !error) {
       setProfile(data);
+
+      // If student_number is missing, try to get it from student_records
+      if (!data.student_number) {
+        const { data: studentRecord } = await supabase
+          .from("student_records")
+          .select("student_number, registration_number")
+          .eq("email", data.email)
+          .maybeSingle();
+
+        if (studentRecord) {
+          // Update the profile with student_number and registration_number
+          await supabase
+            .from("profiles")
+            .update({
+              student_number: studentRecord.student_number,
+              registration_number: studentRecord.registration_number,
+            })
+            .eq("id", userId);
+
+          // Update local state
+          setProfile({
+            ...data,
+            student_number: studentRecord.student_number,
+            registration_number: studentRecord.registration_number,
+          });
+        }
+      }
     }
   };
 
   // Validate if student exists in the system, create if not
-  const validateStudent = async (registrationNumber: string, studentNumber: string, email: string): Promise<{ data: StudentRecord | null; error: Error | null }> => {
+  const validateStudent = async (
+    registrationNumber: string,
+    studentNumber: string,
+    email: string
+  ): Promise<{ data: StudentRecord | null; error: Error | null }> => {
     // First, try to find existing record
     const { data: existingData, error: selectError } = await supabase
-      .from('student_records')
-      .select('*')
-      .eq('registration_number', registrationNumber)
-      .eq('student_number', studentNumber)
+      .from("student_records")
+      .select("*")
+      .eq("registration_number", registrationNumber)
+      .eq("student_number", studentNumber)
       .maybeSingle();
 
     if (selectError) {
@@ -105,21 +164,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If record exists, check if already registered
     if (existingData) {
       if (existingData.is_registered) {
-        return { data: null, error: new Error('This student account is already registered. Please sign in instead.') };
+        return {
+          data: null,
+          error: new Error(
+            "This student account is already registered. Please sign in instead."
+          ),
+        };
       }
       return { data: existingData as StudentRecord, error: null };
     }
 
     // Record doesn't exist, create a new one
     // Extract name from email (part before @) and capitalize
-    const emailName = email.split('@')[0];
-    const fullName = emailName
-      .split(/[._-]/)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-      .join(' ') || 'New Student';
+    const emailName = email.split("@")[0];
+    const fullName =
+      emailName
+        .split(/[._-]/)
+        .map(
+          (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+        )
+        .join(" ") || "New Student";
 
     const { data: newData, error: insertError } = await supabase
-      .from('student_records')
+      .from("student_records")
       .insert({
         registration_number: registrationNumber,
         student_number: studentNumber,
@@ -132,8 +199,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (insertError) {
       // Check if it's a unique constraint violation (duplicate)
-      if (insertError.code === '23505') {
-        return { data: null, error: new Error('This registration or student number is already in use. Please sign in instead.') };
+      if (insertError.code === "23505") {
+        return {
+          data: null,
+          error: new Error(
+            "This registration or student number is already in use. Please sign in instead."
+          ),
+        };
       }
       return { data: null, error: new Error(insertError.message) };
     }
@@ -142,36 +214,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Generate a 4-digit OTP
-  const generateOTP = async (email: string, studentRecordId: string): Promise<{ otp: string; error: Error | null }> => {
+  const generateOTP = async (
+    email: string,
+    studentRecordId: string
+  ): Promise<{ otp: string; error: Error | null }> => {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    const { error } = await supabase
-      .from('otp_verifications')
-      .insert({
-        email,
-        otp_code: otp,
-        student_record_id: studentRecordId,
-        expires_at: expiresAt.toISOString(),
-      });
+    const { error } = await supabase.from("otp_verifications").insert({
+      email,
+      otp_code: otp,
+      student_record_id: studentRecordId,
+      expires_at: expiresAt.toISOString(),
+    });
 
     if (error) {
-      return { otp: '', error: new Error(error.message) };
+      return { otp: "", error: new Error(error.message) };
     }
 
     return { otp, error: null };
   };
 
   // Verify OTP
-  const verifyOTP = async (email: string, otp: string): Promise<{ valid: boolean; error: Error | null }> => {
+  const verifyOTP = async (
+    email: string,
+    otp: string
+  ): Promise<{ valid: boolean; error: Error | null }> => {
     const { data, error } = await supabase
-      .from('otp_verifications')
-      .select('*')
-      .eq('email', email)
-      .eq('otp_code', otp)
-      .eq('verified', false)
-      .gte('expires_at', new Date().toISOString())
-      .order('created_at', { ascending: false })
+      .from("otp_verifications")
+      .select("*")
+      .eq("email", email)
+      .eq("otp_code", otp)
+      .eq("verified", false)
+      .gte("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
@@ -180,21 +256,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (!data) {
-      return { valid: false, error: new Error('Invalid or expired OTP. Please request a new one.') };
+      return {
+        valid: false,
+        error: new Error("Invalid or expired OTP. Please request a new one."),
+      };
     }
 
     // Mark OTP as verified
     await supabase
-      .from('otp_verifications')
+      .from("otp_verifications")
       .update({ verified: true })
-      .eq('id', data.id);
+      .eq("id", data.id);
 
     return { valid: true, error: null };
   };
 
-  const signUp = async (email: string, password: string, fullName: string, registrationNumber?: string, studentNumber?: string) => {
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    registrationNumber?: string,
+    studentNumber?: string
+  ) => {
     const redirectUrl = `${window.location.origin}/`;
-    
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -211,25 +296,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Handle "user already exists" error - this can happen if signup was incomplete
     if (error) {
       // If user already exists, they might need to sign in or reset password
-      if (error.message.includes('already registered') || error.message.includes('User already registered')) {
-        return { 
-          error: new Error('An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.') 
+      if (
+        error.message.includes("already registered") ||
+        error.message.includes("User already registered")
+      ) {
+        return {
+          error: new Error(
+            'An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.'
+          ),
         };
       }
       return { error };
     }
 
+    // Update profile with student_number and registration_number
+    if (data.user) {
+      await supabase
+        .from("profiles")
+        .update({
+          student_number: studentNumber,
+          registration_number: registrationNumber,
+        })
+        .eq("id", data.user.id);
+    }
+
     // Update student record with full name and mark as registered
     if (registrationNumber && studentNumber) {
       await supabase
-        .from('student_records')
-        .update({ 
+        .from("student_records")
+        .update({
           is_registered: true,
           full_name: fullName,
-          email: email
+          email: email,
         })
-        .eq('registration_number', registrationNumber)
-        .eq('student_number', studentNumber);
+        .eq("registration_number", registrationNumber)
+        .eq("student_number", studentNumber);
     }
 
     return { error: null };
@@ -248,22 +349,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithStudentId = async (identifier: string, password: string) => {
     // First, find the student by registration number or student number
     const { data: studentRecord, error: findError } = await supabase
-      .from('student_records')
-      .select('*')
-      .or(`registration_number.eq.${identifier},student_number.eq.${identifier}`)
+      .from("student_records")
+      .select("*")
+      .or(
+        `registration_number.eq.${identifier},student_number.eq.${identifier}`
+      )
       .maybeSingle();
 
     if (findError || !studentRecord) {
-      return { error: new Error('Student not found. Please check your registration or student number.') };
+      return {
+        error: new Error(
+          "Student not found. Please check your registration or student number."
+        ),
+      };
     }
 
     // Check if email exists in student record
     if (!studentRecord.email) {
       // Try to find the email from profiles table
       const { data: profileData } = await supabase
-        .from('profiles')
-        .select('email')
-        .or(`student_number.eq.${studentRecord.student_number},registration_number.eq.${studentRecord.registration_number}`)
+        .from("profiles")
+        .select("email")
+        .or(
+          `student_number.eq.${studentRecord.student_number},registration_number.eq.${studentRecord.registration_number}`
+        )
         .maybeSingle();
 
       if (profileData?.email) {
@@ -274,7 +383,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error };
       }
 
-      return { error: new Error('No email associated with this student. Please contact support.') };
+      return {
+        error: new Error(
+          "No email associated with this student. Please contact support."
+        ),
+      };
     }
 
     // Sign in with the email
@@ -291,19 +404,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      session, 
-      profile, 
-      loading, 
-      signUp, 
-      signIn, 
-      signInWithStudentId,
-      signOut,
-      validateStudent,
-      generateOTP,
-      verifyOTP
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        session,
+        profile,
+        loading,
+        signUp,
+        signIn,
+        signInWithStudentId,
+        signOut,
+        validateStudent,
+        generateOTP,
+        verifyOTP,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -312,7 +427,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

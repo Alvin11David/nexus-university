@@ -1,29 +1,29 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  GraduationCap, 
-  Menu, 
-  X, 
-  Bell, 
-  User, 
+import { useState, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  GraduationCap,
+  Menu,
+  X,
+  Bell,
+  User,
   LogOut,
   BookOpen,
   Calendar,
   Settings,
-  Mail
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+  Mail,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -36,13 +36,13 @@ export function Header() {
       fetchUnreadCount();
       // Set up real-time listener for notifications
       const subscription = supabase
-        .channel('notifications')
+        .channel("notifications")
         .on(
-          'postgres_changes',
+          "postgres_changes",
           {
-            event: '*',
-            schema: 'public',
-            table: 'notifications',
+            event: "*",
+            schema: "public",
+            table: "notifications",
             filter: `user_id=eq.${user.id}`,
           },
           () => {
@@ -61,27 +61,27 @@ export function Header() {
     if (!user) return;
     try {
       const { count, error } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
+        .from("notifications")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("is_read", false);
 
       if (error) throw error;
       setUnreadCount(count || 0);
     } catch (error) {
-      console.error('Error fetching unread count:', error);
+      console.error("Error fetching unread count:", error);
     }
   };
 
   const handleSignOut = async () => {
     await signOut();
-    navigate('/');
+    navigate("/");
   };
 
   const navItems = [
-    { label: 'Courses', href: '/courses', icon: BookOpen },
-    { label: 'Schedule', href: '/schedule', icon: Calendar },
-    { label: 'Webmail', href: '/webmail', icon: Mail },
+    { label: "Courses", href: "/courses", icon: BookOpen },
+    { label: "Schedule", href: "/schedule", icon: Calendar },
+    { label: "Webmail", href: "/webmail", icon: Mail },
   ];
 
   return (
@@ -101,16 +101,17 @@ export function Header() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-1">
-          {user && navItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.href}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          {user &&
+            navItems.map((item) => (
+              <Link
+                key={item.label}
+                to={item.href}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            ))}
         </nav>
 
         {/* Right side */}
@@ -123,7 +124,7 @@ export function Header() {
                   <Bell className="h-5 w-5" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-coral text-[10px] font-bold text-white flex items-center justify-center">
-                      {unreadCount > 9 ? '9+' : unreadCount}
+                      {unreadCount > 9 ? "9+" : unreadCount}
                     </span>
                   )}
                 </Link>
@@ -132,9 +133,15 @@ export function Header() {
               {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-10 w-10 rounded-full">
+                  <Button
+                    variant="ghost"
+                    className="relative h-10 w-10 rounded-full"
+                  >
                     <Avatar className="h-10 w-10">
-                      <AvatarImage src={user.user_metadata?.avatar_url} alt={user.email || ''} />
+                      <AvatarImage
+                        src={user.user_metadata?.avatar_url}
+                        alt={user.email || ""}
+                      />
                       <AvatarFallback className="bg-primary text-primary-foreground">
                         {user.email?.charAt(0).toUpperCase()}
                       </AvatarFallback>
@@ -149,25 +156,38 @@ export function Header() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col space-y-0.5">
-                      <p className="text-sm font-medium">{user.user_metadata?.full_name || 'User'}</p>
-                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                      <p className="text-sm font-medium">
+                        {user.user_metadata?.full_name || "User"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {user.email}
+                      </p>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link to="/dashboard" className="flex items-center gap-2 cursor-pointer">
+                    <Link
+                      to="/dashboard"
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
                       <User className="h-4 w-4" />
                       Dashboard
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
+                    <Link
+                      to="/settings"
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
                       <Settings className="h-4 w-4" />
                       Settings
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive cursor-pointer">
+                  <DropdownMenuItem
+                    onClick={handleSignOut}
+                    className="text-destructive focus:text-destructive cursor-pointer"
+                  >
                     <LogOut className="h-4 w-4 mr-2" />
                     Sign out
                   </DropdownMenuItem>
@@ -179,7 +199,10 @@ export function Header() {
               <Button variant="ghost" asChild>
                 <Link to="/auth">Sign In</Link>
               </Button>
-              <Button asChild className="bg-secondary text-secondary-foreground hover:bg-secondary/90">
+              <Button
+                asChild
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/90"
+              >
                 <Link to="/auth?mode=signup">Get Started</Link>
               </Button>
             </div>
@@ -192,7 +215,11 @@ export function Header() {
             className="md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileMenuOpen ? (
+              <X className="h-5 w-5" />
+            ) : (
+              <Menu className="h-5 w-5" />
+            )}
           </Button>
         </div>
       </div>
@@ -202,22 +229,23 @@ export function Header() {
         {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
+            animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             className="md:hidden border-t border-border bg-background"
           >
             <nav className="container py-4 space-y-1">
-              {user && navItems.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
-                >
-                  <item.icon className="h-5 w-5 text-muted-foreground" />
-                  {item.label}
-                </Link>
-              ))}
+              {user &&
+                navItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    to={item.href}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <item.icon className="h-5 w-5 text-muted-foreground" />
+                    {item.label}
+                  </Link>
+                ))}
             </nav>
           </motion.div>
         )}
