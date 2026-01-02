@@ -1,5 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import QRCode from "qrcode.react";
+import html2canvas from "html2canvas";
 import {
   Receipt,
   Copy,
@@ -17,6 +19,8 @@ import {
   ArrowRight,
   Layers,
   Eye,
+  X,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,6 +40,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -73,6 +84,8 @@ export function GeneratePRNTab() {
   const [fees, setFees] = useState<Fee[]>([]);
   const [selectedFeeId, setSelectedFeeId] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
