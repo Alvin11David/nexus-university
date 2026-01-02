@@ -541,71 +541,92 @@ export function PaymentsTab() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {payments.map((payment, i) => {
-                    const MethodIcon = getMethodIcon(payment.payment_method);
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-secondary mb-4"></div>
+                      <p className="text-muted-foreground">
+                        Loading payment history...
+                      </p>
+                    </div>
+                  ) : payments.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Receipt className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                      <h3 className="font-semibold text-lg mb-2">
+                        No payments yet
+                      </h3>
+                      <p className="text-muted-foreground text-sm">
+                        Your payment history will appear here
+                      </p>
+                    </div>
+                  ) : (
+                    payments.map((payment, i) => {
+                      const MethodIcon = getMethodIcon(payment.payment_method);
 
-                    return (
-                      <motion.div
-                        key={payment.id}
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: i * 0.1 }}
-                        whileHover={{ scale: 1.01 }}
-                        onClick={() => setSelectedPayment(payment)}
-                        className="flex items-center justify-between p-5 rounded-2xl bg-muted/30 hover:bg-muted/50 transition-all cursor-pointer border border-border/50 group"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="relative">
-                            <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                              <MethodIcon className="h-7 w-7 text-white" />
+                      return (
+                        <motion.div
+                          key={payment.id}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.1 }}
+                          whileHover={{ scale: 1.01 }}
+                          onClick={() => setSelectedPayment(payment)}
+                          className="flex items-center justify-between p-5 rounded-2xl bg-muted/30 hover:bg-muted/50 transition-all cursor-pointer border border-border/50 group"
+                        >
+                          <div className="flex items-center gap-4">
+                            <div className="relative">
+                              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                <MethodIcon className="h-7 w-7 text-white" />
+                              </div>
+                              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center border-2 border-card">
+                                <CheckCircle2 className="h-3 w-3 text-white" />
+                              </div>
                             </div>
-                            <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center border-2 border-card">
-                              <CheckCircle2 className="h-3 w-3 text-white" />
+                            <div>
+                              <p className="font-bold text-lg">
+                                UGX {payment.amount.toLocaleString()}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {payment.payment_method}
+                              </p>
+                              <p className="text-xs text-muted-foreground font-mono">
+                                {payment.transaction_ref}
+                              </p>
                             </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-lg">
-                              UGX {payment.amount.toLocaleString()}
+                          <div className="text-right">
+                            <Badge
+                              className={getPaymentStatusColor(payment.status)}
+                            >
+                              {payment.status}
+                            </Badge>
+                            <p className="text-sm text-muted-foreground mt-2">
+                              {new Date(payment.paid_at).toLocaleDateString(
+                                "en-US",
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                }
+                              )}
                             </p>
-                            <p className="text-sm text-muted-foreground">
-                              {payment.payment_method}
-                            </p>
-                            <p className="text-xs text-muted-foreground font-mono">
-                              {payment.transaction_ref}
-                            </p>
+                            <ChevronRight className="h-5 w-5 text-muted-foreground mt-2 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <Badge
-                            className={getPaymentStatusColor(payment.status)}
-                          >
-                            {payment.status}
-                          </Badge>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {new Date(payment.paid_at).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              }
-                            )}
-                          </p>
-                          <ChevronRight className="h-5 w-5 text-muted-foreground mt-2 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </motion.div>
-                    );
-                  })}
+                        </motion.div>
+                      );
+                    })
+                  )}
                 </div>
 
                 {/* View All Button */}
-                <Button
-                  variant="outline"
-                  className="w-full mt-6 h-12 rounded-xl gap-2 border-dashed"
-                >
-                  <FileText className="h-4 w-4" />
-                  View All Transactions
-                </Button>
+                {payments.length > 0 && (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-6 h-12 rounded-xl gap-2 border-dashed"
+                  >
+                    <FileText className="h-4 w-4" />
+                    View All Transactions
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </motion.div>
