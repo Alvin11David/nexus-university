@@ -331,6 +331,65 @@ export function GeneratePRNTab() {
     return num.toLocaleString();
   };
 
+  const sharePRN = async () => {
+    if (!generatedPRN) return;
+
+    const shareText = `PRN Code: ${
+      generatedPRN.code
+    }\nAmount: UGX ${generatedPRN.amount.toLocaleString()}\nPurpose: ${
+      generatedPRN.purpose
+    }\n\nExpires: ${generatedPRN.expiresAt.toLocaleString()}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Payment Reference Number",
+          text: shareText,
+        });
+        toast({
+          title: "Shared Successfully",
+          description: "PRN shared with your contacts",
+        });
+      } catch (error) {
+        console.error("Error sharing:", error);
+      }
+    } else {
+      // Fallback: copy to clipboard
+      navigator.clipboard.writeText(shareText);
+      toast({
+        title: "Copied to Clipboard",
+        description: "Share text copied. You can paste it anywhere.",
+      });
+    }
+  };
+
+  const downloadReceiptImage = async () => {
+    if (!receiptRef.current) return;
+
+    try {
+      const canvas = await html2canvas(receiptRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+      });
+      const image = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `PRN-Receipt-${generatedPRN?.code}.png`;
+      link.click();
+      toast({
+        title: "Receipt Downloaded",
+        description: "Receipt saved as image",
+      });
+    } catch (error) {
+      console.error("Error downloading receipt:", error);
+      toast({
+        title: "Error",
+        description: "Failed to download receipt",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="relative">
       {/* Ambient Background Effects */}
