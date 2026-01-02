@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -23,11 +23,55 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user) {
+      fetchUnreadCount();
+      // Set up real-time listener for notifications
+      const subscription = supabase
+        .channel('notifications')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            fetchUnreadCount();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [user]);
+
+  const fetchUnreadCount = async () => {
+    if (!user) return;
+    try {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+
+      if (error) throw error;
+      setUnreadCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching unread count:', error);
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -77,9 +121,11 @@ export function Header() {
               <Button variant="ghost" size="icon" className="relative" asChild>
                 <Link to="/notifications">
                   <Bell className="h-5 w-5" />
-                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-coral text-[10px] font-bold text-white flex items-center justify-center">
-                    3
-                  </span>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-coral text-[10px] font-bold text-white flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </Link>
               </Button>
 

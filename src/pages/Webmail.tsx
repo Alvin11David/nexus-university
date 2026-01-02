@@ -1,37 +1,57 @@
-import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import gsap from 'gsap';
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
 import {
-  Mail, Inbox, Send, FileText, Star, Archive, Trash2, Search,
-  Plus, X, Paperclip, Image as ImageIcon, MoreVertical, Reply,
-  ReplyAll, Forward, ChevronLeft, Filter, Loader2, User, Clock,
-  CheckCircle2, Circle, AlertCircle
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Header } from '@/components/layout/Header';
-import { BottomNav } from '@/components/layout/BottomNav';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { formatDistanceToNow, format } from 'date-fns';
+  Mail,
+  Inbox,
+  Send,
+  FileText,
+  Star,
+  Archive,
+  Trash2,
+  Search,
+  Plus,
+  X,
+  Paperclip,
+  Image as ImageIcon,
+  MoreVertical,
+  Reply,
+  ReplyAll,
+  Forward,
+  ChevronLeft,
+  Filter,
+  Loader2,
+  User,
+  Clock,
+  CheckCircle2,
+  Circle,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow, format } from "date-fns";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 
 interface Message {
   id: string;
@@ -72,23 +92,23 @@ interface Draft {
   };
 }
 
-type ViewType = 'inbox' | 'sent' | 'drafts' | 'starred' | 'archived';
+type ViewType = "inbox" | "sent" | "drafts" | "starred" | "archived";
 
 export default function Webmail() {
   const { user, profile } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
-  const [selectedView, setSelectedView] = useState<ViewType>('inbox');
+  const [selectedView, setSelectedView] = useState<ViewType>("inbox");
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [isComposeOpen, setIsComposeOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
-  
+
   // Compose state
-  const [composeTo, setComposeTo] = useState('');
-  const [composeSubject, setComposeSubject] = useState('');
-  const [composeBody, setComposeBody] = useState('');
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
   const [composeToId, setComposeToId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [sending, setSending] = useState(false);
@@ -106,13 +126,15 @@ export default function Webmail() {
   useEffect(() => {
     // GSAP Title Animation
     if (titleRef.current) {
-      const chars = titleRef.current.textContent?.split('') || [];
-      titleRef.current.innerHTML = chars.map(char =>
-        char === ' ' ? ' ' : `<span class="inline-block">${char}</span>`
-      ).join('');
+      const chars = titleRef.current.textContent?.split("") || [];
+      titleRef.current.innerHTML = chars
+        .map((char) =>
+          char === " " ? " " : `<span class="inline-block">${char}</span>`
+        )
+        .join("");
 
       gsap.fromTo(
-        titleRef.current.querySelectorAll('span'),
+        titleRef.current.querySelectorAll("span"),
         {
           opacity: 0,
           y: 30,
@@ -124,7 +146,7 @@ export default function Webmail() {
           rotationX: 0,
           duration: 0.6,
           stagger: 0.02,
-          ease: 'back.out(1.7)',
+          ease: "back.out(1.7)",
         }
       );
     }
@@ -133,15 +155,15 @@ export default function Webmail() {
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, avatar_url')
-        .neq('id', user?.id)
-        .order('full_name');
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .neq("id", user?.id)
+        .order("full_name");
 
       if (error) throw error;
       setUsers(data || []);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error("Error fetching users:", error);
     }
   };
 
@@ -151,29 +173,31 @@ export default function Webmail() {
     try {
       setLoading(true);
       let query = supabase
-        .from('messages')
-        .select(`
+        .from("messages")
+        .select(
+          `
           *,
           from_profile:profiles!from_user_id(id, full_name, email, avatar_url),
           to_profile:profiles!to_user_id(id, full_name, email, avatar_url)
-        `)
-        .order('created_at', { ascending: false });
+        `
+        )
+        .order("created_at", { ascending: false });
 
-      if (selectedView === 'inbox') {
+      if (selectedView === "inbox") {
         query = query
-          .eq('to_user_id', user.id)
-          .eq('is_deleted_by_recipient', false);
-      } else if (selectedView === 'sent') {
+          .eq("to_user_id", user.id)
+          .eq("is_deleted_by_recipient", false);
+      } else if (selectedView === "sent") {
         query = query
-          .eq('from_user_id', user.id)
-          .eq('is_deleted_by_sender', false);
-      } else if (selectedView === 'starred') {
+          .eq("from_user_id", user.id)
+          .eq("is_deleted_by_sender", false);
+      } else if (selectedView === "starred") {
         query = query
-          .eq('is_starred', true)
+          .eq("is_starred", true)
           .or(`to_user_id.eq.${user.id},from_user_id.eq.${user.id}`);
-      } else if (selectedView === 'archived') {
+      } else if (selectedView === "archived") {
         query = query
-          .eq('is_archived', true)
+          .eq("is_archived", true)
           .or(`to_user_id.eq.${user.id},from_user_id.eq.${user.id}`);
       }
 
@@ -182,7 +206,7 @@ export default function Webmail() {
       if (error) throw error;
       setMessages(data || []);
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error("Error fetching messages:", error);
     } finally {
       setLoading(false);
     }
@@ -193,52 +217,71 @@ export default function Webmail() {
 
     try {
       const { data, error } = await supabase
-        .from('message_drafts')
-        .select(`
+        .from("message_drafts")
+        .select(
+          `
           *,
           to_profile:profiles!to_user_id(id, full_name, email)
-        `)
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+        `
+        )
+        .eq("user_id", user.id)
+        .order("updated_at", { ascending: false });
 
       if (error) throw error;
       setDrafts(data || []);
     } catch (error) {
-      console.error('Error fetching drafts:', error);
+      console.error("Error fetching drafts:", error);
     }
   };
 
   const handleSendMessage = async () => {
-    if (!user || !composeToId || !composeSubject || !composeBody.trim()) {
+    if (!user) {
+      alert("You must be logged in to send messages.");
+      return;
+    }
+
+    if (!composeToId) {
+      alert("Please select a recipient from the list.");
+      return;
+    }
+
+    if (!composeSubject.trim()) {
+      alert("Please enter a subject.");
+      return;
+    }
+
+    if (!composeBody.trim()) {
+      alert("Please enter a message.");
       return;
     }
 
     try {
       setSending(true);
-      const { error } = await supabase
-        .from('messages')
-        .insert({
-          from_user_id: user.id,
-          to_user_id: composeToId,
-          subject: composeSubject,
-          body: composeBody,
-          thread_id: crypto.randomUUID(),
-        });
+      const { error } = await supabase.from("messages").insert({
+        from_user_id: user.id,
+        to_user_id: composeToId,
+        subject: composeSubject,
+        body: composeBody,
+        thread_id: crypto.randomUUID(),
+      });
 
       if (error) throw error;
 
       // Reset compose form
-      setComposeTo('');
-      setComposeSubject('');
-      setComposeBody('');
+      setComposeTo("");
+      setComposeSubject("");
+      setComposeBody("");
       setComposeToId(null);
       setIsComposeOpen(false);
 
       // Refresh messages
       fetchMessages();
     } catch (error) {
-      console.error('Error sending message:', error);
-      alert('Failed to send message. Please try again.');
+      console.error("Error sending message:", error);
+      alert(
+        "Failed to send message. Please try again. Error: " +
+          (error as any).message
+      );
     } finally {
       setSending(false);
     }
@@ -249,25 +292,23 @@ export default function Webmail() {
 
     try {
       setSavingDraft(true);
-      const { error } = await supabase
-        .from('message_drafts')
-        .insert({
-          user_id: user.id,
-          to_user_id: composeToId,
-          subject: composeSubject,
-          body: composeBody,
-        });
+      const { error } = await supabase.from("message_drafts").insert({
+        user_id: user.id,
+        to_user_id: composeToId,
+        subject: composeSubject,
+        body: composeBody,
+      });
 
       if (error) throw error;
 
-      setComposeTo('');
-      setComposeSubject('');
-      setComposeBody('');
+      setComposeTo("");
+      setComposeSubject("");
+      setComposeBody("");
       setComposeToId(null);
       setIsComposeOpen(false);
       fetchDrafts();
     } catch (error) {
-      console.error('Error saving draft:', error);
+      console.error("Error saving draft:", error);
     } finally {
       setSavingDraft(false);
     }
@@ -276,9 +317,9 @@ export default function Webmail() {
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
     try {
       const { error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({ is_starred: !currentValue })
-        .eq('id', messageId);
+        .eq("id", messageId);
 
       if (error) throw error;
       fetchMessages();
@@ -286,16 +327,16 @@ export default function Webmail() {
         setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
       }
     } catch (error) {
-      console.error('Error toggling star:', error);
+      console.error("Error toggling star:", error);
     }
   };
 
   const handleMarkAsRead = async (messageId: string) => {
     try {
       const { error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({ is_read: true })
-        .eq('id', messageId);
+        .eq("id", messageId);
 
       if (error) throw error;
       fetchMessages();
@@ -303,7 +344,7 @@ export default function Webmail() {
         setSelectedMessage({ ...selectedMessage, is_read: true });
       }
     } catch (error) {
-      console.error('Error marking as read:', error);
+      console.error("Error marking as read:", error);
     }
   };
 
@@ -311,32 +352,34 @@ export default function Webmail() {
     if (!user) return;
 
     try {
-      const message = messages.find(m => m.id === messageId);
+      const message = messages.find((m) => m.id === messageId);
       if (!message) return;
 
       const isSent = message.from_user_id === user.id;
-      const updateField = isSent ? 'is_deleted_by_sender' : 'is_deleted_by_recipient';
+      const updateField = isSent
+        ? "is_deleted_by_sender"
+        : "is_deleted_by_recipient";
 
       const { error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({ [updateField]: true })
-        .eq('id', messageId);
+        .eq("id", messageId);
 
       if (error) throw error;
-      
+
       setSelectedMessage(null);
       fetchMessages();
     } catch (error) {
-      console.error('Error deleting message:', error);
+      console.error("Error deleting message:", error);
     }
   };
 
   const handleArchive = async (messageId: string, currentValue: boolean) => {
     try {
       const { error } = await supabase
-        .from('messages')
+        .from("messages")
         .update({ is_archived: !currentValue })
-        .eq('id', messageId);
+        .eq("id", messageId);
 
       if (error) throw error;
       fetchMessages();
@@ -344,11 +387,11 @@ export default function Webmail() {
         setSelectedMessage({ ...selectedMessage, is_archived: !currentValue });
       }
     } catch (error) {
-      console.error('Error archiving message:', error);
+      console.error("Error archiving message:", error);
     }
   };
 
-  const filteredMessages = messages.filter(msg => {
+  const filteredMessages = messages.filter((msg) => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -361,13 +404,15 @@ export default function Webmail() {
     );
   });
 
-  const unreadCount = messages.filter(m => !m.is_read && m.to_user_id === user?.id).length;
+  const unreadCount = messages.filter(
+    (m) => !m.is_read && m.to_user_id === user?.id
+  ).length;
 
   const getInitials = (name: string) => {
     return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
       .toUpperCase()
       .slice(0, 2);
   };
@@ -375,7 +420,7 @@ export default function Webmail() {
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-0">
       <Header />
-      
+
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--secondary)/0.2)_0%,_transparent_50%)]" />
@@ -389,8 +434,8 @@ export default function Webmail() {
               <Mail className="h-4 w-4" />
               <span>Communication</span>
             </div>
-            
-            <h1 
+
+            <h1
               ref={titleRef}
               className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-primary-foreground mb-4"
             >
@@ -430,11 +475,11 @@ export default function Webmail() {
               <Card className="border-0 shadow-lg">
                 <CardContent className="p-4 space-y-1">
                   <button
-                    onClick={() => setSelectedView('inbox')}
+                    onClick={() => setSelectedView("inbox")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === 'inbox'
-                        ? 'bg-secondary text-secondary-foreground shadow-md'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      selectedView === "inbox"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Inbox className="h-5 w-5" />
@@ -447,11 +492,11 @@ export default function Webmail() {
                   </button>
 
                   <button
-                    onClick={() => setSelectedView('sent')}
+                    onClick={() => setSelectedView("sent")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === 'sent'
-                        ? 'bg-secondary text-secondary-foreground shadow-md'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      selectedView === "sent"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Send className="h-5 w-5" />
@@ -459,11 +504,11 @@ export default function Webmail() {
                   </button>
 
                   <button
-                    onClick={() => setSelectedView('drafts')}
+                    onClick={() => setSelectedView("drafts")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === 'drafts'
-                        ? 'bg-secondary text-secondary-foreground shadow-md'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      selectedView === "drafts"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <FileText className="h-5 w-5" />
@@ -476,11 +521,11 @@ export default function Webmail() {
                   </button>
 
                   <button
-                    onClick={() => setSelectedView('starred')}
+                    onClick={() => setSelectedView("starred")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === 'starred'
-                        ? 'bg-secondary text-secondary-foreground shadow-md'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      selectedView === "starred"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Star className="h-5 w-5" />
@@ -488,11 +533,11 @@ export default function Webmail() {
                   </button>
 
                   <button
-                    onClick={() => setSelectedView('archived')}
+                    onClick={() => setSelectedView("archived")}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === 'archived'
-                        ? 'bg-secondary text-secondary-foreground shadow-md'
-                        : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                      selectedView === "archived"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
                     <Archive className="h-5 w-5" />
@@ -504,7 +549,7 @@ export default function Webmail() {
 
             {/* Main Content */}
             <div className="lg:col-span-3">
-              {selectedView === 'drafts' ? (
+              {selectedView === "drafts" ? (
                 <Card className="border-0 shadow-lg">
                   <CardContent className="p-6">
                     <div className="flex items-center justify-between mb-6">
@@ -522,10 +567,10 @@ export default function Webmail() {
                             key={draft.id}
                             className="cursor-pointer hover:shadow-md transition-shadow"
                             onClick={() => {
-                              setComposeTo(draft.to_profile?.email || '');
+                              setComposeTo(draft.to_profile?.email || "");
                               setComposeToId(draft.to_user_id || null);
-                              setComposeSubject(draft.subject || '');
-                              setComposeBody(draft.body || '');
+                              setComposeSubject(draft.subject || "");
+                              setComposeBody(draft.body || "");
                               setIsComposeOpen(true);
                             }}
                           >
@@ -534,12 +579,17 @@ export default function Webmail() {
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
                                     <span className="font-medium">
-                                      {draft.to_profile?.full_name || 'No recipient'}
+                                      {draft.to_profile?.full_name ||
+                                        "No recipient"}
                                     </span>
                                     {draft.subject && (
                                       <>
-                                        <span className="text-muted-foreground">•</span>
-                                        <span className="font-semibold">{draft.subject}</span>
+                                        <span className="text-muted-foreground">
+                                          •
+                                        </span>
+                                        <span className="font-semibold">
+                                          {draft.subject}
+                                        </span>
                                       </>
                                     )}
                                   </div>
@@ -549,7 +599,10 @@ export default function Webmail() {
                                     </p>
                                   )}
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    {format(new Date(draft.created_at), 'MMM d, yyyy h:mm a')}
+                                    {format(
+                                      new Date(draft.created_at),
+                                      "MMM d, yyyy h:mm a"
+                                    )}
                                   </p>
                                 </div>
                               </div>
@@ -583,7 +636,9 @@ export default function Webmail() {
                     <Card className="border-0 shadow-lg">
                       <CardContent className="p-12 text-center">
                         <Loader2 className="h-10 w-10 animate-spin text-secondary mx-auto mb-4" />
-                        <p className="text-muted-foreground">Loading messages...</p>
+                        <p className="text-muted-foreground">
+                          Loading messages...
+                        </p>
                       </CardContent>
                     </Card>
                   ) : selectedMessage ? (
@@ -607,16 +662,34 @@ export default function Webmail() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => handleToggleStar(selectedMessage.id, selectedMessage.is_starred)}
+                                onClick={() =>
+                                  handleToggleStar(
+                                    selectedMessage.id,
+                                    selectedMessage.is_starred
+                                  )
+                                }
                               >
-                                <Star className={`h-4 w-4 mr-2 ${selectedMessage.is_starred ? 'fill-amber-500 text-amber-500' : ''}`} />
-                                {selectedMessage.is_starred ? 'Unstar' : 'Star'}
+                                <Star
+                                  className={`h-4 w-4 mr-2 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
+                                />
+                                {selectedMessage.is_starred ? "Unstar" : "Star"}
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => handleArchive(selectedMessage.id, selectedMessage.is_archived)}
+                                onClick={() =>
+                                  handleArchive(
+                                    selectedMessage.id,
+                                    selectedMessage.is_archived
+                                  )
+                                }
                               >
                                 <Archive className="h-4 w-4 mr-2" />
-                                {selectedMessage.is_archived ? 'Unarchive' : 'Archive'}
+                                {selectedMessage.is_archived
+                                  ? "Unarchive"
+                                  : "Archive"}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
@@ -632,34 +705,58 @@ export default function Webmail() {
 
                         <div className="space-y-6">
                           <div>
-                            <h2 className="text-2xl font-bold mb-4">{selectedMessage.subject}</h2>
+                            <h2 className="text-2xl font-bold mb-4">
+                              {selectedMessage.subject}
+                            </h2>
                             <div className="flex items-start gap-4 pb-4 border-b">
                               <Avatar className="h-12 w-12">
-                                <AvatarImage src={selectedMessage.from_profile?.avatar_url || undefined} />
+                                <AvatarImage
+                                  src={
+                                    selectedMessage.from_profile?.avatar_url ||
+                                    undefined
+                                  }
+                                />
                                 <AvatarFallback>
-                                  {getInitials(selectedMessage.from_profile?.full_name || 'U')}
+                                  {getInitials(
+                                    selectedMessage.from_profile?.full_name ||
+                                      "U"
+                                  )}
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="font-semibold">
-                                    {selectedMessage.from_profile?.full_name || 'Unknown'}
+                                    {selectedMessage.from_profile?.full_name ||
+                                      "Unknown"}
                                   </span>
                                   <span className="text-muted-foreground">
-                                    &lt;{selectedMessage.from_profile?.email}&gt;
+                                    &lt;{selectedMessage.from_profile?.email}
+                                    &gt;
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {format(new Date(selectedMessage.created_at), 'PPpp')}
+                                  {format(
+                                    new Date(selectedMessage.created_at),
+                                    "PPpp"
+                                  )}
                                 </p>
                               </div>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => handleToggleStar(selectedMessage.id, selectedMessage.is_starred)}
+                                onClick={() =>
+                                  handleToggleStar(
+                                    selectedMessage.id,
+                                    selectedMessage.is_starred
+                                  )
+                                }
                               >
                                 <Star
-                                  className={`h-5 w-5 ${selectedMessage.is_starred ? 'fill-amber-500 text-amber-500' : ''}`}
+                                  className={`h-5 w-5 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
                                 />
                               </Button>
                             </div>
@@ -692,7 +789,9 @@ export default function Webmail() {
                           <div className="text-center py-12">
                             <Mail className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
                             <p className="text-muted-foreground">
-                              {searchQuery ? 'No messages found' : 'No messages yet'}
+                              {searchQuery
+                                ? "No messages found"
+                                : "No messages yet"}
                             </p>
                           </div>
                         ) : (
@@ -700,8 +799,11 @@ export default function Webmail() {
                             <div className="divide-y">
                               <AnimatePresence>
                                 {filteredMessages.map((message, index) => {
-                                  const isSent = message.from_user_id === user?.id;
-                                  const otherProfile = isSent ? message.to_profile : message.from_profile;
+                                  const isSent =
+                                    message.from_user_id === user?.id;
+                                  const otherProfile = isSent
+                                    ? message.to_profile
+                                    : message.from_profile;
 
                                   return (
                                     <motion.div
@@ -711,7 +813,9 @@ export default function Webmail() {
                                       exit={{ opacity: 0, x: 20 }}
                                       transition={{ delay: index * 0.03 }}
                                       className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
-                                        !message.is_read && !isSent ? 'bg-primary/5' : ''
+                                        !message.is_read && !isSent
+                                          ? "bg-primary/5"
+                                          : ""
                                       }`}
                                       onClick={() => {
                                         setSelectedMessage(message);
@@ -722,28 +826,39 @@ export default function Webmail() {
                                     >
                                       <div className="flex items-start gap-4">
                                         <Avatar className="h-10 w-10 flex-shrink-0">
-                                          <AvatarImage src={otherProfile?.avatar_url || undefined} />
+                                          <AvatarImage
+                                            src={
+                                              otherProfile?.avatar_url ||
+                                              undefined
+                                            }
+                                          />
                                           <AvatarFallback className="text-xs">
-                                            {getInitials(otherProfile?.full_name || 'U')}
+                                            {getInitials(
+                                              otherProfile?.full_name || "U"
+                                            )}
                                           </AvatarFallback>
                                         </Avatar>
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2 mb-1">
                                             <span className="font-semibold truncate">
-                                              {otherProfile?.full_name || 'Unknown'}
+                                              {otherProfile?.full_name ||
+                                                "Unknown"}
                                             </span>
                                             {!message.is_read && !isSent && (
                                               <Circle className="h-2 w-2 fill-secondary text-secondary flex-shrink-0" />
                                             )}
                                           </div>
                                           <p className="font-medium truncate mb-1">
-                                            {message.subject || '(No subject)'}
+                                            {message.subject || "(No subject)"}
                                           </p>
                                           <p className="text-sm text-muted-foreground line-clamp-2">
                                             {message.body}
                                           </p>
                                           <p className="text-xs text-muted-foreground mt-2">
-                                            {formatDistanceToNow(new Date(message.created_at), { addSuffix: true })}
+                                            {formatDistanceToNow(
+                                              new Date(message.created_at),
+                                              { addSuffix: true }
+                                            )}
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -753,11 +868,18 @@ export default function Webmail() {
                                             className="h-8 w-8"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              handleToggleStar(message.id, message.is_starred);
+                                              handleToggleStar(
+                                                message.id,
+                                                message.is_starred
+                                              );
                                             }}
                                           >
                                             <Star
-                                              className={`h-4 w-4 ${message.is_starred ? 'fill-amber-500 text-amber-500' : ''}`}
+                                              className={`h-4 w-4 ${
+                                                message.is_starred
+                                                  ? "fill-amber-500 text-amber-500"
+                                                  : ""
+                                              }`}
                                             />
                                           </Button>
                                         </div>
@@ -788,28 +910,65 @@ export default function Webmail() {
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">To</label>
-              <div className="relative">
+              <div className="space-y-2">
                 <Input
-                  placeholder="Search by name or email..."
+                  placeholder="Type name or email to search..."
                   value={composeTo}
                   onChange={(e) => {
                     setComposeTo(e.target.value);
                     const foundUser = users.find(
-                      u => u.email.toLowerCase() === e.target.value.toLowerCase() ||
-                           u.full_name.toLowerCase().includes(e.target.value.toLowerCase())
+                      (u) =>
+                        u.email.toLowerCase() ===
+                          e.target.value.toLowerCase() ||
+                        u.full_name
+                          .toLowerCase()
+                          .includes(e.target.value.toLowerCase())
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
-                  list="users-list"
-                  className="pr-10"
+                  className={composeToId ? "border-green-500" : ""}
                 />
-                <datalist id="users-list">
-                  {users.map(user => (
-                    <option key={user.id} value={user.email}>
-                      {user.full_name}
-                    </option>
-                  ))}
-                </datalist>
+                {composeTo && !composeToId && (
+                  <p className="text-xs text-amber-600">
+                    No user found. Please select from the list below.
+                  </p>
+                )}
+                {composeToId && (
+                  <p className="text-xs text-green-600">✓ Recipient selected</p>
+                )}
+                {composeTo && (
+                  <ScrollArea className="max-h-32 rounded-md border">
+                    <div className="p-2 space-y-1">
+                      {users
+                        .filter(
+                          (u) =>
+                            u.email
+                              .toLowerCase()
+                              .includes(composeTo.toLowerCase()) ||
+                            u.full_name
+                              .toLowerCase()
+                              .includes(composeTo.toLowerCase())
+                        )
+                        .slice(0, 10)
+                        .map((user) => (
+                          <button
+                            key={user.id}
+                            type="button"
+                            onClick={() => {
+                              setComposeTo(user.email);
+                              setComposeToId(user.id);
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors"
+                          >
+                            <div className="font-medium">{user.full_name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {user.email}
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                )}
               </div>
             </div>
 
@@ -844,12 +1003,17 @@ export default function Webmail() {
                     Saving...
                   </>
                 ) : (
-                  'Save Draft'
+                  "Save Draft"
                 )}
               </Button>
               <Button
                 onClick={handleSendMessage}
-                disabled={!composeToId || !composeSubject || !composeBody.trim() || sending}
+                disabled={
+                  !composeToId ||
+                  !composeSubject ||
+                  !composeBody.trim() ||
+                  sending
+                }
                 className="bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90"
               >
                 {sending ? (
@@ -873,4 +1037,3 @@ export default function Webmail() {
     </div>
   );
 }
-
