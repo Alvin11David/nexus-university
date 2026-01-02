@@ -725,6 +725,35 @@ export function GeneratePRNTab() {
                         </motion.p>
                       </div>
 
+                      {/* QR Code Display */}
+                      <AnimatePresence>
+                        {showQR && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            className="flex justify-center p-6 rounded-2xl bg-white border-2 border-dashed border-emerald-500/50 mb-8"
+                          >
+                            <div className="flex flex-col items-center gap-3">
+                              <p className="text-sm font-medium text-muted-foreground">
+                                Scan to complete payment
+                              </p>
+                              <QRCode
+                                value={generatedPRN.code}
+                                size={200}
+                                level="H"
+                                includeMargin={true}
+                                fgColor="#000000"
+                                bgColor="#ffffff"
+                              />
+                              <p className="text-xs text-muted-foreground text-center">
+                                PRN: {generatedPRN.code}
+                              </p>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
                       {/* Details Grid */}
                       <div className="grid grid-cols-2 gap-4">
                         {[
@@ -776,17 +805,31 @@ export function GeneratePRNTab() {
 
                       {/* Action Buttons */}
                       <div className="grid grid-cols-2 gap-4 mt-6">
-                        <Button
-                          variant="outline"
-                          className="h-12 rounded-xl gap-2"
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                         >
-                          <Share2 className="h-4 w-4" />
-                          Share PRN
-                        </Button>
-                        <Button className="h-12 rounded-xl gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700">
-                          <Eye className="h-4 w-4" />
-                          View Receipt
-                        </Button>
+                          <Button
+                            onClick={sharePRN}
+                            variant="outline"
+                            className="h-12 rounded-xl gap-2 w-full"
+                          >
+                            <Share2 className="h-4 w-4" />
+                            Share PRN
+                          </Button>
+                        </motion.div>
+                        <motion.div
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <Button
+                            onClick={() => setShowReceiptModal(true)}
+                            className="h-12 rounded-xl gap-2 w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View Receipt
+                          </Button>
+                        </motion.div>
                       </div>
                     </div>
                   </Card>
