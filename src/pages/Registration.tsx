@@ -60,10 +60,19 @@ export default function Registration() {
   const [selectedSemester, setSelectedSemester] = useState<string>('Semester 1');
   const [selectedYear, setSelectedYear] = useState<number>(CURRENT_YEAR);
   const [step, setStep] = useState<'select' | 'review'>('select');
+  const [registrationNumber, setRegistrationNumber] = useState<string>('');
+  const [studentNumber, setStudentNumber] = useState<string>('');
 
   useEffect(() => {
     fetchData();
   }, [user, selectedSemester, selectedYear]);
+
+  useEffect(() => {
+    if (profile) {
+      setRegistrationNumber(profile.registration_number || '');
+      setStudentNumber(profile.student_number || '');
+    }
+  }, [profile]);
 
   const fetchData = async () => {
     try {
@@ -127,18 +136,39 @@ export default function Registration() {
       });
       return;
     }
+
+    if (!registrationNumber.trim() || !studentNumber.trim()) {
+      toast({ 
+        title: 'Missing Information', 
+        description: 'Please provide both Registration Number and Student Number.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
     
     setSubmitting(true);
     try {
+      // Update profile with registration number and student number
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          registration_number: registrationNumber.trim(),
+          student_number: studentNumber.trim(),
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Create enrollments
       const enrollments = selectedCourses.map(courseId => ({
         course_id: courseId,
         student_id: user.id,
         status: 'pending' as const,
       }));
 
-      const { error } = await supabase.from('enrollments').insert(enrollments);
+      const { error: enrollError } = await supabase.from('enrollments').insert(enrollments);
       
-      if (error) throw error;
+      if (enrollError) throw enrollError;
       
       toast({ 
         title: 'Registration Submitted! 🎉', 
@@ -597,13 +627,35 @@ export default function Registration() {
                   <CardContent className="space-y-6">
                     {/* Student Info */}
                     <div className="p-4 rounded-xl bg-muted/50">
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 mb-4">
                         <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                           <GraduationCap className="h-6 w-6 text-primary" />
                         </div>
                         <div>
                           <p className="font-semibold">{profile?.full_name || 'Student'}</p>
-                          <p className="text-sm text-muted-foreground">{profile?.student_number || profile?.email}</p>
+                          <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                        </div>
+                      </div>
+                      
+                      {/* Registration Number and Student Number Inputs */}
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Registration Number</label>
+                          <Input
+                            value={registrationNumber}
+                            onChange={(e) => setRegistrationNumber(e.target.value)}
+                            placeholder="e.g., 24/U/11805/PS"
+                            className="w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-2 block">Student Number</label>
+                          <Input
+                            value={studentNumber}
+                            onChange={(e) => setStudentNumber(e.target.value)}
+                            placeholder="e.g., 2400711805"
+                            className="w-full"
+                          />
                         </div>
                       </div>
                     </div>

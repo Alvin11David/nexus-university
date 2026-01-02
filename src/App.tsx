@@ -11,6 +11,8 @@ import Registration from "./pages/Registration";
 import Enrollment from "./pages/Enrollment";
 import Portal from "./pages/Portal";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
+import Webmail from "./pages/Webmail";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,7 +48,8 @@ function AppRoutes() {
       <Route path="/live" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/schedule" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/notifications" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+      <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+      <Route path="/webmail" element={<ProtectedRoute><Webmail /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

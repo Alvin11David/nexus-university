@@ -83,7 +83,7 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      const { data, error } = await validateStudent(formData.registrationNumber, formData.studentNumber);
+      const { data, error } = await validateStudent(formData.registrationNumber, formData.studentNumber, formData.email);
       if (error) throw error;
       
       setStudentRecord(data);
@@ -142,7 +142,24 @@ export default function Auth() {
         formData.registrationNumber,
         formData.studentNumber
       );
-      if (error) throw error;
+      if (error) {
+        // If user already exists, provide helpful guidance
+        if (error.message.includes('already exists') || error.message.includes('already registered')) {
+          toast({ 
+            title: 'Account Already Exists', 
+            description: error.message || 'An account with this email already exists. Please sign in instead.',
+            variant: 'destructive',
+            duration: 6000
+          });
+          // Optionally redirect to sign in after a delay
+          setTimeout(() => {
+            setStep('signin');
+            setFormData(prev => ({ ...prev, identifier: formData.email, password: '' }));
+          }, 2000);
+          return;
+        }
+        throw error;
+      }
       
       toast({ title: 'Account Created!', description: 'Welcome to UniPortal.' });
       navigate('/dashboard');

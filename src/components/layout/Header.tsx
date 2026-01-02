@@ -10,7 +10,8 @@ import {
   LogOut,
   BookOpen,
   Calendar,
-  Settings
+  Settings,
+  Mail
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -36,6 +37,7 @@ export function Header() {
   const navItems = [
     { label: 'Courses', href: '/courses', icon: BookOpen },
     { label: 'Schedule', href: '/schedule', icon: Calendar },
+    { label: 'Webmail', href: '/webmail', icon: Mail },
   ];
 
   return (
@@ -72,11 +74,13 @@ export function Header() {
           {user ? (
             <>
               {/* Notifications */}
-              <Button variant="ghost" size="icon" className="relative">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-coral text-[10px] font-bold text-white flex items-center justify-center">
-                  3
-                </span>
+              <Button variant="ghost" size="icon" className="relative" asChild>
+                <Link to="/notifications">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-coral text-[10px] font-bold text-white flex items-center justify-center">
+                    3
+                  </span>
+                </Link>
               </Button>
 
               {/* User Menu */}

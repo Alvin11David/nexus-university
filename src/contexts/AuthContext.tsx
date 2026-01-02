@@ -33,7 +33,7 @@ interface AuthContextType {
   signIn: (identifier: string, password: string) => Promise<{ error: Error | null }>;
   signInWithStudentId: (identifier: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  validateStudent: (registrationNumber: string, studentNumber: string) => Promise<{ data: StudentRecord | null; error: Error | null }>;
+  validateStudent: (registrationNumber: string, studentNumber: string, email: string) => Promise<{ data: StudentRecord | null; error: Error | null }>;
   generateOTP: (email: string, studentRecordId: string) => Promise<{ otp: string; error: Error | null }>;
   verifyOTP: (email: string, otp: string) => Promise<{ valid: boolean; error: Error | null }>;
 }
@@ -88,28 +88,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Validate if student exists in the system
-  const validateStudent = async (registrationNumber: string, studentNumber: string): Promise<{ data: StudentRecord | null; error: Error | null }> => {
-    const { data, error } = await supabase
+  // Validate if student exists in the system, create if not
+  const validateStudent = async (registrationNumber: string, studentNumber: string, email: string): Promise<{ data: StudentRecord | null; error: Error | null }> => {
+    // First, try to find existing record
+    const { data: existingData, error: selectError } = await supabase
       .from('student_records')
       .select('*')
       .eq('registration_number', registrationNumber)
       .eq('student_number', studentNumber)
       .maybeSingle();
 
-    if (error) {
-      return { data: null, error: new Error(error.message) };
+    if (selectError) {
+      return { data: null, error: new Error(selectError.message) };
     }
 
-    if (!data) {
-      return { data: null, error: new Error('Student not found in the system. Please verify your registration and student numbers.') };
+    // If record exists, check if already registered
+    if (existingData) {
+      if (existingData.is_registered) {
+        return { data: null, error: new Error('This student account is already registered. Please sign in instead.') };
+      }
+      return { data: existingData as StudentRecord, error: null };
     }
 
-    if (data.is_registered) {
-      return { data: null, error: new Error('This student account is already registered. Please sign in instead.') };
+    // Record doesn't exist, create a new one
+    // Extract name from email (part before @) and capitalize
+    const emailName = email.split('@')[0];
+    const fullName = emailName
+      .split(/[._-]/)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ') || 'New Student';
+
+    const { data: newData, error: insertError } = await supabase
+      .from('student_records')
+      .insert({
+        registration_number: registrationNumber,
+        student_number: studentNumber,
+        email: email,
+        full_name: fullName,
+        is_registered: false,
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      // Check if it's a unique constraint violation (duplicate)
+      if (insertError.code === '23505') {
+        return { data: null, error: new Error('This registration or student number is already in use. Please sign in instead.') };
+      }
+      return { data: null, error: new Error(insertError.message) };
     }
 
-    return { data: data as StudentRecord, error: null };
+    return { data: newData as StudentRecord, error: null };
   };
 
   // Generate a 4-digit OTP
@@ -166,7 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, fullName: string, registrationNumber?: string, studentNumber?: string) => {
     const redirectUrl = `${window.location.origin}/`;
     
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -179,16 +208,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
 
-    // Mark student as registered in student_records
-    if (!error && registrationNumber && studentNumber) {
+    // Handle "user already exists" error - this can happen if signup was incomplete
+    if (error) {
+      // If user already exists, they might need to sign in or reset password
+      if (error.message.includes('already registered') || error.message.includes('User already registered')) {
+        return { 
+          error: new Error('An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.') 
+        };
+      }
+      return { error };
+    }
+
+    // Update student record with full name and mark as registered
+    if (registrationNumber && studentNumber) {
       await supabase
         .from('student_records')
-        .update({ is_registered: true })
+        .update({ 
+          is_registered: true,
+          full_name: fullName,
+          email: email
+        })
         .eq('registration_number', registrationNumber)
         .eq('student_number', studentNumber);
     }
 
-    return { error };
+    return { error: null };
   };
 
   // Sign in with email and password (legacy method)

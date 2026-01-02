@@ -53,7 +53,7 @@ INSERT INTO public.student_records (full_name, registration_number, student_numb
 ('John Mukasa', '21/U/12345/PS', '2100712345', 'john.mukasa@students.mak.ac.ug'),
 ('Sarah Namuli', '21/U/12346/PS', '2100712346', 'sarah.namuli@students.mak.ac.ug'),
 ('David Okello', '22/U/10001/EVE', '2200710001', 'david.okello@students.mak.ac.ug'),
-('Grace Nakato', '22/U/10002/EVE', '2200710002', 'grace.nakato@students.mak.ac.ug'),
+('Waluube Alvin David', '24/U/11805/PS', '2400711805', 'waluube.alvindavid@students.mak.ac.ug'),
 ('Peter Ssemakula', '23/U/15001/PS', '2300715001', 'peter.ssemakula@students.mak.ac.ug'),
 ('Mary Achieng', '23/U/15002/PS', '2300715002', 'mary.achieng@students.mak.ac.ug'),
 ('James Tumwine', '20/U/08001/EVE', '2000708001', 'james.tumwine@students.mak.ac.ug'),
