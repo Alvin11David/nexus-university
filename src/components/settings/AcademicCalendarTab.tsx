@@ -38,72 +38,72 @@ const academicEvents: CalendarEvent[] = [
   {
     id: "1",
     title: "Semester 1 Begins",
-    date: "2025-01-06",
+    date: "2026-01-05",
     type: "academic",
     important: true,
   },
   {
     id: "2",
     title: "Late Registration Deadline",
-    date: "2025-01-20",
+    date: "2026-01-19",
     type: "deadline",
   },
   {
     id: "3",
     title: "Course Add/Drop Period Ends",
-    date: "2025-01-27",
+    date: "2026-01-26",
     type: "deadline",
   },
-  { id: "4", title: "Martyrs Day", date: "2025-06-03", type: "holiday" },
-  { id: "5", title: "Independence Day", date: "2025-10-09", type: "holiday" },
+  { id: "4", title: "Martyrs Day", date: "2026-06-03", type: "holiday" },
+  { id: "5", title: "Independence Day", date: "2026-10-09", type: "holiday" },
   {
     id: "6",
     title: "Mid-Semester Examinations",
-    date: "2025-03-10",
-    endDate: "2025-03-21",
+    date: "2026-03-09",
+    endDate: "2026-03-20",
     type: "exam",
     important: true,
   },
   {
     id: "7",
     title: "Easter Break",
-    date: "2025-04-18",
-    endDate: "2025-04-21",
+    date: "2026-04-03",
+    endDate: "2026-04-06",
     type: "holiday",
   },
   {
     id: "8",
     title: "End of Semester Examinations",
-    date: "2025-05-19",
-    endDate: "2025-06-06",
+    date: "2026-05-18",
+    endDate: "2026-06-05",
     type: "exam",
     important: true,
   },
   {
     id: "9",
     title: "Semester 1 Ends",
-    date: "2025-06-06",
+    date: "2026-06-05",
     type: "academic",
     important: true,
   },
   {
     id: "10",
     title: "Semester Break",
-    date: "2025-06-07",
-    endDate: "2025-08-03",
+    date: "2026-06-06",
+    endDate: "2026-08-02",
     type: "holiday",
   },
   {
     id: "11",
     title: "Semester 2 Begins",
-    date: "2025-08-04",
+    date: "2026-08-03",
     type: "academic",
     important: true,
   },
   {
     id: "12",
     title: "Graduation Ceremony",
-    date: "2025-02-28",
+    date: "2026-02-27",
     type: "event",
     important: true,
   },
@@ -127,9 +127,12 @@ const months = [
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function AcademicCalendarTab() {
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(2025);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const today = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
+  const [selectedYear, setSelectedYear] = useState(today.getFullYear());
+  const [selectedDate, setSelectedDate] = useState<string | null>(
+    today.toISOString().split("T")[0]
+  );
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
@@ -218,7 +221,7 @@ export function AcademicCalendarTab() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">
-                  Academic Calendar 2024/2025
+                  Academic Calendar 2026
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   Key dates and academic events
@@ -350,6 +353,11 @@ export function AcademicCalendarTab() {
                                 +{dayEvents.length - 3}
                               </div>
                             )}
+                          </div>
+                        )}
+                        {dayEvents.length > 0 && (
+                          <div className="mt-1 text-[10px] leading-tight text-center text-foreground/80 max-h-8 overflow-hidden">
+                            {dayEvents[0].title}
                           </div>
                         )}
                         {hasImportant && (

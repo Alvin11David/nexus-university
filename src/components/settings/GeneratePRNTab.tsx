@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import QRCode from "qrcode.react";
+import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import {
   Receipt,
@@ -20,7 +20,6 @@ import {
   Layers,
   Eye,
   X,
-  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -738,7 +737,7 @@ export function GeneratePRNTab() {
                               <p className="text-sm font-medium text-muted-foreground">
                                 Scan to complete payment
                               </p>
-                              <QRCode
+                              <QRCodeSVG
                                 value={generatedPRN.code}
                                 size={200}
                                 level="H"
@@ -1024,6 +1023,191 @@ export function GeneratePRNTab() {
           </motion.div>
         </div>
       </div>
+
+      {/* Receipt Modal Dialog */}
+      <Dialog open={showReceiptModal} onOpenChange={setShowReceiptModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+            <div>
+              <DialogTitle>Payment Receipt</DialogTitle>
+              <DialogDescription>
+                Keep this receipt for your records
+              </DialogDescription>
+            </div>
+            <button
+              onClick={() => setShowReceiptModal(false)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </DialogHeader>
+
+          {generatedPRN && (
+            <div className="space-y-6">
+              {/* Receipt Content */}
+              <div
+                ref={receiptRef}
+                className="p-8 space-y-6 bg-white text-black rounded-2xl border-2 border-emerald-500"
+              >
+                {/* Header */}
+                <div className="text-center border-b-2 border-dashed border-gray-300 pb-4">
+                  <h2 className="text-2xl font-bold text-emerald-700 mb-2">
+                    PAYMENT RECEIPT
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Nexus University Portal
+                  </p>
+                </div>
+
+                {/* Student Information */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-semibold text-gray-700">
+                      Student Name:
+                    </span>
+                    <span className="text-gray-900">
+                      {profile?.full_name || "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-semibold text-gray-700">
+                      Student Number:
+                    </span>
+                    <span className="font-mono text-gray-900">
+                      {profile?.student_number || "N/A"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-300 pb-2">
+                    <span className="font-semibold text-gray-700">Email:</span>
+                    <span className="text-gray-900">
+                      {profile?.email || "N/A"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment Details */}
+                <div className="bg-emerald-50 p-4 rounded-xl space-y-3">
+                  <h3 className="font-bold text-emerald-900">
+                    Payment Details
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">PRN Code:</span>
+                      <span className="font-mono font-bold text-emerald-700 text-lg">
+                        {generatedPRN.code}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Amount:</span>
+                      <span className="font-bold text-gray-900">
+                        UGX {generatedPRN.amount.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-700">Purpose:</span>
+                      <span className="text-gray-900">
+                        {generatedPRN.purpose}
+                      </span>
+                    </div>
+                    {generatedPRN.fee_id && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Linked Fee:</span>
+                        <span className="text-gray-900">
+                          {fees.find((f) => f.id === generatedPRN.fee_id)
+                            ?.description || "General"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Timestamp Information */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Generated:</span>
+                    <span className="text-gray-900">
+                      {generatedPRN.generatedAt.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-700">Expires:</span>
+                    <span className="font-semibold text-amber-700">
+                      {generatedPRN.expiresAt.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* QR Code for Receipt */}
+                <div className="flex justify-center py-4 border-t-2 border-b-2 border-dashed border-gray-300">
+                  <div className="bg-white p-3 rounded-lg border border-gray-300">
+                    <QRCodeSVG
+                      value={generatedPRN.code}
+                      size={150}
+                      level="H"
+                      includeMargin={true}
+                      fgColor="#000000"
+                      bgColor="#ffffff"
+                    />
+                  </div>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-blue-50 p-4 rounded-xl">
+                  <h4 className="font-bold text-blue-900 mb-2">
+                    Instructions:
+                  </h4>
+                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                    <li>This PRN is valid for 48 hours from generation</li>
+                    <li>Present this code at any authorized payment point</li>
+                    <li>Keep this receipt for your records</li>
+                    <li>
+                      Contact support if payment is not reflected within 48
+                      hours
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Footer */}
+                <div className="text-center border-t-2 border-dashed border-gray-300 pt-4">
+                  <p className="text-xs text-gray-600">
+                    Receipt ID: {generatedPRN.id || generatedPRN.code}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Generated by Nexus University Payment System
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 justify-between">
+                <Button
+                  onClick={downloadReceiptImage}
+                  variant="outline"
+                  className="gap-2 flex-1"
+                >
+                  <Download className="h-4 w-4" />
+                  Download as Image
+                </Button>
+                <Button
+                  onClick={downloadPRN}
+                  variant="outline"
+                  className="gap-2 flex-1"
+                >
+                  <Download className="h-4 w-4" />
+                  Download as Text
+                </Button>
+                <Button
+                  onClick={sharePRN}
+                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
