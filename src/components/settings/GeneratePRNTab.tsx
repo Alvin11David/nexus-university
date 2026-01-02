@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Receipt, Copy, CheckCircle2, RefreshCw, Download, 
@@ -13,17 +13,30 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface GeneratedPRN {
+  id?: string;
   code: string;
   amount: number;
   purpose: string;
   generatedAt: Date;
   expiresAt: Date;
+  fee_id?: string;
+  status?: string;
+}
+
+interface Fee {
+  id: string;
+  amount: number;
+  paid_amount: number;
+  due_date: string;
+  semester: string;
+  description: string;
 }
 
 export function GeneratePRNTab() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [amount, setAmount] = useState('');
   const [purpose, setPurpose] = useState('');
@@ -32,6 +45,33 @@ export function GeneratePRNTab() {
   const [copied, setCopied] = useState(false);
   const [recentPRNs, setRecentPRNs] = useState<GeneratedPRN[]>([]);
   const [showQR, setShowQR] = useState(false);
+  const [fees, setFees] = useState<Fee[]>([]);
+  const [selectedFeeId, setSelectedFeeId] = useState<string>('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchFees();
+    }
+  }, [user]);
+
+  const fetchFees = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('fees')
+        .select('*')
+        .eq('student_id', user?.id)
+        .order('due_date', { ascending: false });
+
+      if (error) throw error;
+      setFees(data || []);
+    } catch (error) {
+      console.error('Error fetching fees:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const purposes = [
     { value: 'tuition', label: 'Tuition Fees', icon: '🎓', amount: 2500000 },
