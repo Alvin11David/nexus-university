@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { formatDistanceToNow } from 'date-fns';
 import { 
   User, Mail, Phone, MapPin, Calendar, GraduationCap,
   Camera, Edit3, Save, X, Building, IdCard, AlertCircle
