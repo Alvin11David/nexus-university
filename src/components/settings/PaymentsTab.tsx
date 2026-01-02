@@ -24,6 +24,8 @@ import {
   Globe,
   Search,
   X,
+  BookOpen,
+  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -66,10 +68,39 @@ interface Payment {
   fee_id: string;
 }
 
+interface Course {
+  id: string;
+  title: string;
+  code: string;
+  credits: number;
+  semester: string;
+  year: number;
+}
+
+interface Enrollment {
+  id: string;
+  course_id: string;
+  status: string;
+  enrolled_at: string;
+  course?: Course;
+}
+
+interface CourseFeesBreakdown {
+  course: Course;
+  enrollment: Enrollment;
+  semesterFees: Fee[];
+  totalCost: number;
+  totalPaid: number;
+}
+
 export function PaymentsTab() {
   const { user } = useAuth();
   const [fees, setFees] = useState<Fee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [courseFeesBreakdown, setCourseFeesBreakdown] = useState<
+    CourseFeesBreakdown[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [filterYear, setFilterYear] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -99,6 +130,28 @@ export function PaymentsTab() {
         .eq("student_id", user?.id)
         .order("paid_at", { ascending: false });
 
+      // Fetch enrollments with course data
+      const { data: enrollmentsData, error: enrollmentsError } = await supabase
+        .from("enrollments")
+        .select(
+          `
+          id,
+          course_id,
+          status,
+          enrolled_at,
+          courses (
+            id,
+            title,
+            code,
+            credits,
+            semester,
+            year
+          )
+        `
+        )
+        .eq("student_id", user?.id)
+        .order("enrolled_at", { ascending: false });
+
       if (feesError) {
         console.error("Error fetching fees:", feesError);
       } else if (feesData) {
@@ -109,6 +162,46 @@ export function PaymentsTab() {
         console.error("Error fetching payments:", paymentsError);
       } else if (paymentsData) {
         setPayments(paymentsData);
+      }
+
+      if (enrollmentsError) {
+        console.error("Error fetching enrollments:", enrollmentsError);
+      } else if (enrollmentsData) {
+        // Transform the data to match our interface
+        const transformedEnrollments = enrollmentsData.map((e: any) => ({
+          id: e.id,
+          course_id: e.course_id,
+          status: e.status,
+          enrolled_at: e.enrolled_at,
+          course: e.courses,
+        }));
+        setEnrollments(transformedEnrollments);
+
+        // Build course fees breakdown
+        if (feesData) {
+          const breakdown = transformedEnrollments.map((enrollment) => {
+            const semesterFees = feesData.filter(
+              (fee) => fee.semester === enrollment.course?.semester
+            );
+            const totalCost = semesterFees.reduce(
+              (sum, fee) => sum + fee.amount,
+              0
+            );
+            const totalPaid = semesterFees.reduce(
+              (sum, fee) => sum + fee.paid_amount,
+              0
+            );
+
+            return {
+              course: enrollment.course,
+              enrollment,
+              semesterFees,
+              totalCost,
+              totalPaid,
+            };
+          });
+          setCourseFeesBreakdown(breakdown);
+        }
       }
     } catch (error) {
       console.error("Error fetching payment data:", error);
@@ -340,161 +433,234 @@ export function PaymentsTab() {
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-2 gap-8">
-          {/* Fee Structure Card */}
+          {/* Fee Structure by Course Card */}
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.3 }}
+            className="lg:col-span-2"
           >
-            <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm h-full">
+            <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                      <BarChart3 className="h-5 w-5 text-primary" />
+                      <BookOpen className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <CardTitle className="text-lg">Fee Structure</CardTitle>
-                      <CardDescription>Breakdown of your fees</CardDescription>
+                      <CardTitle className="text-lg">
+                        Course Fee Breakdown
+                      </CardTitle>
+                      <CardDescription>
+                        Fees for each course by semester
+                      </CardDescription>
                     </div>
                   </div>
-                  <Select value={filterYear} onValueChange={setFilterYear}>
-                    <SelectTrigger className="w-36 rounded-xl">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Year" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Years</SelectItem>
-                      <SelectItem value="2024/2025">2024/2025</SelectItem>
-                      <SelectItem value="2023/2024">2023/2024</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {loading ? (
-                    <div className="text-center py-12">
-                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
-                      <p className="text-muted-foreground">
-                        Loading fee data...
-                      </p>
-                    </div>
-                  ) : fees.length === 0 ? (
-                    <div className="text-center py-12">
-                      <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-                      <h3 className="font-semibold text-lg mb-2">
-                        No fees found
-                      </h3>
-                      <p className="text-muted-foreground text-sm">
-                        Check back later for your fee structure
-                      </p>
-                    </div>
-                  ) : (
-                    fees.map((fee, i) => {
-                      const isPaid = fee.paid_amount >= fee.amount;
-                      const isPartial =
-                        fee.paid_amount > 0 && fee.paid_amount < fee.amount;
-                      const progress = (fee.paid_amount / fee.amount) * 100;
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-4"></div>
+                    <p className="text-muted-foreground">
+                      Loading course data...
+                    </p>
+                  </div>
+                ) : courseFeesBreakdown.length === 0 ? (
+                  <div className="text-center py-12">
+                    <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+                    <h3 className="font-semibold text-lg mb-2">
+                      No courses found
+                    </h3>
+                    <p className="text-muted-foreground text-sm">
+                      Your enrolled courses will appear here
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {courseFeesBreakdown.map((breakdown, courseIdx) => {
+                      const coursePaid = breakdown.totalPaid;
+                      const courseRemaining = breakdown.totalCost - coursePaid;
+                      const courseProgress =
+                        breakdown.totalCost > 0
+                          ? (coursePaid / breakdown.totalCost) * 100
+                          : 0;
 
                       return (
                         <motion.div
-                          key={fee.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.1 }}
-                          whileHover={{
-                            scale: 1.01,
-                            transition: { duration: 0.2 },
-                          }}
-                          className="relative p-5 rounded-2xl bg-muted/30 hover:bg-muted/50 transition-all border border-border/50 group"
+                          key={breakdown.course?.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: courseIdx * 0.1 }}
+                          className="relative overflow-hidden rounded-2xl border border-border/50 bg-gradient-to-br from-muted/30 to-muted/10 p-6 group hover:border-primary/20 transition-all"
                         >
-                          {/* Progress Background */}
-                          <div
-                            className={`absolute inset-0 rounded-2xl opacity-20 ${
-                              isPaid
-                                ? "bg-gradient-to-r from-emerald-500/30 to-transparent"
-                                : isPartial
-                                ? "bg-gradient-to-r from-amber-500/30 to-transparent"
-                                : "bg-gradient-to-r from-destructive/30 to-transparent"
-                            }`}
-                            style={{ width: `${progress}%` }}
-                          />
+                          {/* Decorative Background */}
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-primary/10 to-transparent rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
 
                           <div className="relative">
-                            <div className="flex items-start justify-between mb-3">
-                              <div>
-                                <p className="font-bold text-lg">
-                                  {fee.description}
-                                </p>
-                                <p className="text-sm text-muted-foreground">
-                                  {fee.semester} • {fee.academic_year}
-                                </p>
+                            {/* Course Header */}
+                            <div className="flex items-start justify-between mb-5">
+                              <div className="flex items-start gap-4">
+                                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center">
+                                  <Award className="h-6 w-6 text-primary" />
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-bold text-lg">
+                                      {breakdown.course?.title}
+                                    </h3>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {breakdown.course?.code}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-sm text-muted-foreground">
+                                      {breakdown.course?.semester}
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      •
+                                    </span>
+                                    <span className="text-sm text-muted-foreground">
+                                      {breakdown.course?.credits} Credits
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                               <Badge
                                 className={`${
-                                  isPaid
+                                  courseRemaining <= 0
                                     ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                                    : isPartial
+                                    : courseRemaining <
+                                      breakdown.totalCost * 0.25
                                     ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
                                     : "bg-destructive/10 text-destructive border-destructive/30"
                                 }`}
                               >
-                                {isPaid
-                                  ? "✓ Paid"
-                                  : isPartial
-                                  ? "Partial"
-                                  : "Unpaid"}
+                                {courseRemaining <= 0 ? "✓ Paid" : "Pending"}
                               </Badge>
                             </div>
 
-                            <div className="flex items-end justify-between">
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">
-                                  Due:{" "}
-                                  {new Date(fee.due_date).toLocaleDateString(
-                                    "en-US",
-                                    {
-                                      month: "short",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    }
-                                  )}
-                                </p>
-                                {isPartial && (
-                                  <p className="text-sm">
-                                    <span className="text-emerald-600 font-semibold">
-                                      UGX {fee.paid_amount.toLocaleString()}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {" "}
-                                      / {fee.amount.toLocaleString()}
-                                    </span>
-                                  </p>
-                                )}
-                              </div>
-                              <p className="text-2xl font-black">
-                                UGX {fee.amount.toLocaleString()}
-                              </p>
-                            </div>
+                            {/* Semester Fees */}
+                            {breakdown.semesterFees.length > 0 ? (
+                              <>
+                                <div className="space-y-3 mb-5">
+                                  {breakdown.semesterFees.map((fee, feeIdx) => {
+                                    const isPaid =
+                                      fee.paid_amount >= fee.amount;
+                                    const isPartial =
+                                      fee.paid_amount > 0 &&
+                                      fee.paid_amount < fee.amount;
+                                    const progress =
+                                      (fee.paid_amount / fee.amount) * 100;
 
-                            {/* Progress Bar for Partial */}
-                            {isPartial && (
-                              <div className="mt-3 h-2 rounded-full bg-muted overflow-hidden">
-                                <motion.div
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${progress}%` }}
-                                  transition={{ duration: 1, delay: i * 0.1 }}
-                                  className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full"
-                                />
+                                    return (
+                                      <motion.div
+                                        key={fee.id}
+                                        initial={{ opacity: 0, x: -10 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: feeIdx * 0.05 }}
+                                        className="p-4 rounded-xl bg-background/50 border border-border/50"
+                                      >
+                                        <div className="flex items-center justify-between mb-3">
+                                          <div>
+                                            <p className="font-semibold text-sm">
+                                              {fee.description}
+                                            </p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Due:{" "}
+                                              {new Date(
+                                                fee.due_date
+                                              ).toLocaleDateString("en-US", {
+                                                month: "short",
+                                                day: "numeric",
+                                              })}
+                                            </p>
+                                          </div>
+                                          <div className="text-right">
+                                            <p className="font-bold text-sm">
+                                              UGX {fee.amount.toLocaleString()}
+                                            </p>
+                                            {isPartial && (
+                                              <p className="text-xs text-emerald-600">
+                                                Paid: UGX{" "}
+                                                {fee.paid_amount.toLocaleString()}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {/* Mini Progress Bar */}
+                                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                          <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${progress}%` }}
+                                            transition={{ duration: 0.8 }}
+                                            className={`h-full ${
+                                              isPaid
+                                                ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                                                : isPartial
+                                                ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                                                : "bg-gradient-to-r from-primary to-secondary"
+                                            }`}
+                                          />
+                                        </div>
+                                      </motion.div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Course Total */}
+                                <div className="pt-4 border-t border-border/50">
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="text-sm text-muted-foreground mb-1">
+                                        Total Course Cost
+                                      </p>
+                                      <p className="font-bold text-lg">
+                                        UGX{" "}
+                                        {breakdown.totalCost.toLocaleString()}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-sm text-emerald-600 font-semibold">
+                                        Paid: UGX{" "}
+                                        {breakdown.totalPaid.toLocaleString()}
+                                      </p>
+                                      {courseRemaining > 0 && (
+                                        <p className="text-sm text-destructive font-semibold">
+                                          Remaining: UGX{" "}
+                                          {courseRemaining.toLocaleString()}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Course Progress Bar */}
+                                  <div className="mt-3 h-3 rounded-full bg-muted/50 overflow-hidden">
+                                    <motion.div
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${courseProgress}%` }}
+                                      transition={{ duration: 1 }}
+                                      className="h-full bg-gradient-to-r from-primary via-secondary to-accent rounded-full"
+                                    />
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-center py-6">
+                                <p className="text-muted-foreground text-sm">
+                                  No fees associated with this course
+                                </p>
                               </div>
                             )}
                           </div>
                         </motion.div>
                       );
-                    })
-                  )}
-                </div>
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
