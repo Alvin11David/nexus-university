@@ -1,20 +1,37 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { formatDistanceToNow } from 'date-fns';
-import { 
-  User, Mail, Phone, MapPin, Calendar, GraduationCap,
-  Camera, Edit3, Save, X, Building, IdCard, AlertCircle
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { formatDistanceToNow } from "date-fns";
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  GraduationCap,
+  Camera,
+  Edit3,
+  Save,
+  X,
+  Building,
+  IdCard,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 export function BioDataTab() {
   const { user, profile } = useAuth();
@@ -22,36 +39,36 @@ export function BioDataTab() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
-    full_name: '',
-    email: '',
-    phone: '',
-    bio: '',
-    student_number: '',
-    department: '',
-    college: '',
+    full_name: "",
+    email: "",
+    phone: "",
+    bio: "",
+    student_number: "",
+    department: "",
+    college: "",
   });
 
   useEffect(() => {
     if (profile) {
       setFormData({
-        full_name: profile.full_name || '',
-        email: profile.email || '',
-        phone: profile.phone || '',
-        bio: profile.bio || '',
-        student_number: profile.student_number || '',
-        department: profile.department || '',
-        college: profile.college || '',
+        full_name: profile.full_name || "",
+        email: profile.email || "",
+        phone: profile.phone || "",
+        bio: profile.bio || "",
+        student_number: profile.student_number || "",
+        department: profile.department || "",
+        college: profile.college || "",
       });
     }
   }, [profile]);
 
   const handleSave = async () => {
     if (!user) return;
-    
+
     setIsSaving(true);
     try {
       const { error } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({
           full_name: formData.full_name,
           phone: formData.phone,
@@ -59,18 +76,21 @@ export function BioDataTab() {
           department: formData.department,
           college: formData.college,
         })
-        .eq('id', user.id);
+        .eq("id", user.id);
 
       if (error) throw error;
 
       // Profile updated
       setIsEditing(false);
-      toast({ title: "Profile Updated", description: "Your changes have been saved" });
+      toast({
+        title: "Profile Updated",
+        description: "Your changes have been saved",
+      });
     } catch (error: any) {
-      toast({ 
-        title: "Error", 
+      toast({
+        title: "Error",
         description: error.message || "Failed to update profile",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsSaving(false);
@@ -78,15 +98,26 @@ export function BioDataTab() {
   };
 
   const getInitials = (name: string) => {
-    return name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
+    return (
+      name
+        ?.split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase() || "U"
+    );
   };
 
   const profileFields = [
-    { icon: IdCard, label: 'Student Number', key: 'student_number', editable: false },
-    { icon: Mail, label: 'Email Address', key: 'email', editable: false },
-    { icon: Phone, label: 'Phone Number', key: 'phone', editable: true },
-    { icon: Building, label: 'Department', key: 'department', editable: true },
-    { icon: GraduationCap, label: 'College', key: 'college', editable: true },
+    {
+      icon: IdCard,
+      label: "Student Number",
+      key: "student_number",
+      editable: false,
+    },
+    { icon: Mail, label: "Email Address", key: "email", editable: false },
+    { icon: Phone, label: "Phone Number", key: "phone", editable: true },
+    { icon: Building, label: "Department", key: "department", editable: true },
+    { icon: GraduationCap, label: "College", key: "college", editable: true },
   ];
 
   return (
@@ -104,8 +135,8 @@ export function BioDataTab() {
                   {getInitials(formData.full_name)}
                 </AvatarFallback>
               </Avatar>
-              <Button 
-                size="icon" 
+              <Button
+                size="icon"
                 variant="secondary"
                 className="absolute -bottom-2 -right-2 h-10 w-10 rounded-full shadow-lg"
               >
@@ -116,14 +147,20 @@ export function BioDataTab() {
               <h2 className="text-2xl font-bold mb-1">{formData.full_name}</h2>
               <p className="text-muted-foreground mb-3">{formData.email}</p>
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                <Badge variant="outline">{formData.student_number || 'No Student ID'}</Badge>
-                <Badge variant="secondary">{formData.department || 'No Department'}</Badge>
-                <Badge className="bg-emerald-500/10 text-emerald-600 border-0">Active Student</Badge>
+                <Badge variant="outline">
+                  {formData.student_number || "No Student ID"}
+                </Badge>
+                <Badge variant="secondary">
+                  {formData.department || "No Department"}
+                </Badge>
+                <Badge className="bg-emerald-500/10 text-emerald-600 border-0">
+                  Active Student
+                </Badge>
               </div>
             </div>
             <Button
               variant={isEditing ? "outline" : "default"}
-              onClick={() => isEditing ? handleSave() : setIsEditing(true)}
+              onClick={() => (isEditing ? handleSave() : setIsEditing(true))}
               disabled={isSaving}
               className="gap-2"
             >
@@ -163,12 +200,14 @@ export function BioDataTab() {
               <Input
                 id="full_name"
                 value={formData.full_name}
-                onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, full_name: e.target.value })
+                }
                 disabled={!isEditing}
-                className={!isEditing ? 'bg-muted' : ''}
+                className={!isEditing ? "bg-muted" : ""}
               />
             </div>
-            
+
             {profileFields.map((field, i) => (
               <motion.div
                 key={field.key}
@@ -181,15 +220,19 @@ export function BioDataTab() {
                   <field.icon className="h-4 w-4 text-muted-foreground" />
                   {field.label}
                   {!field.editable && (
-                    <Badge variant="outline" className="text-xs ml-auto">Read-only</Badge>
+                    <Badge variant="outline" className="text-xs ml-auto">
+                      Read-only
+                    </Badge>
                   )}
                 </Label>
                 <Input
                   id={field.key}
                   value={formData[field.key as keyof typeof formData]}
-                  onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, [field.key]: e.target.value })
+                  }
                   disabled={!isEditing || !field.editable}
-                  className={(!isEditing || !field.editable) ? 'bg-muted' : ''}
+                  className={!isEditing || !field.editable ? "bg-muted" : ""}
                 />
               </motion.div>
             ))}
@@ -209,10 +252,12 @@ export function BioDataTab() {
             <CardContent>
               <Textarea
                 value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, bio: e.target.value })
+                }
                 disabled={!isEditing}
                 placeholder="Write a short bio about yourself..."
-                className={`min-h-32 ${!isEditing ? 'bg-muted' : ''}`}
+                className={`min-h-32 ${!isEditing ? "bg-muted" : ""}`}
               />
             </CardContent>
           </Card>
@@ -224,10 +269,10 @@ export function BioDataTab() {
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: 'Member Since', value: 'Active' },
-                  { label: 'Last Updated', value: 'Recently' },
-                  { label: 'Profile Status', value: 'Complete' },
-                  { label: 'Account Type', value: 'Student' },
+                  { label: "Member Since", value: "Active" },
+                  { label: "Last Updated", value: profile?.updated_at ? formatDistanceToNow(new Date(profile.updated_at), { addSuffix: true }) : "Recently" },
+                  { label: "Profile Status", value: "Complete" },
+                  { label: "Account Type", value: "Student" },
                 ].map((stat, i) => (
                   <motion.div
                     key={stat.label}
@@ -236,7 +281,9 @@ export function BioDataTab() {
                     transition={{ delay: i * 0.1 }}
                     className="p-3 rounded-xl bg-muted/50 text-center"
                   >
-                    <p className="text-xs text-muted-foreground mb-1">{stat.label}</p>
+                    <p className="text-xs text-muted-foreground mb-1">
+                      {stat.label}
+                    </p>
                     <p className="font-semibold text-sm">{stat.value}</p>
                   </motion.div>
                 ))}
@@ -250,10 +297,13 @@ export function BioDataTab() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0" />
                   <div>
-                    <h4 className="font-semibold text-sm mb-1">Editing Mode Active</h4>
+                    <h4 className="font-semibold text-sm mb-1">
+                      Editing Mode Active
+                    </h4>
                     <p className="text-xs text-muted-foreground">
-                      Some fields like Student Number and Email cannot be changed. 
-                      Contact the registrar's office for official changes.
+                      Some fields like Student Number and Email cannot be
+                      changed. Contact the registrar's office for official
+                      changes.
                     </p>
                     <Button
                       variant="ghost"
