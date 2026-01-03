@@ -132,35 +132,32 @@ export default function LecturerDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white">
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
       <Header />
 
       <main className="px-4 pb-28 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto pt-6 lg:pt-10">
-          <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-6 sm:p-8 shadow-[0_20px_60px_-30px_rgba(0,0,0,0.7)]">
-            <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 via-cyan-400/5 to-transparent" />
+          <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/70 backdrop-blur-lg p-6 sm:p-8 shadow-xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-transparent pointer-events-none" />
             <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-2">
-                <p className="text-sm uppercase tracking-[0.3em] text-emerald-200/80">
+                <p className="text-sm uppercase tracking-[0.3em] text-primary/80">
                   Lecturer workspace
                 </p>
-                <h1 className="text-3xl font-bold sm:text-4xl flex items-center gap-2">
+                <h1 className="text-3xl font-bold sm:text-4xl flex items-center gap-2 text-foreground">
                   Welcome back, {firstName}
-                  <Sparkles className="h-6 w-6 text-emerald-300" />
+                  <Sparkles className="h-6 w-6 text-primary" />
                 </h1>
-                <p className="text-sm text-slate-200/70 max-w-2xl">
+                <p className="text-sm text-muted-foreground max-w-2xl">
                   Run your day with focus: live sessions, grading,
                   announcements, and class insights in one clean view.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="secondary"
-                  className="bg-white text-slate-900 hover:bg-white/90"
-                >
+                <Button variant="secondary" className="border-border/60">
                   <Mail className="mr-2 h-4 w-4" /> Message cohorts
                 </Button>
-                <Button className="bg-gradient-to-r from-emerald-500 to-cyan-500 text-white border-0 shadow-lg shadow-emerald-500/30">
+                <Button className="bg-gradient-to-r from-primary to-secondary text-primary-foreground border-0 shadow-lg shadow-primary/30">
                   <PlayCircle className="mr-2 h-4 w-4" /> Start live session
                 </Button>
               </div>
@@ -176,18 +173,18 @@ export default function LecturerDashboard() {
                 animate="visible"
                 custom={idx}
               >
-                <Card className="border-white/10 bg-white/5 backdrop-blur-sm">
+                <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm text-slate-200/80">
+                    <CardTitle className="text-sm text-muted-foreground">
                       {stat.label}
                     </CardTitle>
-                    <stat.icon className="h-4 w-4 text-emerald-300" />
+                    <stat.icon className="h-4 w-4 text-primary" />
                   </CardHeader>
                   <CardContent>
-                    <div className="text-3xl font-semibold text-white">
+                    <div className="text-3xl font-semibold text-foreground">
                       {stat.value}
                     </div>
-                    <p className="text-xs text-slate-300/70 mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {stat.hint}
                     </p>
                   </CardContent>
