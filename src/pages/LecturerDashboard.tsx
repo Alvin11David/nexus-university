@@ -201,19 +201,19 @@ export default function LecturerDashboard() {
               custom={1}
               className="space-y-4 xl:col-span-2"
             >
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
-                      Today’s schedule
+                    <CardTitle className="text-lg text-foreground">
+                      Today's schedule
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Live sessions, labs, and seminars
                     </p>
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-emerald-500/20 text-emerald-100 border-emerald-400/30"
+                    className="bg-primary/10 text-primary border-primary/30"
                   >
                     Focus mode
                   </Badge>
@@ -222,24 +222,24 @@ export default function LecturerDashboard() {
                   {schedule.map((item) => (
                     <div
                       key={item.time}
-                      className="flex items-center justify-between rounded-2xl border border-white/5 bg-white/[0.04] px-4 py-3"
+                      className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-emerald-500/15 text-emerald-200 flex items-center justify-center font-semibold">
+                        <div className="h-10 w-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-semibold text-sm">
                           {item.time}
                         </div>
                         <div>
-                          <p className="font-semibold text-white">
+                          <p className="font-semibold text-foreground">
                             {item.title}
                           </p>
-                          <p className="text-xs text-slate-300/70">
+                          <p className="text-xs text-muted-foreground">
                             {item.type} • {item.room}
                           </p>
                         </div>
                       </div>
                       <Badge
                         variant="outline"
-                        className="border-emerald-300/40 text-emerald-50"
+                        className="border-primary/40 text-primary"
                       >
                         {item.mode}
                       </Badge>
@@ -248,17 +248,17 @@ export default function LecturerDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Grading queue
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       What needs your attention now
                     </p>
                   </div>
-                  <Badge className="bg-amber-500/20 text-amber-50 border-amber-400/30">
+                  <Badge className="bg-amber-50 text-amber-700 border-amber-200/60">
                     Auto-save on
                   </Badge>
                 </CardHeader>
@@ -266,27 +266,27 @@ export default function LecturerDashboard() {
                   {gradingQueue.map((item) => (
                     <div
                       key={item.course}
-                      className="rounded-2xl border border-white/5 bg-white/[0.04] p-4"
+                      className="rounded-2xl border border-border/60 bg-muted/30 p-4"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-white">
+                          <p className="font-semibold text-foreground">
                             {item.course}
                           </p>
-                          <p className="text-xs text-slate-300/70">
+                          <p className="text-xs text-muted-foreground">
                             {item.items} submissions • Due {item.due}
                           </p>
                         </div>
                         <Badge
                           variant="secondary"
-                          className="bg-white/10 text-emerald-100 border-emerald-300/20"
+                          className="bg-primary/10 text-primary border-primary/30"
                         >
                           {item.progress}% reviewed
                         </Badge>
                       </div>
-                      <div className="mt-3 h-2 rounded-full bg-white/10">
+                      <div className="mt-3 h-2 rounded-full bg-muted/60">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
                           style={{ width: `${item.progress}%` }}
                         />
                       </div>
@@ -303,20 +303,20 @@ export default function LecturerDashboard() {
               custom={2}
               className="space-y-4"
             >
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Announcements
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Push to cohorts instantly
                     </p>
                   </div>
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="bg-white/10 text-white border-white/20"
+                    className="bg-muted/60 text-foreground border-border/60"
                   >
                     <Mail className="mr-2 h-4 w-4" /> New
                   </Button>
@@ -325,41 +325,41 @@ export default function LecturerDashboard() {
                   {announcements.map((item) => (
                     <div
                       key={item.title}
-                      className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.04] px-3 py-3"
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
                     >
                       <div>
-                        <p className="font-semibold text-white">{item.title}</p>
-                        <p className="text-xs text-slate-300/70">
+                        <p className="font-semibold text-foreground">
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
                           {item.audience}
                         </p>
                       </div>
-                      <span className="text-xs text-emerald-100">
-                        {item.when}
-                      </span>
+                      <span className="text-xs text-primary">{item.when}</span>
                     </div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
-                  <CardTitle className="text-lg text-white">
+                  <CardTitle className="text-lg text-foreground">
                     Engagement pulse
                   </CardTitle>
-                  <Flame className="h-4 w-4 text-amber-300" />
+                  <Flame className="h-4 w-4 text-amber-500" />
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {engagement.map((item) => (
                     <div key={item.label} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm text-slate-200/80">
+                      <div className="flex items-center justify-between text-sm text-muted-foreground">
                         <span>{item.label}</span>
-                        <span className="font-semibold text-white">
+                        <span className="font-semibold text-foreground">
                           {item.value}%
                         </span>
                       </div>
-                      <div className="h-2 rounded-full bg-white/10">
+                      <div className="h-2 rounded-full bg-muted/60">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
                           style={{ width: `${item.value}%` }}
                         />
                       </div>
