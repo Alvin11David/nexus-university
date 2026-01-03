@@ -41,7 +41,8 @@ interface AuthContextType {
     fullName: string,
     registrationNumber?: string,
     studentNumber?: string,
-    role?: "student" | "lecturer"
+    role?: "student" | "lecturer",
+    department?: string
   ) => Promise<{ error: Error | null }>;
   signIn: (
     identifier: string,
@@ -282,7 +283,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     registrationNumber?: string,
     studentNumber?: string,
-    role: "student" | "lecturer" = "student"
+    role: "student" | "lecturer" = "student",
+    department?: string
   ) => {
     const redirectUrl = `${window.location.origin}/`;
 
@@ -323,6 +325,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .update({
             student_number: studentNumber,
             registration_number: registrationNumber,
+          })
+          .eq("id", data.user.id);
+      } else if (role === "lecturer") {
+        // For lecturers, update profile with department
+        await supabase
+          .from("profiles")
+          .update({
+            department: department,
           })
           .eq("id", data.user.id);
       }

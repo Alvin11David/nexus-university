@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 type AuthStep =
   | "signin"
@@ -144,8 +145,22 @@ export default function Auth() {
         formData.password
       );
       if (error) throw error;
-      toast({ title: "Welcome back!" });
-      navigate("/dashboard");
+
+      // Check user role and redirect accordingly
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+      if (currentUser) {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", currentUser.id)
+          .single();
+
+        const userRole = roleData?.role || "student";
+        toast({ title: "Welcome back!" });
+        navigate(userRole === "lecturer" ? "/lecturer" : "/dashboard");
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -267,7 +282,8 @@ export default function Auth() {
         studentRecord?.full_name || (isLecturerSignup ? "Lecturer" : "Student"),
         isLecturerSignup ? undefined : formData.registrationNumber,
         isLecturerSignup ? undefined : formData.studentNumber,
-        isLecturerSignup ? "lecturer" : "student"
+        isLecturerSignup ? "lecturer" : "student",
+        isLecturerSignup ? formData.department : undefined
       );
       if (error) {
         // If user already exists, provide helpful guidance
