@@ -82,6 +82,7 @@ export default function Dashboard() {
   const [classAction, setClassAction] = useState<"join" | "create">("join");
   const [joinCode, setJoinCode] = useState("");
   const [className, setClassName] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const classroomCourses = [
     {
@@ -343,12 +344,57 @@ export default function Dashboard() {
       return;
     }
 
+    if (!user) {
+      alert("You must be logged in to join a class");
+      return;
+    }
+
     try {
-      // You can add Supabase integration here to join a classroom
-      console.log("Joining class with code:", joinCode);
-      alert(`Successfully joined classroom with code: ${joinCode}`);
+      // First, find the classroom by join code
+      const { data: classroom, error: classroomError } = await supabase
+        .from("classrooms")
+        .select("id, name")
+        .eq("join_code", joinCode.trim())
+        .single();
+
+      if (classroomError || !classroom) {
+        alert("Invalid class code. Please check and try again.");
+        return;
+      }
+
+      // Check if student is already enrolled
+      const { data: existingEnrollment } = await supabase
+        .from("classroom_enrollments")
+        .select("id")
+        .eq("classroom_id", classroom.id)
+        .eq("student_id", user.id)
+        .single();
+
+      if (existingEnrollment) {
+        alert("You are already enrolled in this class");
+        setShowClassDialog(false);
+        setJoinCode("");
+        return;
+      }
+
+      // Add student to classroom
+      const { error: enrollError } = await supabase
+        .from("classroom_enrollments")
+        .insert({
+          classroom_id: classroom.id,
+          student_id: user.id,
+          role: "student",
+          enrolled_at: new Date().toISOString(),
+        });
+
+      if (enrollError) throw enrollError;
+
+      alert(`Successfully joined "${classroom.name}"!`);
       setShowClassDialog(false);
       setJoinCode("");
+      
+      // Refresh the page to show new classroom
+      window.location.reload();
     } catch (error) {
       console.error("Error joining class:", error);
       alert("Failed to join class. Please try again.");
@@ -361,12 +407,47 @@ export default function Dashboard() {
       return;
     }
 
+    if (!user) {
+      alert("You must be logged in to create a class");
+      return;
+    }
+
     try {
-      // You can add Supabase integration here to create a classroom
-      console.log("Creating class:", className);
-      alert(`Successfully created classroom: ${className}`);
+      // Generate a unique join code
+      const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+      // Create the classroom
+      const { data: newClassroom, error: createError } = await supabase
+        .from("classrooms")
+        .insert({
+          name: className.trim(),
+          join_code: joinCode,
+          instructor_id: user.id,
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      // Add the creator as instructor
+      const { error: enrollError } = await supabase
+        .from("classroom_enrollments")
+        .insert({
+          classroom_id: newClassroom.id,
+          student_id: user.id,
+          role: "instructor",
+          enrolled_at: new Date().toISOString(),
+        });
+
+      if (enrollError) throw enrollError;
+
+      alert(`Class "${className}" created successfully!\nClass Code: ${joinCode}`);
       setShowClassDialog(false);
       setClassName("");
+
+      // Refresh the page to show new classroom
+      window.location.reload();
     } catch (error) {
       console.error("Error creating class:", error);
       alert("Failed to create class. Please try again.");
@@ -923,10 +1004,7 @@ export default function Dashboard() {
                     Ask your instructor for the class code to join
                   </p>
                 </div>
-                <Button
-                  onClick={handleJoinClass}
-                  className="w-full mt-4"
-                >
+                <Button onClick={handleJoinClass} className="w-full mt-4">
                   Join Class
                 </Button>
               </div>
@@ -949,10 +1027,7 @@ export default function Dashboard() {
                     Give your class a clear, descriptive name
                   </p>
                 </div>
-                <Button
-                  onClick={handleCreateClass}
-                  className="w-full mt-4"
-                >
+                <Button onClick={handleCreateClass} className="w-full mt-4">
                   Create Class
                 </Button>
               </div>
