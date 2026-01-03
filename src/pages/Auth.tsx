@@ -226,7 +226,11 @@ export default function Auth() {
     const enteredOtp = otpValues.join("");
 
     try {
-      const { valid, error } = await verifyOTP(formData.email, enteredOtp);
+      // Use actualEmail for lecturers, regular email for students
+      const emailToVerify = isLecturerSignup
+        ? formData.actualEmail
+        : formData.email;
+      const { valid, error } = await verifyOTP(emailToVerify, enteredOtp);
       if (error) throw error;
 
       if (valid) {
@@ -297,7 +301,8 @@ export default function Auth() {
         title: "Account Created!",
         description: "Welcome to UniPortal.",
       });
-      navigate("/dashboard");
+      // Redirect to lecturer dashboard if lecturer, student dashboard if student
+      navigate(isLecturerSignup ? "/lecturer" : "/dashboard");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -705,7 +710,7 @@ export default function Auth() {
               <p className="text-muted-foreground text-sm">
                 We've sent a 4-digit code to{" "}
                 <span className="font-medium text-foreground">
-                  {formData.email}
+                  {isLecturerSignup ? formData.actualEmail : formData.email}
                 </span>
               </p>
             </div>

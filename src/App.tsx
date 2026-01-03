@@ -16,6 +16,7 @@ import Notifications from "./pages/Notifications";
 import Webmail from "./pages/Webmail";
 import Results from "./pages/Results";
 import Timetable from "./pages/Timetable";
+import LecturerDashboard from "./pages/LecturerDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -145,6 +146,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Timetable />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer"
+        element={
+          <ProtectedRoute>
+            <LecturerDashboard />
           </ProtectedRoute>
         }
       />
