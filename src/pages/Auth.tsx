@@ -37,8 +37,6 @@ type AuthStep =
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "signup";
-  const userRole = searchParams.get("role") as "student" | "lecturer" | null; // Hidden role param
-  const isLecturerSignup = userRole === "lecturer";
   const [step, setStep] = useState<AuthStep>(
     initialMode ? "signup-details" : "signin"
   );
@@ -47,6 +45,7 @@ export default function Auth() {
   const [otpValues, setOtpValues] = useState(["", "", "", ""]);
   const [generatedOtp, setGeneratedOtp] = useState("");
   const [studentRecord, setStudentRecord] = useState<any>(null);
+  const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [formData, setFormData] = useState({
@@ -159,18 +158,20 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      // For lecturers: validate email domain format and move to personal details
-      if (isLecturerSignup) {
-        // Validate email format: surname.othernames@lecturer.com
-        const emailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
+      // Auto-detect if email is lecturer format
+      const emailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
+      const isLecturer = emailPattern.test(formData.email);
 
+      if (isLecturer) {
+        // Validate email format: surname.othernames@lecturer.com
         if (!emailPattern.test(formData.email)) {
           throw new Error(
             "Email must be in format: surname.othernames@lecturer.com"
           );
         }
 
-        // Move to personal details step
+        // Set lecturer flag and move to personal details step
+        setIsLecturerSignup(true);
         setStep("lecturer-personal-details");
         setLoading(false);
         return;
@@ -467,7 +468,7 @@ export default function Auth() {
       case "signup-details":
         return (
           <form onSubmit={handleValidateStudent} className="space-y-5">
-            {!isLecturerSignup && (
+            {!formData.email.endsWith("@lecturer.com") && (
               <>
                 <div className="space-y-2">
                   <Label
@@ -523,18 +524,14 @@ export default function Auth() {
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                {isLecturerSignup
-                  ? "Institutional Email Address"
-                  : "Email Address"}
+                Email Address
               </Label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder={
-                    isLecturerSignup ? "surname.othernames@lecturer.com" : "you@university.edu"
-                  }
+                  placeholder="you@university.edu"
                   value={formData.email}
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
@@ -543,9 +540,10 @@ export default function Auth() {
                   required
                 />
               </div>
-              {isLecturerSignup && (
+              {formData.email.endsWith("@lecturer.com") && (
                 <p className="text-xs text-muted-foreground mt-1 ml-1">
-                  Format: surname.othernames@lecturer.com
+                  Lecturer email detected - you'll be asked for personal details
+                  next
                 </p>
               )}
             </div>
@@ -553,8 +551,8 @@ export default function Auth() {
             <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
               <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
-                {isLecturerSignup
-                  ? "Enter your email address in the format: surname.othernames@lecturer.com"
+                {formData.email.endsWith("@lecturer.com")
+                  ? "Lecturer registration: Enter email in format surname.othernames@lecturer.com"
                   : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
               </p>
             </div>
@@ -645,7 +643,8 @@ export default function Auth() {
 
             <div className="bg-muted/30 p-4 rounded-xl">
               <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Email:</span> {formData.email}
+                <span className="font-medium text-foreground">Email:</span>{" "}
+                {formData.email}
               </p>
             </div>
 
