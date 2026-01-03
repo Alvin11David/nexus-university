@@ -1,45 +1,72 @@
-import { useState, useRef, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  GraduationCap, Mail, Lock, User, Eye, EyeOff, Loader2, ArrowRight, 
-  BookOpen, Award, Users, Sparkles, CheckCircle2, IdCard, Hash,
-  ArrowLeft, ShieldCheck, KeyRound
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useRef, useEffect } from "react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  GraduationCap,
+  Mail,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  Loader2,
+  ArrowRight,
+  BookOpen,
+  Award,
+  Users,
+  Sparkles,
+  CheckCircle2,
+  IdCard,
+  Hash,
+  ArrowLeft,
+  ShieldCheck,
+  KeyRound,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
-type AuthStep = 'signin' | 'signup-details' | 'signup-otp' | 'signup-password';
+type AuthStep = "signin" | "signup-details" | "lecturer-personal-details" | "signup-otp" | "signup-password";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
-  const initialMode = searchParams.get('mode') === 'signup';
-  const userRole = searchParams.get('role') as 'student' | 'lecturer' | null; // Hidden role param
-  const isLecturerSignup = userRole === 'lecturer';
-  const [step, setStep] = useState<AuthStep>(initialMode ? 'signup-details' : 'signin');
+  const initialMode = searchParams.get("mode") === "signup";
+  const userRole = searchParams.get("role") as "student" | "lecturer" | null; // Hidden role param
+  const isLecturerSignup = userRole === "lecturer";
+  const [step, setStep] = useState<AuthStep>(
+    initialMode ? "signup-details" : "signin"
+  );
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [otpValues, setOtpValues] = useState(['', '', '', '']);
-  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [otpValues, setOtpValues] = useState(["", "", "", ""]);
+  const [generatedOtp, setGeneratedOtp] = useState("");
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-  
-  const [formData, setFormData] = useState({ 
-    identifier: '', // student number or registration number for sign in
-    email: '', 
-    password: '', 
-    registrationNumber: '',
-    studentNumber: ''
+
+  const [formData, setFormData] = useState({
+    identifier: "", // student number or registration number for sign in
+    email: "",
+    password: "",
+    registrationNumber: "",
+    studentNumber: "",
+    firstName: "",
+    lastName: "",
+    department: "",
   });
-  
-  const { signIn, signUp, signInWithStudentId, validateStudent, generateOTP, verifyOTP } = useAuth();
+
+  const {
+    signIn,
+    signUp,
+    signInWithStudentId,
+    validateStudent,
+    generateOTP,
+    verifyOTP,
+  } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const isSignUp = step !== 'signin';
+  const isSignUp = step !== "signin";
 
   // Handle OTP input
   const handleOtpChange = (index: number, value: string) => {
@@ -59,8 +86,39 @@ export default function Auth() {
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
+    if (e.key === "Backspace" && !otpValues[index] && index > 0) {
       otpRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleLecturerDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // Generate OTP for lecturer
+      const { otp, error: otpError } = await generateOTP(formData.email, null);
+      if (otpError) throw otpError;
+      
+      setGeneratedOtp(otp);
+      setStudentRecord({ 
+        id: null, 
+        full_name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.email,
+        department: formData.department
+      });
+      
+      toast({ 
+        title: 'OTP Sent (Demo Mode)', 
+        description: `Your verification code is: ${otp}`,
+        duration: 10000
+      });
+      
+      setStep('signup-otp');
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,12 +127,19 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      const { error } = await signInWithStudentId(formData.identifier, formData.password);
+      const { error } = await signInWithStudentId(
+        formData.identifier,
+        formData.password
+      );
       if (error) throw error;
-      toast({ title: 'Welcome back!' });
-      navigate('/dashboard');
+      toast({ title: "Welcome back!" });
+      navigate("/dashboard");
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -85,59 +150,54 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      // For lecturers: validate email domain, skip student record check
+      // For lecturers: validate email domain format and move to personal details
       if (isLecturerSignup) {
-        // Validate institutional email domain
-        const emailDomain = formData.email.split('@')[1]?.toLowerCase();
-        const validDomains = ['nexus.edu', 'staff.nexus.edu', 'faculty.nexus.edu'];
+        // Validate email format: surname.othernames@lecturer.com
+        const emailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
         
-        if (!emailDomain || !validDomains.includes(emailDomain)) {
-          throw new Error('Lecturers must use a valid institutional email address (@nexus.edu)');
+        if (!emailPattern.test(formData.email)) {
+          throw new Error('Email must be in format: surname.othernames@lecturer.com');
         }
         
-        // Generate OTP for lecturer (no student record needed)
-        const { otp, error: otpError } = await generateOTP(formData.email, null);
-        if (otpError) throw otpError;
-        
-        setGeneratedOtp(otp);
-        setStudentRecord({ 
-          id: null, 
-          full_name: formData.email.split('@')[0].replace(/[._]/g, ' '),
-          email: formData.email 
-        });
-        
-        toast({ 
-          title: 'OTP Sent (Demo Mode)', 
-          description: `Your verification code is: ${otp}`,
-          duration: 10000
-        });
-        
-        setStep('signup-otp');
+        // Move to personal details step
+        setStep('lecturer-personal-details');
+        setLoading(false);
         return;
       }
-      
+
       // For students: validate against student records
-      const { data, error } = await validateStudent(formData.registrationNumber, formData.studentNumber, formData.email);
+      const { data, error } = await validateStudent(
+        formData.registrationNumber,
+        formData.studentNumber,
+        formData.email
+      );
       if (error) throw error;
-      
+
       setStudentRecord(data);
-      
+
       // Generate OTP (mock - shown in toast for testing)
-      const { otp, error: otpError } = await generateOTP(formData.email, data!.id);
+      const { otp, error: otpError } = await generateOTP(
+        formData.email,
+        data!.id
+      );
       if (otpError) throw otpError;
-      
+
       setGeneratedOtp(otp);
-      
+
       // Show OTP in toast for testing
-      toast({ 
-        title: 'OTP Sent (Demo Mode)', 
+      toast({
+        title: "OTP Sent (Demo Mode)",
         description: `Your verification code is: ${otp}`,
-        duration: 10000
+        duration: 10000,
       });
-      
-      setStep('signup-otp');
+
+      setStep("signup-otp");
     } catch (error: any) {
-      toast({ title: 'Validation Failed', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Validation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -147,18 +207,25 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
 
-    const enteredOtp = otpValues.join('');
-    
+    const enteredOtp = otpValues.join("");
+
     try {
       const { valid, error } = await verifyOTP(formData.email, enteredOtp);
       if (error) throw error;
-      
+
       if (valid) {
-        toast({ title: 'Email Verified!', description: 'Please set your password.' });
-        setStep('signup-password');
+        toast({
+          title: "Email Verified!",
+          description: "Please set your password.",
+        });
+        setStep("signup-password");
       }
     } catch (error: any) {
-      toast({ title: 'Verification Failed', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Verification Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -170,87 +237,121 @@ export default function Auth() {
 
     try {
       const { error } = await signUp(
-        formData.email, 
-        formData.password, 
-        studentRecord?.full_name || (isLecturerSignup ? 'Lecturer' : 'Student'),
+        formData.email,
+        formData.password,
+        studentRecord?.full_name || (isLecturerSignup ? "Lecturer" : "Student"),
         isLecturerSignup ? undefined : formData.registrationNumber,
         isLecturerSignup ? undefined : formData.studentNumber,
-        isLecturerSignup ? 'lecturer' : 'student'
+        isLecturerSignup ? "lecturer" : "student"
       );
       if (error) {
         // If user already exists, provide helpful guidance
-        if (error.message.includes('already exists') || error.message.includes('already registered')) {
-          toast({ 
-            title: 'Account Already Exists', 
-            description: error.message || 'An account with this email already exists. Please sign in instead.',
-            variant: 'destructive',
-            duration: 6000
+        if (
+          error.message.includes("already exists") ||
+          error.message.includes("already registered")
+        ) {
+          toast({
+            title: "Account Already Exists",
+            description:
+              error.message ||
+              "An account with this email already exists. Please sign in instead.",
+            variant: "destructive",
+            duration: 6000,
           });
           // Optionally redirect to sign in after a delay
           setTimeout(() => {
-            setStep('signin');
-            setFormData(prev => ({ ...prev, identifier: formData.email, password: '' }));
+            setStep("signin");
+            setFormData((prev) => ({
+              ...prev,
+              identifier: formData.email,
+              password: "",
+            }));
           }, 2000);
           return;
         }
         throw error;
       }
-      
-      toast({ title: 'Account Created!', description: 'Welcome to UniPortal.' });
-      navigate('/dashboard');
+
+      toast({
+        title: "Account Created!",
+        description: "Welcome to UniPortal.",
+      });
+      navigate("/dashboard");
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const resetToSignIn = () => {
-    setStep('signin');
-    setOtpValues(['', '', '', '']);
-    setGeneratedOtp('');
+    setStep("signin");
+    setOtpValues(["", "", "", ""]);
+    setGeneratedOtp("");
     setStudentRecord(null);
-    setFormData({ identifier: '', email: '', password: '', registrationNumber: '', studentNumber: '' });
+    setFormData({
+      identifier: "",
+      email: "",
+      password: "",
+      registrationNumber: "",
+      studentNumber: "",
+    });
   };
 
   const resetToSignUp = () => {
-    setStep('signup-details');
-    setOtpValues(['', '', '', '']);
-    setGeneratedOtp('');
+    setStep("signup-details");
+    setOtpValues(["", "", "", ""]);
+    setGeneratedOtp("");
     setStudentRecord(null);
-    setFormData({ identifier: '', email: '', password: '', registrationNumber: '', studentNumber: '' });
+    setFormData({
+      identifier: "",
+      email: "",
+      password: "",
+      registrationNumber: "",
+      studentNumber: "",
+    });
   };
 
   const benefits = [
-    { icon: BookOpen, text: 'Access 2,500+ courses' },
-    { icon: Award, text: 'Track grades & achievements' },
-    { icon: Users, text: 'Join live sessions' },
+    { icon: BookOpen, text: "Access 2,500+ courses" },
+    { icon: Award, text: "Track grades & achievements" },
+    { icon: Users, text: "Join live sessions" },
   ];
 
   const renderStepIndicator = () => {
-    if (step === 'signin') return null;
-    
+    if (step === "signin") return null;
+
     const steps = [
-      { key: 'signup-details', label: 'Details' },
-      { key: 'signup-otp', label: 'Verify' },
-      { key: 'signup-password', label: 'Password' },
+      { key: "signup-details", label: "Details" },
+      { key: "signup-otp", label: "Verify" },
+      { key: "signup-password", label: "Password" },
     ];
-    
-    const currentIndex = steps.findIndex(s => s.key === step);
+
+    const currentIndex = steps.findIndex((s) => s.key === step);
 
     return (
       <div className="flex items-center justify-center gap-2 mb-8">
         {steps.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-              i <= currentIndex 
-                ? 'bg-secondary text-secondary-foreground' 
-                : 'bg-muted text-muted-foreground'
-            }`}>
+            <div
+              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                i <= currentIndex
+                  ? "bg-secondary text-secondary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
               {i < currentIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
             </div>
             {i < steps.length - 1 && (
-              <div className={`w-8 h-0.5 ${i < currentIndex ? 'bg-secondary' : 'bg-muted'}`} />
+              <div
+                className={`w-8 h-0.5 ${
+                  i < currentIndex ? "bg-secondary" : "bg-muted"
+                }`}
+              />
             )}
           </div>
         ))}
@@ -260,18 +361,22 @@ export default function Auth() {
 
   const renderForm = () => {
     switch (step) {
-      case 'signin':
+      case "signin":
         return (
           <form onSubmit={handleSignIn} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-sm font-medium">Student / Registration Number or Email</Label>
+              <Label htmlFor="identifier" className="text-sm font-medium">
+                Student / Registration Number or Email
+              </Label>
               <div className="relative">
                 <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="identifier"
                   placeholder="21/U/12345/PS, 2100712345 or email"
                   value={formData.identifier}
-                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, identifier: e.target.value })
+                  }
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                 />
@@ -280,8 +385,13 @@ export default function Auth() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-                <Link to="/forgot-password" className="text-sm text-secondary hover:text-secondary/80 font-medium">
+                <Label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </Label>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-secondary hover:text-secondary/80 font-medium"
+                >
                   Forgot password?
                 </Link>
               </div>
@@ -289,10 +399,12 @@ export default function Auth() {
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
                   className="h-14 pl-12 pr-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                   minLength={6}
@@ -302,14 +414,18 @@ export default function Auth() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
                 </button>
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group" 
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
               disabled={loading}
             >
               {loading ? (
@@ -324,20 +440,30 @@ export default function Auth() {
           </form>
         );
 
-      case 'signup-details':
+      case "signup-details":
         return (
           <form onSubmit={handleValidateStudent} className="space-y-5">
             {!isLecturerSignup && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="registrationNumber" className="text-sm font-medium">Registration Number</Label>
+                  <Label
+                    htmlFor="registrationNumber"
+                    className="text-sm font-medium"
+                  >
+                    Registration Number
+                  </Label>
                   <div className="relative">
                     <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
                       id="registrationNumber"
                       placeholder="21/U/12345/PS"
                       value={formData.registrationNumber}
-                      onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          registrationNumber: e.target.value,
+                        })
+                      }
                       className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                       required
                     />
@@ -345,14 +471,24 @@ export default function Auth() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="studentNumber" className="text-sm font-medium">Student Number</Label>
+                  <Label
+                    htmlFor="studentNumber"
+                    className="text-sm font-medium"
+                  >
+                    Student Number
+                  </Label>
                   <div className="relative">
                     <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                     <Input
                       id="studentNumber"
                       placeholder="2100712345"
                       value={formData.studentNumber}
-                      onChange={(e) => setFormData({ ...formData, studentNumber: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          studentNumber: e.target.value,
+                        })
+                      }
                       className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                       required
                     />
@@ -363,16 +499,22 @@ export default function Auth() {
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
-                {isLecturerSignup ? 'Institutional Email Address' : 'Email Address'}
+                {isLecturerSignup
+                  ? "Institutional Email Address"
+                  : "Email Address"}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder={isLecturerSignup ? 'you@nexus.edu' : 'you@university.edu'}
+                  placeholder={
+                    isLecturerSignup ? "you@nexus.edu" : "you@university.edu"
+                  }
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                 />
@@ -387,16 +529,15 @@ export default function Auth() {
             <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
               <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
-                {isLecturerSignup 
+                {isLecturerSignup
                   ? "We'll verify your institutional email address to confirm your faculty status."
-                  : "We'll verify you're a registered student by checking your registration and student numbers against our records."
-                }
+                  : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
               </p>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group" 
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
               disabled={loading}
             >
               {loading ? (
@@ -411,16 +552,21 @@ export default function Auth() {
           </form>
         );
 
-      case 'signup-otp':
+      case "signup-otp":
         return (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div className="text-center mb-6">
               <div className="h-16 w-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
                 <KeyRound className="h-8 w-8 text-secondary" />
               </div>
-              <h3 className="text-lg font-semibold mb-2">Enter Verification Code</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                Enter Verification Code
+              </h3>
               <p className="text-muted-foreground text-sm">
-                We've sent a 4-digit code to <span className="font-medium text-foreground">{formData.email}</span>
+                We've sent a 4-digit code to{" "}
+                <span className="font-medium text-foreground">
+                  {formData.email}
+                </span>
               </p>
             </div>
 
@@ -440,10 +586,10 @@ export default function Auth() {
               ))}
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group" 
-              disabled={loading || otpValues.some(v => !v)}
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
+              disabled={loading || otpValues.some((v) => !v)}
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -456,14 +602,14 @@ export default function Auth() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
-              Didn't receive the code?{' '}
-              <button 
+              Didn't receive the code?{" "}
+              <button
                 type="button"
                 onClick={() => {
-                  toast({ 
-                    title: 'OTP Resent (Demo Mode)', 
+                  toast({
+                    title: "OTP Resent (Demo Mode)",
                     description: `Your verification code is: ${generatedOtp}`,
-                    duration: 10000
+                    duration: 10000,
                   });
                 }}
                 className="text-secondary font-medium hover:text-secondary/80"
@@ -474,7 +620,7 @@ export default function Auth() {
           </form>
         );
 
-      case 'signup-password':
+      case "signup-password":
         return (
           <form onSubmit={handleCreateAccount} className="space-y-5">
             <div className="text-center mb-6">
@@ -483,20 +629,28 @@ export default function Auth() {
               </div>
               <h3 className="text-lg font-semibold mb-2">Email Verified!</h3>
               <p className="text-muted-foreground text-sm">
-                Welcome, <span className="font-medium text-foreground">{studentRecord?.full_name}</span>. Set your password to complete registration.
+                Welcome,{" "}
+                <span className="font-medium text-foreground">
+                  {studentRecord?.full_name}
+                </span>
+                . Set your password to complete registration.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">Create Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">
+                Create Password
+              </Label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   placeholder="Min. 6 characters"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
                   className="h-14 pl-12 pr-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                   minLength={6}
@@ -506,7 +660,11 @@ export default function Auth() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -514,13 +672,14 @@ export default function Auth() {
             <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
               <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
-                By creating an account, you agree to our Terms of Service and Privacy Policy
+                By creating an account, you agree to our Terms of Service and
+                Privacy Policy
               </p>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group" 
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
               disabled={loading}
             >
               {loading ? (
@@ -540,7 +699,7 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left Panel - Decorative */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6 }}
@@ -549,10 +708,13 @@ export default function Auth() {
         <div className="absolute inset-0 hero-gradient" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--secondary)/0.3)_0%,_transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_hsl(var(--accent)/0.2)_0%,_transparent_50%)]" />
-        
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }} />
+
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
 
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
@@ -570,7 +732,9 @@ export default function Auth() {
             <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
               <GraduationCap className="h-7 w-7 text-white" />
             </div>
-            <span className="font-display text-2xl font-bold text-white">UniPortal</span>
+            <span className="font-display text-2xl font-bold text-white">
+              UniPortal
+            </span>
           </Link>
 
           <div className="max-w-lg">
@@ -583,14 +747,17 @@ export default function Auth() {
                 <Sparkles className="h-4 w-4 text-secondary" />
                 <span>Join 50,000+ students</span>
               </div>
-              
+
               <h1 className="font-display text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
                 Your Gateway to
-                <span className="block text-secondary">Academic Excellence</span>
+                <span className="block text-secondary">
+                  Academic Excellence
+                </span>
               </h1>
-              
+
               <p className="text-lg text-white/70 mb-10">
-                Access courses, manage your schedule, track grades, and connect with classmates — all in one powerful platform.
+                Access courses, manage your schedule, track grades, and connect
+                with classmates — all in one powerful platform.
               </p>
 
               <div className="space-y-4">
@@ -623,7 +790,8 @@ export default function Auth() {
               ))}
             </div>
             <div className="text-white/70 text-sm">
-              <span className="text-white font-semibold">4.9★</span> from 10,000+ reviews
+              <span className="text-white font-semibold">4.9★</span> from
+              10,000+ reviews
             </div>
           </div>
         </div>
@@ -637,7 +805,7 @@ export default function Auth() {
             <BookOpen className="h-8 w-8 text-white/80" />
           </div>
         </motion.div>
-        
+
         <motion.div
           animate={{ y: [0, 12, 0] }}
           transition={{ duration: 5, repeat: Infinity }}
@@ -666,9 +834,11 @@ export default function Auth() {
           </Link>
 
           {/* Back button for multi-step */}
-          {step !== 'signin' && step !== 'signup-details' && (
+          {step !== "signin" && step !== "signup-details" && (
             <button
-              onClick={() => setStep(step === 'signup-otp' ? 'signup-details' : 'signup-otp')}
+              onClick={() =>
+                setStep(step === "signup-otp" ? "signup-details" : "signup-otp")
+              }
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
@@ -682,16 +852,22 @@ export default function Auth() {
           {/* Form Header */}
           <div className="mb-8">
             <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3">
-              {step === 'signin' ? 'Welcome back' : 
-               step === 'signup-details' ? 'Create an account' :
-               step === 'signup-otp' ? 'Verify your email' :
-               'Set your password'}
+              {step === "signin"
+                ? "Welcome back"
+                : step === "signup-details"
+                ? "Create an account"
+                : step === "signup-otp"
+                ? "Verify your email"
+                : "Set your password"}
             </h1>
             <p className="text-muted-foreground text-lg">
-              {step === 'signin' ? 'Sign in with your student credentials' : 
-               step === 'signup-details' ? 'Verify your student identity to get started' :
-               step === 'signup-otp' ? 'Enter the code sent to your email' :
-               'Almost there! Create a secure password'}
+              {step === "signin"
+                ? "Sign in with your student credentials"
+                : step === "signup-details"
+                ? "Verify your student identity to get started"
+                : step === "signup-otp"
+                ? "Enter the code sent to your email"
+                : "Almost there! Create a secure password"}
             </p>
           </div>
 
@@ -710,12 +886,16 @@ export default function Auth() {
 
           {/* Toggle */}
           <p className="text-center text-muted-foreground mt-8">
-            {step === 'signin' ? "Don't have an account?" : 'Already have an account?'}{' '}
-            <button 
-              onClick={() => step === 'signin' ? resetToSignUp() : resetToSignIn()} 
+            {step === "signin"
+              ? "Don't have an account?"
+              : "Already have an account?"}{" "}
+            <button
+              onClick={() =>
+                step === "signin" ? resetToSignUp() : resetToSignIn()
+              }
               className="text-secondary font-semibold hover:text-secondary/80 transition-colors"
             >
-              {step === 'signin' ? 'Sign up' : 'Sign in'}
+              {step === "signin" ? "Sign up" : "Sign in"}
             </button>
           </p>
         </motion.div>

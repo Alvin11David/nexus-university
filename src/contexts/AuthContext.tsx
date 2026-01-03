@@ -41,7 +41,7 @@ interface AuthContextType {
     fullName: string,
     registrationNumber?: string,
     studentNumber?: string,
-    role?: 'student' | 'lecturer'
+    role?: "student" | "lecturer"
   ) => Promise<{ error: Error | null }>;
   signIn: (
     identifier: string,
@@ -282,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     registrationNumber?: string,
     studentNumber?: string,
-    role: 'student' | 'lecturer' = 'student'
+    role: "student" | "lecturer" = "student"
   ) => {
     const redirectUrl = `${window.location.origin}/`;
 
@@ -317,7 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Update profile with student_number and registration_number (for students)
     if (data.user) {
-      if (role === 'student') {
+      if (role === "student") {
         await supabase
           .from("profiles")
           .update({
@@ -326,18 +326,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           })
           .eq("id", data.user.id);
       }
-      
+
       // Assign role to user in user_roles table
-      await supabase
-        .from("user_roles")
-        .insert({
-          user_id: data.user.id,
-          role: role,
-        });
+      await supabase.from("user_roles").insert({
+        user_id: data.user.id,
+        role: role,
+      });
     }
 
     // Update student record with full name and mark as registered (for students only)
-    if (role === 'student' && registrationNumber && studentNumber) {
+    if (role === "student" && registrationNumber && studentNumber) {
       await supabase
         .from("student_records")
         .update({
@@ -364,14 +362,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Sign in with student number or registration number
   const signInWithStudentId = async (identifier: string, password: string) => {
     // Check if identifier is an email (for lecturers)
-    if (identifier.includes('@')) {
+    if (identifier.includes("@")) {
       const { error } = await supabase.auth.signInWithPassword({
         email: identifier,
         password,
       });
       return { error };
     }
-    
+
     // First, find the student by registration number or student number
     const { data: studentRecord, error: findError } = await supabase
       .from("student_records")
