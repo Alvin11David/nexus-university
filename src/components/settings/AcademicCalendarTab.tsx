@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar,
   BookOpen,
@@ -12,6 +12,13 @@ import {
   Star,
   AlertCircle,
   Sparkles,
+  FileText,
+  Download,
+  Upload,
+  X,
+  CheckCircle,
+  AlertTriangle,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,15 +30,41 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 
 interface CalendarEvent {
   id: string;
   title: string;
   date: string;
   endDate?: string;
-  type: "academic" | "exam" | "holiday" | "deadline" | "event";
+  type: "academic" | "exam" | "holiday" | "deadline" | "event" | "assignment";
   description?: string;
   important?: boolean;
+}
+
+interface Assignment {
+  id: string;
+  title: string;
+  course: string;
+  dueDate: string;
+  points: number;
+  status: "pending" | "submitted" | "graded";
+  type: "coding" | "lab" | "presentation" | "essay";
+  instructions: string;
+  attachments: Array<{
+    id: string;
+    name: string;
+    type: "pdf" | "docx" | "xlsx" | "doc";
+    url: string;
+    size: string;
+  }>;
+  submissions: Array<{
+    id: string;
+    date: string;
+    grade?: number;
+    feedback?: string;
+    fileName: string;
+  }>;
 }
 
 const academicEvents: CalendarEvent[] = [
@@ -106,6 +139,102 @@ const academicEvents: CalendarEvent[] = [
     date: "2026-02-27",
     type: "event",
     important: true,
+  },
+];
+
+// Assignment data with full details
+const assignmentsData: Assignment[] = [
+  {
+    id: "asg-1",
+    title: "Binary Trees Implementation",
+    course: "Advanced Data Structures",
+    dueDate: "2026-01-08",
+    points: 30,
+    status: "pending",
+    type: "coding",
+    instructions:
+      "Implement a complete binary search tree with insert, delete, and search operations. Include AVL tree self-balancing. Submit your code with comprehensive comments.",
+    attachments: [
+      {
+        id: "att-1",
+        name: "BST_Template.java",
+        type: "doc",
+        url: "https://example.com/bst-template.java",
+        size: "12 KB",
+      },
+      {
+        id: "att-2",
+        name: "Assignment_Rubric.pdf",
+        type: "pdf",
+        url: "https://example.com/rubric.pdf",
+        size: "245 KB",
+      },
+    ],
+    submissions: [],
+  },
+  {
+    id: "asg-2",
+    title: "SQL Replication Lab",
+    course: "Database Systems & Cloud",
+    dueDate: "2026-01-09",
+    points: 25,
+    status: "pending",
+    type: "lab",
+    instructions:
+      "Set up master-slave replication in MySQL. Document the configuration steps and test failover scenarios.",
+    attachments: [
+      {
+        id: "att-3",
+        name: "Replication_Guide.pdf",
+        type: "pdf",
+        url: "https://example.com/replication-guide.pdf",
+        size: "567 KB",
+      },
+      {
+        id: "att-4",
+        name: "Lab_Sheet.docx",
+        type: "docx",
+        url: "https://example.com/lab-sheet.docx",
+        size: "134 KB",
+      },
+    ],
+    submissions: [
+      {
+        id: "sub-1",
+        date: "2026-01-08T14:30:00",
+        fileName: "SQL_Replication_Solution.zip",
+      },
+    ],
+  },
+  {
+    id: "asg-3",
+    title: "Design Review: Sprint 2",
+    course: "Software Engineering Studio",
+    dueDate: "2026-01-12",
+    points: 20,
+    status: "graded",
+    type: "presentation",
+    instructions:
+      "Present your design mockups and architecture decisions. Include wireframes, user flows, and technical architecture diagrams.",
+    attachments: [
+      {
+        id: "att-5",
+        name: "Design_Template.pptx",
+        type: "doc",
+        url: "https://example.com/design-template.pptx",
+        size: "8.2 MB",
+      },
+    ],
+    submissions: [
+      {
+        id: "sub-2",
+        date: "2026-01-12T10:00:00",
+        grade: 95,
+        feedback:
+          "Excellent presentation! The architecture is well-thought-out and scalable.",
+        fileName: "Sprint2_Design_Review.pdf",
+      },
+    ],
   },
 ];
 
