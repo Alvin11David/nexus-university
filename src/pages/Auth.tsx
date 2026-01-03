@@ -17,6 +17,8 @@ type AuthStep = 'signin' | 'signup-details' | 'signup-otp' | 'signup-password';
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get('mode') === 'signup';
+  const userRole = searchParams.get('role') as 'student' | 'lecturer' | null; // Hidden role param
+  const isLecturerSignup = userRole === 'lecturer';
   const [step, setStep] = useState<AuthStep>(initialMode ? 'signup-details' : 'signin');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -83,6 +85,38 @@ export default function Auth() {
     setLoading(true);
 
     try {
+      // For lecturers: validate email domain, skip student record check
+      if (isLecturerSignup) {
+        // Validate institutional email domain
+        const emailDomain = formData.email.split('@')[1]?.toLowerCase();
+        const validDomains = ['nexus.edu', 'staff.nexus.edu', 'faculty.nexus.edu'];
+        
+        if (!emailDomain || !validDomains.includes(emailDomain)) {
+          throw new Error('Lecturers must use a valid institutional email address (@nexus.edu)');
+        }
+        
+        // Generate OTP for lecturer (no student record needed)
+        const { otp, error: otpError } = await generateOTP(formData.email, null);
+        if (otpError) throw otpError;
+        
+        setGeneratedOtp(otp);
+        setStudentRecord({ 
+          id: null, 
+          full_name: formData.email.split('@')[0].replace(/[._]/g, ' '),
+          email: formData.email 
+        });
+        
+        toast({ 
+          title: 'OTP Sent (Demo Mode)', 
+          description: `Your verification code is: ${otp}`,
+          duration: 10000
+        });
+        
+        setStep('signup-otp');
+        return;
+      }
+      
+      // For students: validate against student records
       const { data, error } = await validateStudent(formData.registrationNumber, formData.studentNumber, formData.email);
       if (error) throw error;
       
@@ -138,9 +172,10 @@ export default function Auth() {
       const { error } = await signUp(
         formData.email, 
         formData.password, 
-        studentRecord?.full_name || 'Student',
-        formData.registrationNumber,
-        formData.studentNumber
+        studentRecord?.full_name || (isLecturerSignup ? 'Lecturer' : 'Student'),
+        isLecturerSignup ? undefined : formData.registrationNumber,
+        isLecturerSignup ? undefined : formData.studentNumber,
+        isLecturerSignup ? 'lecturer' : 'student'
       );
       if (error) {
         // If user already exists, provide helpful guidance
@@ -229,12 +264,12 @@ export default function Auth() {
         return (
           <form onSubmit={handleSignIn} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-sm font-medium">Student / Registration Number</Label>
+              <Label htmlFor="identifier" className="text-sm font-medium">Student / Registration Number or Email</Label>
               <div className="relative">
                 <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="identifier"
-                  placeholder="21/U/12345/PS or 2100712345"
+                  placeholder="21/U/12345/PS, 2100712345 or email"
                   value={formData.identifier}
                   onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
@@ -292,56 +327,70 @@ export default function Auth() {
       case 'signup-details':
         return (
           <form onSubmit={handleValidateStudent} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="registrationNumber" className="text-sm font-medium">Registration Number</Label>
-              <div className="relative">
-                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  id="registrationNumber"
-                  placeholder="21/U/12345/PS"
-                  value={formData.registrationNumber}
-                  onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
-                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
-                  required
-                />
-              </div>
-            </div>
+            {!isLecturerSignup && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="registrationNumber" className="text-sm font-medium">Registration Number</Label>
+                  <div className="relative">
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="registrationNumber"
+                      placeholder="21/U/12345/PS"
+                      value={formData.registrationNumber}
+                      onChange={(e) => setFormData({ ...formData, registrationNumber: e.target.value })}
+                      className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="studentNumber" className="text-sm font-medium">Student Number</Label>
+                  <div className="relative">
+                    <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input
+                      id="studentNumber"
+                      placeholder="2100712345"
+                      value={formData.studentNumber}
+                      onChange={(e) => setFormData({ ...formData, studentNumber: e.target.value })}
+                      className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                      required
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
-              <Label htmlFor="studentNumber" className="text-sm font-medium">Student Number</Label>
-              <div className="relative">
-                <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  id="studentNumber"
-                  placeholder="2100712345"
-                  value={formData.studentNumber}
-                  onChange={(e) => setFormData({ ...formData, studentNumber: e.target.value })}
-                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
+              <Label htmlFor="email" className="text-sm font-medium">
+                {isLecturerSignup ? 'Institutional Email Address' : 'Email Address'}
+              </Label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="you@university.edu"
+                  placeholder={isLecturerSignup ? 'you@nexus.edu' : 'you@university.edu'}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                 />
               </div>
+              {isLecturerSignup && (
+                <p className="text-xs text-muted-foreground mt-1 ml-1">
+                  Must use @nexus.edu domain
+                </p>
+              )}
             </div>
 
             <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
               <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
-                We'll verify you're a registered student by checking your registration and student numbers against our records.
+                {isLecturerSignup 
+                  ? "We'll verify your institutional email address to confirm your faculty status."
+                  : "We'll verify you're a registered student by checking your registration and student numbers against our records."
+                }
               </p>
             </div>
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar as CalendarIcon,
@@ -13,13 +13,38 @@ import {
   Video,
   Bell,
   Share2,
+  QrCode,
+  FileImage,
+  FileText,
+  Link as LinkIcon,
+  Check,
+  X as CloseIcon,
 } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 // Sample course data - In production, this would come from your database
@@ -232,10 +257,121 @@ const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 export default function Timetable() {
   const [view, setView] = useState<"week" | "list">("week");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [showQRDialog, setShowQRDialog] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const timetableRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
 
   const currentDay = days[new Date().getDay() - 1] || "Monday";
+  const timetableUrl = window.location.origin + "/timetable";
 
   const getCourseById = (id: number) => courses.find((c) => c.id === id);
+
+  // Share functionality
+  const handleShare = async () => {
+    const shareData = {
+      title: "My Teaching Timetable",
+      text: "Check out my weekly teaching schedule!",
+      url: timetableUrl,
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        toast({
+          title: "Shared successfully!",
+          description: "Your timetable has been shared.",
+        });
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          // User cancelled, don't show error
+          copyToClipboard();
+        }
+      }
+    } else {
+      copyToClipboard();
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(timetableUrl);
+    setCopied(true);
+    toast({
+      title: "Link copied!",
+      description: "Timetable link copied to clipboard.",
+    });
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Export to PNG
+  const exportToPNG = async () => {
+    if (!timetableRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(timetableRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const link = document.createElement("a");
+      link.download = `teaching-timetable-${new Date().toISOString().split("T")[0]}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+
+      toast({
+        title: "Export successful!",
+        description: "Your timetable has been downloaded as PNG.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Failed to export timetable. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  // Export to PDF
+  const exportToPDF = async () => {
+    if (!timetableRef.current) return;
+    
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(timetableRef.current, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: canvas.width > canvas.height ? "landscape" : "portrait",
+        unit: "px",
+        format: [canvas.width, canvas.height],
+      });
+
+      pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
+      pdf.save(`teaching-timetable-${new Date().toISOString().split("T")[0]}.pdf`);
+
+      toast({
+        title: "Export successful!",
+        description: "Your timetable has been downloaded as PDF.",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: "Failed to export timetable. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const renderWeekView = () => (
     <div className="overflow-x-auto">
@@ -522,14 +658,49 @@ export default function Timetable() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-2">
-                <Share2 className="h-4 w-4" />
-                Share
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={() => setShowQRDialog(true)}
+              >
+                <QrCode className="h-4 w-4" />
+                <span className="hidden sm:inline">QR Code</span>
               </Button>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Download className="h-4 w-4" />
-                Export
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="gap-2"
+                onClick={handleShare}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
+                <span className="hidden sm:inline">{copied ? "Copied!" : "Share"}</span>
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="gap-2"
+                    disabled={isExporting}
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">{isExporting ? "Exporting..." : "Export"}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Export Format</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={exportToPNG}>
+                    <FileImage className="h-4 w-4 mr-2" />
+                    Export as PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToPDF}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
@@ -599,29 +770,31 @@ export default function Timetable() {
           </div>
 
           {/* View Tabs */}
-          <Tabs
-            value={view}
-            onValueChange={(v) => setView(v as "week" | "list")}
-          >
-            <div className="flex items-center justify-between">
-              <TabsList>
-                <TabsTrigger value="week">Week View</TabsTrigger>
-                <TabsTrigger value="list">List View</TabsTrigger>
-              </TabsList>
-              <Button variant="outline" size="sm" className="gap-2">
-                <Filter className="h-4 w-4" />
-                Filter
-              </Button>
-            </div>
+          <div ref={timetableRef}>
+            <Tabs
+              value={view}
+              onValueChange={(v) => setView(v as "week" | "list")}
+            >
+              <div className="flex items-center justify-between">
+                <TabsList>
+                  <TabsTrigger value="week">Week View</TabsTrigger>
+                  <TabsTrigger value="list">List View</TabsTrigger>
+                </TabsList>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <Filter className="h-4 w-4" />
+                  Filter
+                </Button>
+              </div>
 
-            <TabsContent value="week" className="mt-6">
-              {renderWeekView()}
-            </TabsContent>
+              <TabsContent value="week" className="mt-6">
+                {renderWeekView()}
+              </TabsContent>
 
-            <TabsContent value="list" className="mt-6">
-              {renderListView()}
-            </TabsContent>
-          </Tabs>
+              <TabsContent value="list" className="mt-6">
+                {renderListView()}
+              </TabsContent>
+            </Tabs>
+          </div>
 
           {/* Course Legend */}
           <Card className="p-6">
@@ -658,6 +831,75 @@ export default function Timetable() {
           </Card>
         </motion.div>
       </main>
+
+      {/* QR Code Dialog */}
+      <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share Timetable via QR Code</DialogTitle>
+            <DialogDescription>
+              Scan this QR code to view and download the timetable
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-6 py-4">
+            <div className="p-4 bg-white rounded-lg border-2 border-muted">
+              <QRCodeSVG
+                value={timetableUrl}
+                size={256}
+                level="H"
+                includeMargin={true}
+                imageSettings={{
+                  src: "/logo.png",
+                  height: 40,
+                  width: 40,
+                  excavate: true,
+                }}
+              />
+            </div>
+            <div className="w-full space-y-3">
+              <div className="flex items-center gap-2 p-3 bg-muted rounded-lg">
+                <LinkIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <code className="text-xs flex-1 truncate">{timetableUrl}</code>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={copyToClipboard}
+                  className="flex-shrink-0"
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <span className="text-xs">Copy</span>
+                  )}
+                </Button>
+              </div>
+              <p className="text-xs text-center text-muted-foreground">
+                Anyone with this QR code can view your teaching timetable
+              </p>
+            </div>
+            <div className="flex gap-2 w-full">
+              <Button
+                onClick={exportToPNG}
+                variant="outline"
+                className="flex-1 gap-2"
+                disabled={isExporting}
+              >
+                <FileImage className="h-4 w-4" />
+                Download PNG
+              </Button>
+              <Button
+                onClick={exportToPDF}
+                variant="outline"
+                className="flex-1 gap-2"
+                disabled={isExporting}
+              >
+                <FileText className="h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>

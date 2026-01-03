@@ -40,7 +40,8 @@ interface AuthContextType {
     password: string,
     fullName: string,
     registrationNumber?: string,
-    studentNumber?: string
+    studentNumber?: string,
+    role?: 'student' | 'lecturer'
   ) => Promise<{ error: Error | null }>;
   signIn: (
     identifier: string,
@@ -220,7 +221,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Generate a 4-digit OTP
   const generateOTP = async (
     email: string,
-    studentRecordId: string
+    studentRecordId: string | null
   ): Promise<{ otp: string; error: Error | null }> => {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
@@ -280,7 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     registrationNumber?: string,
-    studentNumber?: string
+    studentNumber?: string,
+    role: 'student' | 'lecturer' = 'student'
   ) => {
     const redirectUrl = `${window.location.origin}/`;
 
@@ -313,19 +315,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Update profile with student_number and registration_number
+    // Update profile with student_number and registration_number (for students)
     if (data.user) {
+      if (role === 'student') {
+        await supabase
+          .from("profiles")
+          .update({
+            student_number: studentNumber,
+            registration_number: registrationNumber,
+          })
+          .eq("id", data.user.id);
+      }
+      
+      // Assign role to user in user_roles table
       await supabase
-        .from("profiles")
-        .update({
-          student_number: studentNumber,
-          registration_number: registrationNumber,
-        })
-        .eq("id", data.user.id);
+        .from("user_roles")
+        .insert({
+          user_id: data.user.id,
+          role: role,
+        });
     }
 
-    // Update student record with full name and mark as registered
-    if (registrationNumber && studentNumber) {
+    // Update student record with full name and mark as registered (for students only)
+    if (role === 'student' && registrationNumber && studentNumber) {
       await supabase
         .from("student_records")
         .update({
@@ -351,6 +363,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Sign in with student number or registration number
   const signInWithStudentId = async (identifier: string, password: string) => {
+    // Check if identifier is an email (for lecturers)
+    if (identifier.includes('@')) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: identifier,
+        password,
+      });
+      return { error };
+    }
+    
     // First, find the student by registration number or student number
     const { data: studentRecord, error: findError } = await supabase
       .from("student_records")
