@@ -1,40 +1,53 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Settings as SettingsIcon, ChevronRight } from 'lucide-react';
-import { Header } from '@/components/layout/Header';
-import { BottomNav } from '@/components/layout/BottomNav';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from "react";
+import { motion } from "framer-motion";
+import {
+  Settings as SettingsIcon,
+  ChevronRight,
+  Calendar,
+  Clock,
+  ArrowRight,
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import { Header } from "@/components/layout/Header";
+import { BottomNav } from "@/components/layout/BottomNav";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Settings Tab Components
-import { GeneratePRNTab } from '@/components/settings/GeneratePRNTab';
-import { EnrollmentRegistrationTab } from '@/components/settings/EnrollmentRegistrationTab';
-import { PaymentsTab } from '@/components/settings/PaymentsTab';
-import { MyProgrammeTab } from '@/components/settings/MyProgrammeTab';
-import { ServicesTab } from '@/components/settings/ServicesTab';
-import { BioDataTab } from '@/components/settings/BioDataTab';
-import { AcademicCalendarTab } from '@/components/settings/AcademicCalendarTab';
-import { EvaluationSurveysTab } from '@/components/settings/EvaluationSurveysTab';
+import { GeneratePRNTab } from "@/components/settings/GeneratePRNTab";
+import { EnrollmentRegistrationTab } from "@/components/settings/EnrollmentRegistrationTab";
+import { PaymentsTab } from "@/components/settings/PaymentsTab";
+import { MyProgrammeTab } from "@/components/settings/MyProgrammeTab";
+import { ServicesTab } from "@/components/settings/ServicesTab";
+import { BioDataTab } from "@/components/settings/BioDataTab";
+import { AcademicCalendarTab } from "@/components/settings/AcademicCalendarTab";
+import { EvaluationSurveysTab } from "@/components/settings/EvaluationSurveysTab";
 
 const settingsTabs = [
-  { id: 'prn', label: 'Generate PRN', shortLabel: 'PRN' },
-  { id: 'enrollment', label: 'Enrollment & Registration', shortLabel: 'Enrollment' },
-  { id: 'payments', label: 'Payments', shortLabel: 'Payments' },
-  { id: 'programme', label: 'My Programme', shortLabel: 'Programme' },
-  { id: 'services', label: 'Services', shortLabel: 'Services' },
-  { id: 'biodata', label: 'Bio Data', shortLabel: 'Bio Data' },
-  { id: 'calendar', label: 'Academic Calendar', shortLabel: 'Calendar' },
-  { id: 'surveys', label: 'Evaluation Surveys', shortLabel: 'Surveys' },
+  { id: "prn", label: "Generate PRN", shortLabel: "PRN" },
+  {
+    id: "enrollment",
+    label: "Enrollment & Registration",
+    shortLabel: "Enrollment",
+  },
+  { id: "payments", label: "Payments", shortLabel: "Payments" },
+  { id: "programme", label: "My Programme", shortLabel: "Programme" },
+  { id: "services", label: "Services", shortLabel: "Services" },
+  { id: "biodata", label: "Bio Data", shortLabel: "Bio Data" },
+  { id: "calendar", label: "Academic Calendar", shortLabel: "Calendar" },
+  { id: "surveys", label: "Evaluation Surveys", shortLabel: "Surveys" },
 ];
 
 export default function Settings() {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState('prn');
+  const [activeTab, setActiveTab] = useState("prn");
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
       <Header />
-      
+
       <main className="container py-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -47,7 +60,9 @@ export default function Settings() {
               <SettingsIcon className="h-4 w-4" />
               <span>Settings</span>
               <ChevronRight className="h-3 w-3" />
-              <span className="text-foreground">{settingsTabs.find(t => t.id === activeTab)?.label}</span>
+              <span className="text-foreground">
+                {settingsTabs.find((t) => t.id === activeTab)?.label}
+              </span>
             </div>
             <h1 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-2">
               Student Settings
@@ -57,8 +72,59 @@ export default function Settings() {
             </p>
           </div>
 
+          {/* Teaching Timetable Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="mb-6"
+          >
+            <Link to="/timetable">
+              <Card className="overflow-hidden border-2 border-secondary/20 hover:border-secondary/40 transition-all hover:shadow-lg cursor-pointer group">
+                <div className="relative bg-gradient-to-br from-secondary via-purple-600 to-pink-600 p-6 text-white">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
+                  <div className="relative flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Calendar className="h-6 w-6" />
+                        <h2 className="text-2xl font-bold">
+                          Teaching Timetable
+                        </h2>
+                      </div>
+                      <p className="text-white/90 mb-4">
+                        View your weekly class schedule with all your enrolled
+                        courses
+                      </p>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span>Weekly Schedule</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          <span>6 Courses</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      className="bg-white text-secondary hover:bg-white/90 gap-2 group-hover:translate-x-1 transition-transform"
+                    >
+                      View Timetable
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </Link>
+          </motion.div>
+
           {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
             <div className="overflow-x-auto -mx-4 px-4 pb-2">
               <TabsList className="inline-flex h-auto p-1 gap-1 bg-muted/50 backdrop-blur-sm">
                 {settingsTabs.map((tab) => (

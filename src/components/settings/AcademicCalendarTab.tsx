@@ -368,7 +368,14 @@ export function AcademicCalendarTab() {
 
   // File upload handler
   const handleFileSelect = (file: File) => {
-    const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip"];
+    const validTypes = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.ms-excel",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/zip",
+    ];
     if (validTypes.includes(file.type)) {
       setUploadedFile(file);
     } else {
@@ -454,7 +461,7 @@ export function AcademicCalendarTab() {
               className="bg-background rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-border/50 md:border-border"
             >
               {/* Detail Header */}
-              <div className="sticky top-0 bg-gradient-to-r from-primary/10 via-secondary/5 to-accent/10 border-b border-border/50 p-6 flex items-start justify-between">
+              <div className="sticky top-0 bg-background/95 backdrop-blur-sm border-b border-border p-6 flex items-start justify-between z-20">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <Badge className="bg-purple-500/20 text-purple-600 border-purple-500/30">
@@ -616,14 +623,11 @@ export function AcademicCalendarTab() {
                             className={`bg-gradient-to-r ${getFileColor(
                               att.type
                             )} border rounded-xl p-4 transition-all group cursor-pointer hover:shadow-lg`}
+                            onClick={() =>
+                              handleDownloadFile(att.url, att.name)
+                            }
                           >
-                            <a
-                              href={att.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              download
-                              className="flex items-center justify-between"
-                            >
+                            <div className="flex items-center justify-between">
                               <div className="flex items-center gap-3 flex-1 min-w-0">
                                 <div
                                   className={`h-12 w-12 rounded-lg ${getBgColor(
@@ -651,7 +655,7 @@ export function AcademicCalendarTab() {
                                 </span>
                                 <Download className="h-5 w-5 opacity-60 group-hover:opacity-100 transition-opacity transform group-hover:translate-y-0.5" />
                               </div>
-                            </a>
+                            </div>
                           </motion.div>
                         );
                       })}
@@ -740,23 +744,78 @@ export function AcademicCalendarTab() {
                 {/* Upload Section */}
                 {selectedAssignment.status === "pending" && (
                   <div className="space-y-4">
-                    <div className="border-2 border-dashed border-primary/40 rounded-2xl p-8 text-center hover:border-primary/60 hover:bg-primary/5 transition-all cursor-pointer group">
-                      <div className="flex justify-center mb-4">
-                        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                          <Upload className="h-8 w-8 text-primary" />
+                    <div
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop}
+                      className="border-2 border-dashed border-primary/40 rounded-2xl p-8 text-center hover:border-primary/60 hover:bg-primary/5 transition-all cursor-pointer group"
+                    >
+                      <input
+                        ref={(input) => (
+                          input?.addEventListener(
+                            "change",
+                            handleFileInputChange as any
+                          ),
+                          input
+                        )}
+                        type="file"
+                        className="hidden"
+                        id="file-upload"
+                        onChange={handleFileInputChange}
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.zip"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="cursor-pointer block"
+                      >
+                        <div className="flex justify-center mb-4">
+                          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                            <Upload className="h-8 w-8 text-primary" />
+                          </div>
                         </div>
-                      </div>
-                      <p className="text-sm font-semibold mb-1">
-                        Drag and drop your file here
-                      </p>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        or click to browse (PDF, Word, Excel, ZIP)
-                      </p>
-                      <input type="file" className="hidden" />
+                        <p className="text-sm font-semibold mb-1">
+                          Drag and drop your file here
+                        </p>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          or click to browse (PDF, Word, Excel, ZIP)
+                        </p>
+                      </label>
                     </div>
-                    <Button className="w-full h-12 bg-gradient-to-r from-primary via-accent to-secondary text-white text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+                    {uploadedFile && (
+                      <div className="bg-muted/60 rounded-lg p-4 border border-primary/20">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-primary" />
+                            <p className="text-sm font-medium">
+                              {uploadedFile.name}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setUploadedFile(null)}
+                            disabled={isUploading}
+                            className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        {isUploading && (
+                          <div className="space-y-2">
+                            <Progress value={uploadProgress} className="h-2" />
+                            <p className="text-xs text-muted-foreground text-center">
+                              {uploadProgress}% uploading...
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      onClick={handleUploadSubmission}
+                      disabled={!uploadedFile || isUploading}
+                      className="w-full h-12 bg-gradient-to-r from-primary via-accent to-secondary text-white text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
                       <Upload className="h-5 w-5 mr-2" />
-                      Upload Submission
+                      {isUploading
+                        ? `Uploading... ${uploadProgress}%`
+                        : "Upload Submission"}
                     </Button>
                   </div>
                 )}
