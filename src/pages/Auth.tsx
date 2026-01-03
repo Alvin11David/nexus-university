@@ -51,6 +51,7 @@ export default function Auth() {
   const [formData, setFormData] = useState({
     identifier: "", // student number or registration number for sign in
     email: "",
+    actualEmail: "", // Real email for lecturers (email field is for identification)
     password: "",
     registrationNumber: "",
     studentNumber: "",
@@ -100,15 +101,18 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      // Generate OTP for lecturer
-      const { otp, error: otpError } = await generateOTP(formData.email, null);
+      // Generate OTP for lecturer using their actual email
+      const { otp, error: otpError } = await generateOTP(
+        formData.actualEmail,
+        null
+      );
       if (otpError) throw otpError;
 
       setGeneratedOtp(otp);
       setStudentRecord({
         id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
-        email: formData.email,
+        email: formData.actualEmail,
         department: formData.department,
       });
 
@@ -248,8 +252,13 @@ export default function Auth() {
     setLoading(true);
 
     try {
+      // Use actualEmail for lecturers, regular email for students
+      const emailToUse = isLecturerSignup
+        ? formData.actualEmail
+        : formData.email;
+
       const { error } = await signUp(
-        formData.email,
+        emailToUse,
         formData.password,
         studentRecord?.full_name || (isLecturerSignup ? "Lecturer" : "Student"),
         isLecturerSignup ? undefined : formData.registrationNumber,
@@ -308,6 +317,7 @@ export default function Auth() {
     setFormData({
       identifier: "",
       email: "",
+      actualEmail: "",
       password: "",
       registrationNumber: "",
       studentNumber: "",
@@ -325,6 +335,7 @@ export default function Auth() {
     setFormData({
       identifier: "",
       email: "",
+      actualEmail: "",
       password: "",
       registrationNumber: "",
       studentNumber: "",
@@ -641,10 +652,26 @@ export default function Auth() {
               </div>
             </div>
 
-            <div className="bg-muted/30 p-4 rounded-xl">
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">Email:</span>{" "}
-                {formData.email}
+            <div className="space-y-2">
+              <Label htmlFor="actualEmail" className="text-sm font-medium">
+                Your Email Address
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="actualEmail"
+                  type="email"
+                  placeholder="your.email@institution.edu"
+                  value={formData.actualEmail}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actualEmail: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 ml-1">
+                We'll send the verification code to this email
               </p>
             </div>
 
