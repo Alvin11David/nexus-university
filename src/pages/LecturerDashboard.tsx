@@ -378,13 +378,13 @@ export default function LecturerDashboard() {
               custom={3}
               className="space-y-4 lg:col-span-2"
             >
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Cohort insights
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Health of your classes at a glance
                     </p>
                   </div>
@@ -421,27 +421,25 @@ export default function LecturerDashboard() {
                   ].map((item, idx) => (
                     <div
                       key={item.title}
-                      className="rounded-2xl border border-white/5 bg-white/[0.04] p-4"
+                      className="rounded-2xl border border-border/60 bg-muted/30 p-4"
                     >
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <p className="text-sm text-slate-200/80">
+                          <p className="text-sm text-muted-foreground">
                             {item.title}
                           </p>
-                          <p className="text-2xl font-semibold text-white">
+                          <p className="text-2xl font-semibold text-foreground">
                             {item.value}
                           </p>
-                          <p className="text-xs text-emerald-200">
-                            {item.trend}
-                          </p>
+                          <p className="text-xs text-primary">{item.trend}</p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-white/10 text-emerald-100 flex items-center justify-center">
+                        <div className="h-10 w-10 rounded-xl bg-muted/60 text-primary flex items-center justify-center">
                           <item.icon className="h-5 w-5" />
                         </div>
                       </div>
-                      <div className="mt-3 h-1.5 rounded-full bg-white/10">
+                      <div className="mt-3 h-1.5 rounded-full bg-muted/60">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
                           style={{ width: `${80 + idx * 5}%` }}
                         />
                       </div>
@@ -450,17 +448,19 @@ export default function LecturerDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">Inbox</CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <CardTitle className="text-lg text-foreground">
+                      Inbox
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">
                       Latest pings across courses
                     </p>
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-white/10 text-white border-white/20"
+                    className="bg-muted/60 text-foreground border-border/60"
                   >
                     Realtime
                   </Badge>
@@ -469,20 +469,22 @@ export default function LecturerDashboard() {
                   {messages.map((item) => (
                     <div
                       key={item.text}
-                      className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.04] px-3 py-3"
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
                     >
                       <div>
-                        <p className="font-semibold text-white">{item.from}</p>
-                        <p className="text-xs text-slate-300/70">{item.text}</p>
+                        <p className="font-semibold text-foreground">
+                          {item.from}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.text}
+                        </p>
                       </div>
-                      <span className="text-xs text-emerald-100">
-                        {item.time}
-                      </span>
+                      <span className="text-xs text-primary">{item.time}</span>
                     </div>
                   ))}
                   <Button
                     variant="secondary"
-                    className="w-full bg-white/10 text-white border-white/20"
+                    className="w-full bg-muted/60 text-foreground border-border/60"
                   >
                     View all messages
                   </Button>
@@ -497,17 +499,17 @@ export default function LecturerDashboard() {
               custom={4}
               className="space-y-4"
             >
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Quick actions
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Launch the things you do most
                     </p>
                   </div>
-                  <Sparkles className="h-4 w-4 text-emerald-200" />
+                  <Sparkles className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent className="grid gap-3">
                   {[
@@ -519,7 +521,7 @@ export default function LecturerDashboard() {
                     <Button
                       key={action.label}
                       variant="secondary"
-                      className="justify-start bg-white/10 text-white border-white/20 hover:bg-white/20"
+                      className="justify-start bg-muted/60 text-foreground border-border/60 hover:bg-muted"
                     >
                       <action.icon className="mr-3 h-4 w-4" />
                       {action.label}
@@ -528,17 +530,17 @@ export default function LecturerDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Course signals
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Where to lean in this week
                     </p>
                   </div>
-                  <BarChart3 className="h-4 w-4 text-emerald-200" />
+                  <BarChart3 className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {[
@@ -552,10 +554,10 @@ export default function LecturerDashboard() {
                   ].map((course) => (
                     <div
                       key={course.title}
-                      className="rounded-xl border border-white/5 bg-white/[0.04] p-3"
+                      className="rounded-xl border border-border/60 bg-muted/30 p-3"
                     >
                       <div className="flex items-center justify-between">
-                        <p className="font-semibold text-white">
+                        <p className="font-semibold text-foreground">
                           {course.title}
                         </p>
                         <Badge
@@ -571,7 +573,7 @@ export default function LecturerDashboard() {
                           {course.status}
                         </Badge>
                       </div>
-                      <div className="mt-3 h-1.5 rounded-full bg-white/10">
+                      <div className="mt-3 h-1.5 rounded-full bg-muted/60">
                         <div
                           className={`h-full rounded-full ${
                             course.tag === "Green"
@@ -595,17 +597,17 @@ export default function LecturerDashboard() {
                 </CardContent>
               </Card>
 
-              <Card className="border-white/10 bg-white/5">
+              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-white">
+                    <CardTitle className="text-lg text-foreground">
                       Energy meter
                     </CardTitle>
-                    <p className="text-sm text-slate-300/70">
+                    <p className="text-sm text-muted-foreground">
                       Workload vs momentum
                     </p>
                   </div>
-                  <Target className="h-4 w-4 text-emerald-200" />
+                  <Target className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-3">
                   {[
@@ -616,15 +618,17 @@ export default function LecturerDashboard() {
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className="rounded-xl border border-white/5 bg-white/[0.04] p-3"
+                      className="rounded-xl border border-border/60 bg-muted/30 p-3"
                     >
-                      <p className="text-xs text-slate-300/70">{item.label}</p>
-                      <p className="text-xl font-semibold text-white">
+                      <p className="text-xs text-muted-foreground">
+                        {item.label}
+                      </p>
+                      <p className="text-xl font-semibold text-foreground">
                         {item.value}
                       </p>
-                      <div className="mt-2 h-1.5 rounded-full bg-white/10">
+                      <div className="mt-2 h-1.5 rounded-full bg-muted/60">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500"
+                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
                           style={{ width: item.value }}
                         />
                       </div>
