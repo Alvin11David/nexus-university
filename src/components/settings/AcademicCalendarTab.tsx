@@ -267,6 +267,9 @@ export function AcademicCalendarTab() {
   const [activeTab, setActiveTab] = useState<"calendar" | "assignments">(
     "calendar"
   );
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
@@ -362,6 +365,74 @@ export function AcademicCalendarTab() {
         return eventDate === new Date(selectedDate).toDateString();
       })
     : [];
+
+  // File upload handler
+  const handleFileSelect = (file: File) => {
+    const validTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/zip"];
+    if (validTypes.includes(file.type)) {
+      setUploadedFile(file);
+    } else {
+      alert("Please upload a valid file type: PDF, Word, Excel, or ZIP");
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleUploadSubmission = async () => {
+    if (!uploadedFile || !selectedAssignment) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      // Simulate file upload with progress
+      for (let i = 0; i <= 100; i += 10) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        setUploadProgress(i);
+      }
+
+      // In a real app, you would upload to a server here
+      console.log("Uploading file:", uploadedFile.name);
+      alert(`File "${uploadedFile.name}" uploaded successfully!`);
+      setUploadedFile(null);
+      setUploadProgress(0);
+      setIsUploading(false);
+    } catch (error) {
+      console.error("Upload failed:", error);
+      alert("Failed to upload file. Please try again.");
+      setIsUploading(false);
+    }
+  };
+
+  const handleDownloadFile = (url: string, fileName: string) => {
+    // Simulate file download
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    console.log("Downloading:", fileName);
+  };
 
   return (
     <div className="space-y-6">
