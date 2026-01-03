@@ -307,7 +307,7 @@ export default function Timetable() {
   // Export to PNG
   const exportToPNG = async () => {
     if (!timetableRef.current) return;
-    
+
     setIsExporting(true);
     try {
       const canvas = await html2canvas(timetableRef.current, {
@@ -317,7 +317,9 @@ export default function Timetable() {
       });
 
       const link = document.createElement("a");
-      link.download = `teaching-timetable-${new Date().toISOString().split("T")[0]}.png`;
+      link.download = `teaching-timetable-${
+        new Date().toISOString().split("T")[0]
+      }.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
 
@@ -339,7 +341,7 @@ export default function Timetable() {
   // Export to PDF
   const exportToPDF = async () => {
     if (!timetableRef.current) return;
-    
+
     setIsExporting(true);
     try {
       const canvas = await html2canvas(timetableRef.current, {
@@ -356,7 +358,9 @@ export default function Timetable() {
       });
 
       pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
-      pdf.save(`teaching-timetable-${new Date().toISOString().split("T")[0]}.pdf`);
+      pdf.save(
+        `teaching-timetable-${new Date().toISOString().split("T")[0]}.pdf`
+      );
 
       toast({
         title: "Export successful!",
@@ -658,34 +662,42 @@ export default function Timetable() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="gap-2"
                 onClick={() => setShowQRDialog(true)}
               >
                 <QrCode className="h-4 w-4" />
                 <span className="hidden sm:inline">QR Code</span>
               </Button>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 className="gap-2"
                 onClick={handleShare}
               >
-                {copied ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
-                <span className="hidden sm:inline">{copied ? "Copied!" : "Share"}</span>
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Share2 className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">
+                  {copied ? "Copied!" : "Share"}
+                </span>
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     className="gap-2"
                     disabled={isExporting}
                   >
                     <Download className="h-4 w-4" />
-                    <span className="hidden sm:inline">{isExporting ? "Exporting..." : "Export"}</span>
+                    <span className="hidden sm:inline">
+                      {isExporting ? "Exporting..." : "Export"}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
