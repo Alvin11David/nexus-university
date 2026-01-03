@@ -392,7 +392,7 @@ export default function Dashboard() {
       alert(`Successfully joined "${classroom.name}"!`);
       setShowClassDialog(false);
       setJoinCode("");
-      
+
       // Refresh the page to show new classroom
       window.location.reload();
     } catch (error) {
@@ -442,7 +442,9 @@ export default function Dashboard() {
 
       if (enrollError) throw enrollError;
 
-      alert(`Class "${className}" created successfully!\nClass Code: ${joinCode}`);
+      alert(
+        `Class "${className}" created successfully!\nClass Code: ${joinCode}`
+      );
       setShowClassDialog(false);
       setClassName("");
 
