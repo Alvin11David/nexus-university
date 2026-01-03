@@ -491,7 +491,8 @@ export function AcademicCalendarTab() {
                   <div>
                     <h3 className="font-semibold mb-3 flex items-center gap-2">
                       <Download className="h-5 w-5 text-primary" />
-                      Download Resources ({selectedAssignment.attachments.length})
+                      Download Resources (
+                      {selectedAssignment.attachments.length})
                     </h3>
                     <div className="space-y-3">
                       {selectedAssignment.attachments.map((att) => {
@@ -588,64 +589,74 @@ export function AcademicCalendarTab() {
                 )}
 
                 {/* Submissions */}
-                <div>
-                  <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <Upload className="h-5 w-5 text-secondary" />
-                    Submissions
+                <div className="bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl p-6 border border-primary/10">
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <Upload className="h-5 w-5 text-primary" />
+                    Your Submissions
                   </h3>
                   {selectedAssignment.submissions.length > 0 ? (
-                    <div className="space-y-3">
+                    <div className="space-y-4">
                       {selectedAssignment.submissions.map((sub, idx) => (
                         <motion.div
                           key={sub.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: idx * 0.1 }}
-                          className="bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4"
+                          className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-2 border-emerald-500/30 rounded-xl p-5 hover:border-emerald-500/50 transition-all"
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <p className="font-medium text-sm flex items-center gap-2">
-                                <CheckCircle className="h-4 w-4 text-emerald-600" />
-                                {sub.fileName}
-                              </p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Submitted on{" "}
-                                {new Date(sub.date).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  }
-                                )}
-                              </p>
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-start gap-3 flex-1">
+                              <div className="h-10 w-10 rounded-lg bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <CheckCircle className="h-5 w-5 text-emerald-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold text-sm">
+                                  {sub.fileName}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Submitted on{" "}
+                                  {new Date(sub.date).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }
+                                  )}
+                                </p>
+                              </div>
                             </div>
                             {sub.grade !== undefined && (
-                              <Badge className="bg-emerald-500/20 text-emerald-700 border-emerald-500/30">
-                                Grade: {sub.grade}%
+                              <Badge className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-700 border-emerald-500/30 font-semibold">
+                                {sub.grade}%
                               </Badge>
                             )}
                           </div>
 
                           {sub.feedback && (
-                            <div className="mt-3 pt-3 border-t border-emerald-500/20">
-                              <p className="text-xs font-semibold text-emerald-700 mb-1">
-                                Feedback
-                              </p>
-                              <p className="text-sm text-foreground/80">
-                                {sub.feedback}
-                              </p>
+                            <div className="mt-4 pt-4 border-t border-emerald-500/20">
+                              <div className="bg-white/50 rounded-lg p-3">
+                                <p className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">
+                                  📝 Lecturer Feedback
+                                </p>
+                                <p className="text-sm text-foreground/85 leading-relaxed">
+                                  {sub.feedback}
+                                </p>
+                              </div>
                             </div>
                           )}
                         </motion.div>
                       ))}
                     </div>
                   ) : (
-                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-6 text-center">
-                      <AlertTriangle className="h-8 w-8 text-amber-600 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm font-medium text-amber-700">
+                    <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border-2 border-dashed border-amber-500/30 rounded-xl p-8 text-center">
+                      <div className="flex justify-center mb-3">
+                        <div className="h-16 w-16 rounded-full bg-amber-500/20 flex items-center justify-center">
+                          <AlertTriangle className="h-8 w-8 text-amber-600" />
+                        </div>
+                      </div>
+                      <p className="text-sm font-semibold text-amber-700 mb-1">
                         No submissions yet
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
@@ -655,12 +666,45 @@ export function AcademicCalendarTab() {
                   )}
                 </div>
 
-                {/* Submit Button */}
+                {/* Upload Section */}
                 {selectedAssignment.status === "pending" && (
-                  <Button className="w-full h-12 bg-gradient-to-r from-primary to-accent text-lg font-semibold rounded-xl">
-                    <Upload className="h-5 w-5 mr-2" />
-                    Upload Submission
-                  </Button>
+                  <div className="space-y-4">
+                    <div className="border-2 border-dashed border-primary/40 rounded-2xl p-8 text-center hover:border-primary/60 hover:bg-primary/5 transition-all cursor-pointer group">
+                      <div className="flex justify-center mb-4">
+                        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                          <Upload className="h-8 w-8 text-primary" />
+                        </div>
+                      </div>
+                      <p className="text-sm font-semibold mb-1">
+                        Drag and drop your file here
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        or click to browse (PDF, Word, Excel, ZIP)
+                      </p>
+                      <input type="file" className="hidden" />
+                    </div>
+                    <Button className="w-full h-12 bg-gradient-to-r from-primary via-accent to-secondary text-white text-base font-bold rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+                      <Upload className="h-5 w-5 mr-2" />
+                      Upload Submission
+                    </Button>
+                  </div>
+                )}
+
+                {/* Submitted/Graded Info */}
+                {selectedAssignment.status !== "pending" && (
+                  <div className="bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border-2 border-emerald-500/30 rounded-xl p-4 text-center">
+                    <CheckCircle className="h-6 w-6 text-emerald-600 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-emerald-700">
+                      {selectedAssignment.status === "graded"
+                        ? "Assignment Graded ✓"
+                        : "Assignment Submitted ✓"}
+                    </p>
+                    {selectedAssignment.submissions[0]?.grade && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Your score: {selectedAssignment.submissions[0].grade}%
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
             </motion.div>
