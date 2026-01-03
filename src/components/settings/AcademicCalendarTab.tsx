@@ -262,6 +262,11 @@ export function AcademicCalendarTab() {
   const [selectedDate, setSelectedDate] = useState<string | null>(
     today.toISOString().split("T")[0]
   );
+  const [selectedAssignment, setSelectedAssignment] =
+    useState<Assignment | null>(null);
+  const [activeTab, setActiveTab] = useState<"calendar" | "assignments">(
+    "calendar"
+  );
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
@@ -273,6 +278,8 @@ export function AcademicCalendarTab() {
         return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
       case "deadline":
         return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+      case "assignment":
+        return "bg-purple-500/10 text-purple-600 border-purple-500/20";
       case "event":
         return "bg-secondary/10 text-secondary border-secondary/20";
       default:
@@ -290,6 +297,8 @@ export function AcademicCalendarTab() {
         return "bg-emerald-500";
       case "deadline":
         return "bg-amber-500";
+      case "assignment":
+        return "bg-purple-500";
       case "event":
         return "bg-secondary";
       default:
@@ -303,6 +312,22 @@ export function AcademicCalendarTab() {
   const calendarDays = Array.from({ length: firstDay }, () => null).concat(
     Array.from({ length: daysInMonth }, (_, i) => i + 1)
   );
+
+  const getAssignmentsForDate = (day: number) => {
+    const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(
+      2,
+      "0"
+    )}-${String(day).padStart(2, "0")}`;
+    return assignmentsData.filter((assignment) => {
+      const assignDate = new Date(assignment.dueDate);
+      const currentDate = new Date(dateStr);
+      return (
+        assignDate.getDate() === currentDate.getDate() &&
+        assignDate.getMonth() === currentDate.getMonth() &&
+        assignDate.getFullYear() === currentDate.getFullYear()
+      );
+    });
+  };
 
   const getEventsForDate = (day: number) => {
     const dateStr = `${selectedYear}-${String(selectedMonth + 1).padStart(
