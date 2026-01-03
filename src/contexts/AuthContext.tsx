@@ -408,11 +408,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ error: Error | null }> => {
     try {
       // Get the current user's session (after OTP verification)
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
+
       if (!currentUser) {
         return {
-          error: new Error("You must verify your identity first before resetting password"),
+          error: new Error(
+            "You must verify your identity first before resetting password"
+          ),
         };
       }
 
@@ -428,7 +432,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     } catch (err) {
       return {
-        error: err instanceof Error ? err : new Error("Failed to reset password"),
+        error:
+          err instanceof Error ? err : new Error("Failed to reset password"),
       };
     }
   };

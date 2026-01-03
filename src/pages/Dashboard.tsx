@@ -17,7 +17,16 @@ import {
   Folder,
   MessageCircle,
   Sparkles,
+  X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -69,6 +78,10 @@ export default function Dashboard() {
   const [resultsLoading, setResultsLoading] = useState(true);
   const [termResults, setTermResults] = useState<TermResult[]>([]);
   const [cgpa, setCgpa] = useState(0);
+  const [showClassDialog, setShowClassDialog] = useState(false);
+  const [classAction, setClassAction] = useState<"join" | "create">("join");
+  const [joinCode, setJoinCode] = useState("");
+  const [className, setClassName] = useState("");
 
   const classroomCourses = [
     {
@@ -324,6 +337,42 @@ export default function Dashboard() {
     loadResults();
   }, [user]);
 
+  const handleJoinClass = async () => {
+    if (!joinCode.trim()) {
+      alert("Please enter a valid join code");
+      return;
+    }
+
+    try {
+      // You can add Supabase integration here to join a classroom
+      console.log("Joining class with code:", joinCode);
+      alert(`Successfully joined classroom with code: ${joinCode}`);
+      setShowClassDialog(false);
+      setJoinCode("");
+    } catch (error) {
+      console.error("Error joining class:", error);
+      alert("Failed to join class. Please try again.");
+    }
+  };
+
+  const handleCreateClass = async () => {
+    if (!className.trim()) {
+      alert("Please enter a class name");
+      return;
+    }
+
+    try {
+      // You can add Supabase integration here to create a classroom
+      console.log("Creating class:", className);
+      alert(`Successfully created classroom: ${className}`);
+      setShowClassDialog(false);
+      setClassName("");
+    } catch (error) {
+      console.error("Error creating class:", error);
+      alert("Failed to create class. Please try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-20 md:pb-0 relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-60">
@@ -548,10 +597,13 @@ export default function Dashboard() {
                   Google Classrooms
                 </h2>
               </div>
-              <div className="flex items-center gap-2 text-sm text-secondary">
+              <button
+                onClick={() => setShowClassDialog(true)}
+                className="flex items-center gap-2 text-sm text-secondary hover:text-secondary/80 transition-colors cursor-pointer"
+              >
                 <Plus className="h-4 w-4" />
                 Join or create class
-              </div>
+              </button>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -814,6 +866,100 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* Join or Create Class Dialog */}
+      <Dialog open={showClassDialog} onOpenChange={setShowClassDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Join or Create a Class</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {/* Toggle between Join and Create */}
+            <div className="flex gap-2 bg-muted p-1 rounded-lg">
+              <button
+                onClick={() => {
+                  setClassAction("join");
+                  setJoinCode("");
+                  setClassName("");
+                }}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "join"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Join Class
+              </button>
+              <button
+                onClick={() => {
+                  setClassAction("create");
+                  setJoinCode("");
+                  setClassName("");
+                }}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "create"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Create Class
+              </button>
+            </div>
+
+            {/* Join Class Form */}
+            {classAction === "join" && (
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Class Code
+                  </label>
+                  <Input
+                    placeholder="Enter the class code (e.g., abc-1234-xyz)"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value)}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Ask your instructor for the class code to join
+                  </p>
+                </div>
+                <Button
+                  onClick={handleJoinClass}
+                  className="w-full mt-4"
+                >
+                  Join Class
+                </Button>
+              </div>
+            )}
+
+            {/* Create Class Form */}
+            {classAction === "create" && (
+              <div className="grid gap-3">
+                <div>
+                  <label className="text-sm font-medium text-foreground">
+                    Class Name
+                  </label>
+                  <Input
+                    placeholder="Enter class name (e.g., Advanced Data Structures)"
+                    value={className}
+                    onChange={(e) => setClassName(e.target.value)}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Give your class a clear, descriptive name
+                  </p>
+                </div>
+                <Button
+                  onClick={handleCreateClass}
+                  className="w-full mt-4"
+                >
+                  Create Class
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>

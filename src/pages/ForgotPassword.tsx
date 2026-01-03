@@ -1,36 +1,47 @@
-import { useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Mail, Lock, Eye, EyeOff, Loader2, ArrowRight, 
-  ArrowLeft, ShieldCheck, KeyRound, CheckCircle2,
-  GraduationCap, Sparkles, MailOpen, LockOpen
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState, useRef } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  Loader2,
+  ArrowRight,
+  ArrowLeft,
+  ShieldCheck,
+  KeyRound,
+  CheckCircle2,
+  GraduationCap,
+  Sparkles,
+  MailOpen,
+  LockOpen,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
-type ForgotPasswordStep = 'identifier' | 'otp' | 'password' | 'success';
+type ForgotPasswordStep = "identifier" | "otp" | "password" | "success";
 
 export default function ForgotPassword() {
-  const [step, setStep] = useState<ForgotPasswordStep>('identifier');
+  const [step, setStep] = useState<ForgotPasswordStep>("identifier");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [otpValues, setOtpValues] = useState(['', '', '', '']);
-  const [generatedOtp, setGeneratedOtp] = useState('');
+  const [otpValues, setOtpValues] = useState(["", "", "", ""]);
+  const [generatedOtp, setGeneratedOtp] = useState("");
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
-  
-  const [formData, setFormData] = useState({ 
-    identifier: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
+
+  const [formData, setFormData] = useState({
+    identifier: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
-  
-  const [userEmail, setUserEmail] = useState('');
-  
+
+  const [userEmail, setUserEmail] = useState("");
+
   const { generateOTP, verifyOTP, resetPassword } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -53,7 +64,7 @@ export default function ForgotPassword() {
   };
 
   const handleOtpKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
+    if (e.key === "Backspace" && !otpValues[index] && index > 0) {
       otpRefs.current[index - 1]?.focus();
     }
   };
@@ -65,23 +76,27 @@ export default function ForgotPassword() {
     try {
       // In a real app, you'd validate the identifier/email exists
       setUserEmail(formData.identifier);
-      
+
       // Generate OTP
-      const { otp, error } = await generateOTP(formData.identifier, '');
+      const { otp, error } = await generateOTP(formData.identifier, "");
       if (error) throw error;
-      
+
       setGeneratedOtp(otp);
-      
+
       // Show OTP in toast for testing
-      toast({ 
-        title: 'OTP Sent (Demo Mode)', 
+      toast({
+        title: "OTP Sent (Demo Mode)",
         description: `Your verification code is: ${otp}`,
-        duration: 10000
+        duration: 10000,
       });
-      
-      setStep('otp');
+
+      setStep("otp");
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Failed to send OTP', variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message || "Failed to send OTP",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -91,18 +106,25 @@ export default function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
 
-    const enteredOtp = otpValues.join('');
-    
+    const enteredOtp = otpValues.join("");
+
     try {
       const { valid, error } = await verifyOTP(formData.identifier, enteredOtp);
       if (error) throw error;
-      
+
       if (valid) {
-        toast({ title: 'Email Verified!', description: 'Please set your new password.' });
-        setStep('password');
+        toast({
+          title: "Email Verified!",
+          description: "Please set your new password.",
+        });
+        setStep("password");
       }
     } catch (error: any) {
-      toast({ title: 'Verification Failed', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Verification Failed",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -110,27 +132,45 @@ export default function ForgotPassword() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
-      toast({ title: 'Error', description: 'Passwords do not match', variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      });
       return;
     }
 
     if (formData.password.length < 6) {
-      toast({ title: 'Error', description: 'Password must be at least 6 characters', variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
       return;
     }
 
     setLoading(true);
 
     try {
-      const { error } = await resetPassword(formData.identifier, formData.password);
+      const { error } = await resetPassword(
+        formData.identifier,
+        formData.password
+      );
       if (error) throw error;
-      
-      toast({ title: 'Success!', description: 'Your password has been reset.' });
-      setStep('success');
+
+      toast({
+        title: "Success!",
+        description: "Your password has been reset.",
+      });
+      setStep("success");
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message || 'Failed to reset password', variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -138,26 +178,32 @@ export default function ForgotPassword() {
 
   const renderStepIndicator = () => {
     const steps = [
-      { key: 'identifier', label: 'Identify' },
-      { key: 'otp', label: 'Verify' },
-      { key: 'password', label: 'Reset' },
+      { key: "identifier", label: "Identify" },
+      { key: "otp", label: "Verify" },
+      { key: "password", label: "Reset" },
     ];
-    
-    const currentIndex = steps.findIndex(s => s.key === step);
+
+    const currentIndex = steps.findIndex((s) => s.key === step);
 
     return (
       <div className="flex items-center justify-center gap-2 mb-8">
         {steps.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2">
-            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-              i <= currentIndex 
-                ? 'bg-secondary text-secondary-foreground' 
-                : 'bg-muted text-muted-foreground'
-            }`}>
+            <div
+              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                i <= currentIndex
+                  ? "bg-secondary text-secondary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
               {i < currentIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
             </div>
             {i < steps.length - 1 && (
-              <div className={`w-8 h-0.5 ${i < currentIndex ? 'bg-secondary' : 'bg-muted'}`} />
+              <div
+                className={`w-8 h-0.5 ${
+                  i < currentIndex ? "bg-secondary" : "bg-muted"
+                }`}
+              />
             )}
           </div>
         ))}
@@ -167,7 +213,7 @@ export default function ForgotPassword() {
 
   const renderForm = () => {
     switch (step) {
-      case 'identifier':
+      case "identifier":
         return (
           <form onSubmit={handleSendOtp} className="space-y-6">
             <motion.div
@@ -180,20 +226,25 @@ export default function ForgotPassword() {
               <div className="relative bg-gradient-to-br from-secondary/10 to-accent/5 p-6 rounded-2xl border border-secondary/20 backdrop-blur-sm">
                 <MailOpen className="h-5 w-5 text-secondary mb-3" />
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Enter your email address or student number, and we'll send you a verification code to reset your password.
+                  Enter your email address or student number, and we'll send you
+                  a verification code to reset your password.
                 </p>
               </div>
             </motion.div>
 
             <div className="space-y-2">
-              <Label htmlFor="identifier" className="text-sm font-medium">Email or Student Number</Label>
+              <Label htmlFor="identifier" className="text-sm font-medium">
+                Email or Student Number
+              </Label>
               <div className="relative group">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-secondary transition-colors" />
                 <Input
                   id="identifier"
                   placeholder="student@university.edu or 2100712345"
                   value={formData.identifier}
-                  onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, identifier: e.target.value })
+                  }
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
                   required
                 />
@@ -201,9 +252,9 @@ export default function ForgotPassword() {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group" 
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group"
               disabled={loading}
             >
               {loading ? (
@@ -218,7 +269,7 @@ export default function ForgotPassword() {
           </form>
         );
 
-      case 'otp':
+      case "otp":
         return (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <motion.div
@@ -234,20 +285,28 @@ export default function ForgotPassword() {
               >
                 <KeyRound className="h-10 w-10 text-secondary" />
               </motion.div>
-              <h3 className="text-xl font-semibold mb-2">Enter Verification Code</h3>
+              <h3 className="text-xl font-semibold mb-2">
+                Enter Verification Code
+              </h3>
               <p className="text-muted-foreground text-sm">
-                We've sent a 4-digit code to <span className="font-medium text-foreground">{userEmail}</span>
+                We've sent a 4-digit code to{" "}
+                <span className="font-medium text-foreground">{userEmail}</span>
               </p>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
               className="flex justify-center gap-3"
             >
               {otpValues.map((value, index) => (
-                <motion.div key={index} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.1 * index }}>
+                <motion.div
+                  key={index}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.1 * index }}
+                >
                   <Input
                     ref={(el) => (otpRefs.current[index] = el)}
                     type="text"
@@ -262,10 +321,10 @@ export default function ForgotPassword() {
               ))}
             </motion.div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group" 
-              disabled={loading || otpValues.some(v => !v)}
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group"
+              disabled={loading || otpValues.some((v) => !v)}
             >
               {loading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -278,14 +337,14 @@ export default function ForgotPassword() {
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
-              Didn't receive the code?{' '}
-              <button 
+              Didn't receive the code?{" "}
+              <button
                 type="button"
                 onClick={() => {
-                  toast({ 
-                    title: 'OTP Resent (Demo Mode)', 
+                  toast({
+                    title: "OTP Resent (Demo Mode)",
                     description: `Your verification code is: ${generatedOtp}`,
-                    duration: 10000
+                    duration: 10000,
                   });
                 }}
                 className="text-secondary font-medium hover:text-secondary/80 transition-colors"
@@ -296,7 +355,7 @@ export default function ForgotPassword() {
           </form>
         );
 
-      case 'password':
+      case "password":
         return (
           <form onSubmit={handleResetPassword} className="space-y-5">
             <motion.div
@@ -312,22 +371,28 @@ export default function ForgotPassword() {
               >
                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
               </motion.div>
-              <h3 className="text-lg font-semibold mb-2">Create New Password</h3>
+              <h3 className="text-lg font-semibold mb-2">
+                Create New Password
+              </h3>
               <p className="text-muted-foreground text-sm">
                 Choose a strong password to secure your account
               </p>
             </motion.div>
 
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">New Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">
+                New Password
+              </Label>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-secondary transition-colors" />
                 <Input
                   id="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   placeholder="Min. 6 characters"
                   value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, password: e.target.value })
+                  }
                   className="h-14 pl-12 pr-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
                   required
                   minLength={6}
@@ -337,21 +402,32 @@ export default function ForgotPassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
                 </button>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="text-sm font-medium">Confirm Password</Label>
+              <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                Confirm Password
+              </Label>
               <div className="relative group">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-secondary transition-colors" />
                 <Input
                   id="confirmPassword"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   placeholder="Confirm your password"
                   value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      confirmPassword: e.target.value,
+                    })
+                  }
                   className="h-14 pl-12 pr-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
                   required
                   minLength={6}
@@ -361,7 +437,11 @@ export default function ForgotPassword() {
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? (
+                    <EyeOff className="h-5 w-5" />
+                  ) : (
+                    <Eye className="h-5 w-5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -374,13 +454,14 @@ export default function ForgotPassword() {
             >
               <ShieldCheck className="h-5 w-5 text-secondary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
-                Use a combination of uppercase, lowercase, numbers, and symbols for maximum security
+                Use a combination of uppercase, lowercase, numbers, and symbols
+                for maximum security
               </p>
             </motion.div>
 
-            <Button 
-              type="submit" 
-              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group" 
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group"
               disabled={loading}
             >
               {loading ? (
@@ -395,13 +476,13 @@ export default function ForgotPassword() {
           </form>
         );
 
-      case 'success':
+      case "success":
         return (
           <motion.div className="space-y-6 text-center">
             <motion.div
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: 'spring', stiffness: 100, damping: 15 }}
+              transition={{ type: "spring", stiffness: 100, damping: 15 }}
             >
               <div className="h-24 w-24 rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center mx-auto border-2 border-emerald-500/30">
                 <motion.div
@@ -418,9 +499,12 @@ export default function ForgotPassword() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
             >
-              <h2 className="text-2xl font-bold text-foreground mb-3">Password Reset Successfully!</h2>
+              <h2 className="text-2xl font-bold text-foreground mb-3">
+                Password Reset Successfully!
+              </h2>
               <p className="text-muted-foreground text-lg">
-                Your password has been changed. You can now sign in with your new password.
+                Your password has been changed. You can now sign in with your
+                new password.
               </p>
             </motion.div>
 
@@ -442,17 +526,17 @@ export default function ForgotPassword() {
               transition={{ delay: 0.6 }}
               className="flex flex-col gap-3"
             >
-              <Button 
-                onClick={() => navigate('/auth')}
+              <Button
+                onClick={() => navigate("/auth")}
                 className="w-full h-14 text-base font-semibold bg-gradient-to-r from-secondary to-accent text-secondary-foreground hover:from-secondary/90 hover:to-accent/90 rounded-xl shadow-glow group"
               >
                 Back to Sign In
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
-              
-              <Button 
+
+              <Button
                 variant="outline"
-                onClick={() => navigate('/')}
+                onClick={() => navigate("/")}
                 className="w-full h-14 text-base font-semibold"
               >
                 Go to Home
@@ -466,7 +550,7 @@ export default function ForgotPassword() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left Panel - Decorative */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.6 }}
@@ -475,10 +559,13 @@ export default function ForgotPassword() {
         <div className="absolute inset-0 hero-gradient" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--secondary)/0.3)_0%,_transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_hsl(var(--accent)/0.2)_0%,_transparent_50%)]" />
-        
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }} />
+
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
 
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
@@ -496,7 +583,9 @@ export default function ForgotPassword() {
             <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
               <GraduationCap className="h-7 w-7 text-white" />
             </div>
-            <span className="font-display text-2xl font-bold text-white">UniPortal</span>
+            <span className="font-display text-2xl font-bold text-white">
+              UniPortal
+            </span>
           </Link>
 
           <div className="max-w-lg">
@@ -509,21 +598,22 @@ export default function ForgotPassword() {
                 <Sparkles className="h-4 w-4 text-secondary" />
                 <span>Account Recovery</span>
               </div>
-              
+
               <h1 className="font-display text-4xl xl:text-5xl font-bold text-white leading-tight mb-6">
                 Regain Access to
                 <span className="block text-secondary">Your Account</span>
               </h1>
-              
+
               <p className="text-lg text-white/70 mb-10">
-                Follow a simple verification process to reset your password and regain full access to your UniPortal account.
+                Follow a simple verification process to reset your password and
+                regain full access to your UniPortal account.
               </p>
 
               <div className="space-y-4">
                 {[
-                  { icon: Mail, text: 'Verify your email' },
-                  { icon: KeyRound, text: 'Confirm with OTP' },
-                  { icon: LockOpen, text: 'Create new password' },
+                  { icon: Mail, text: "Verify your email" },
+                  { icon: KeyRound, text: "Confirm with OTP" },
+                  { icon: LockOpen, text: "Create new password" },
                 ].map((item, i) => (
                   <motion.div
                     key={i}
@@ -571,13 +661,13 @@ export default function ForgotPassword() {
           </Link>
 
           {/* Back button */}
-          {step !== 'identifier' && (
+          {step !== "identifier" && (
             <motion.button
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               onClick={() => {
-                if (step === 'otp') setStep('identifier');
-                else if (step === 'password') setStep('otp');
+                if (step === "otp") setStep("identifier");
+                else if (step === "password") setStep("otp");
               }}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
             >
@@ -587,30 +677,34 @@ export default function ForgotPassword() {
           )}
 
           {/* Step Indicator */}
-          {step !== 'success' && renderStepIndicator()}
+          {step !== "success" && renderStepIndicator()}
 
           {/* Form Header */}
-          {step !== 'success' && (
+          {step !== "success" && (
             <div className="mb-8">
-              <motion.h1 
+              <motion.h1
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 key={step}
                 className="font-display text-3xl md:text-4xl font-bold text-foreground mb-3"
               >
-                {step === 'identifier' ? 'Forgot your password?' : 
-                 step === 'otp' ? 'Verify your identity' :
-                 'Create new password'}
+                {step === "identifier"
+                  ? "Forgot your password?"
+                  : step === "otp"
+                  ? "Verify your identity"
+                  : "Create new password"}
               </motion.h1>
-              <motion.p 
+              <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.1 }}
                 className="text-muted-foreground text-lg"
               >
-                {step === 'identifier' ? "Don't worry, we'll help you reset it" : 
-                 step === 'otp' ? 'Enter the code we sent you' :
-                 'Choose a strong password'}
+                {step === "identifier"
+                  ? "Don't worry, we'll help you reset it"
+                  : step === "otp"
+                  ? "Enter the code we sent you"
+                  : "Choose a strong password"}
               </motion.p>
             </div>
           )}
@@ -629,10 +723,13 @@ export default function ForgotPassword() {
           </AnimatePresence>
 
           {/* Back to sign in link */}
-          {step !== 'success' && (
+          {step !== "success" && (
             <p className="text-center text-muted-foreground mt-8">
-              Remember your password?{' '}
-              <Link to="/auth" className="text-secondary font-semibold hover:text-secondary/80 transition-colors">
+              Remember your password?{" "}
+              <Link
+                to="/auth"
+                className="text-secondary font-semibold hover:text-secondary/80 transition-colors"
+              >
                 Sign in
               </Link>
             </p>
