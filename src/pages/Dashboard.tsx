@@ -349,6 +349,7 @@ export default function Dashboard() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       // First, find the classroom by join code
       const { data: classroom, error: classroomError } = await supabase
@@ -398,6 +399,8 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error joining class:", error);
       alert("Failed to join class. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -412,6 +415,7 @@ export default function Dashboard() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       // Generate a unique join code
       const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -453,6 +457,8 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error creating class:", error);
       alert("Failed to create class. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1006,8 +1012,12 @@ export default function Dashboard() {
                     Ask your instructor for the class code to join
                   </p>
                 </div>
-                <Button onClick={handleJoinClass} className="w-full mt-4">
-                  Join Class
+                <Button
+                  onClick={handleJoinClass}
+                  className="w-full mt-4"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Joining..." : "Join Class"}
                 </Button>
               </div>
             )}
@@ -1029,8 +1039,12 @@ export default function Dashboard() {
                     Give your class a clear, descriptive name
                   </p>
                 </div>
-                <Button onClick={handleCreateClass} className="w-full mt-4">
-                  Create Class
+                <Button
+                  onClick={handleCreateClass}
+                  className="w-full mt-4"
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? "Creating..." : "Create Class"}
                 </Button>
               </div>
             )}
