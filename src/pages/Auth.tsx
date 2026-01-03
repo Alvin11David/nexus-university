@@ -27,7 +27,12 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
-type AuthStep = "signin" | "signup-details" | "lecturer-personal-details" | "signup-otp" | "signup-password";
+type AuthStep =
+  | "signin"
+  | "signup-details"
+  | "lecturer-personal-details"
+  | "signup-otp"
+  | "signup-password";
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
@@ -99,24 +104,28 @@ export default function Auth() {
       // Generate OTP for lecturer
       const { otp, error: otpError } = await generateOTP(formData.email, null);
       if (otpError) throw otpError;
-      
+
       setGeneratedOtp(otp);
-      setStudentRecord({ 
-        id: null, 
+      setStudentRecord({
+        id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
         email: formData.email,
-        department: formData.department
+        department: formData.department,
       });
-      
-      toast({ 
-        title: 'OTP Sent (Demo Mode)', 
+
+      toast({
+        title: "OTP Sent (Demo Mode)",
         description: `Your verification code is: ${otp}`,
-        duration: 10000
+        duration: 10000,
       });
-      
-      setStep('signup-otp');
+
+      setStep("signup-otp");
     } catch (error: any) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -154,13 +163,15 @@ export default function Auth() {
       if (isLecturerSignup) {
         // Validate email format: surname.othernames@lecturer.com
         const emailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
-        
+
         if (!emailPattern.test(formData.email)) {
-          throw new Error('Email must be in format: surname.othernames@lecturer.com');
+          throw new Error(
+            "Email must be in format: surname.othernames@lecturer.com"
+          );
         }
-        
+
         // Move to personal details step
-        setStep('lecturer-personal-details');
+        setStep("lecturer-personal-details");
         setLoading(false);
         return;
       }
@@ -299,6 +310,9 @@ export default function Auth() {
       password: "",
       registrationNumber: "",
       studentNumber: "",
+      firstName: "",
+      lastName: "",
+      department: "",
     });
   };
 
@@ -313,6 +327,9 @@ export default function Auth() {
       password: "",
       registrationNumber: "",
       studentNumber: "",
+      firstName: "",
+      lastName: "",
+      department: "",
     });
   };
 
@@ -325,11 +342,18 @@ export default function Auth() {
   const renderStepIndicator = () => {
     if (step === "signin") return null;
 
-    const steps = [
-      { key: "signup-details", label: "Details" },
-      { key: "signup-otp", label: "Verify" },
-      { key: "signup-password", label: "Password" },
-    ];
+    const steps = isLecturerSignup
+      ? [
+          { key: "signup-details", label: "Email" },
+          { key: "lecturer-personal-details", label: "Details" },
+          { key: "signup-otp", label: "Verify" },
+          { key: "signup-password", label: "Password" },
+        ]
+      : [
+          { key: "signup-details", label: "Details" },
+          { key: "signup-otp", label: "Verify" },
+          { key: "signup-password", label: "Password" },
+        ];
 
     const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -509,7 +533,7 @@ export default function Auth() {
                   id="email"
                   type="email"
                   placeholder={
-                    isLecturerSignup ? "you@nexus.edu" : "you@university.edu"
+                    isLecturerSignup ? "surname.othernames@lecturer.com" : "you@university.edu"
                   }
                   value={formData.email}
                   onChange={(e) =>
@@ -521,7 +545,7 @@ export default function Auth() {
               </div>
               {isLecturerSignup && (
                 <p className="text-xs text-muted-foreground mt-1 ml-1">
-                  Must use @nexus.edu domain
+                  Format: surname.othernames@lecturer.com
                 </p>
               )}
             </div>
@@ -530,7 +554,7 @@ export default function Auth() {
               <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
                 {isLecturerSignup
-                  ? "We'll verify your institutional email address to confirm your faculty status."
+                  ? "Enter your email address in the format: surname.othernames@lecturer.com"
                   : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
               </p>
             </div>
@@ -545,6 +569,96 @@ export default function Auth() {
               ) : (
                 <>
                   Verify & Continue
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </Button>
+          </form>
+        );
+
+      case "lecturer-personal-details":
+        return (
+          <form onSubmit={handleLecturerDetails} className="space-y-5">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold mb-2">Personal Details</h3>
+              <p className="text-muted-foreground text-sm">
+                Please provide your information
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="firstName" className="text-sm font-medium">
+                First Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, firstName: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName" className="text-sm font-medium">
+                Last Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, lastName: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="department" className="text-sm font-medium">
+                Department
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="department"
+                  placeholder="Computer Science"
+                  value={formData.department}
+                  onChange={(e) =>
+                    setFormData({ ...formData, department: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="bg-muted/30 p-4 rounded-xl">
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Email:</span> {formData.email}
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Continue to Verification
                   <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                 </>
               )}
