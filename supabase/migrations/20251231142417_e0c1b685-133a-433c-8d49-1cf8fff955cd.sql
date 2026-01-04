@@ -1,5 +1,5 @@
 -- Create student_records table for validating students during signup
-CREATE TABLE public.student_records (
+CREATE TABLE IF NOT EXISTS public.student_records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   full_name TEXT NOT NULL,
   registration_number TEXT NOT NULL UNIQUE,
@@ -10,7 +10,7 @@ CREATE TABLE public.student_records (
 );
 
 -- Create OTP verification table
-CREATE TABLE public.otp_verifications (
+CREATE TABLE IF NOT EXISTS public.otp_verifications (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT NOT NULL,
   otp_code TEXT NOT NULL,
@@ -25,24 +25,28 @@ ALTER TABLE public.student_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.otp_verifications ENABLE ROW LEVEL SECURITY;
 
 -- Anyone can read student_records to validate during signup (only reg/student numbers, not sensitive data)
+DROP POLICY IF EXISTS "Anyone can validate student records" ON public.student_records;
 CREATE POLICY "Anyone can validate student records"
 ON public.student_records
 FOR SELECT
 USING (true);
 
 -- Anyone can create OTP verifications during signup
+DROP POLICY IF EXISTS "Anyone can create OTP" ON public.otp_verifications;
 CREATE POLICY "Anyone can create OTP"
 ON public.otp_verifications
 FOR INSERT
 WITH CHECK (true);
 
 -- Anyone can read their own OTP by email
+DROP POLICY IF EXISTS "Anyone can verify OTP" ON public.otp_verifications;
 CREATE POLICY "Anyone can verify OTP"
 ON public.otp_verifications
 FOR SELECT
 USING (true);
 
 -- Anyone can update OTP verification status
+DROP POLICY IF EXISTS "Anyone can update OTP status" ON public.otp_verifications;
 CREATE POLICY "Anyone can update OTP status"
 ON public.otp_verifications
 FOR UPDATE

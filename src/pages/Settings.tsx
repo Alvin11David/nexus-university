@@ -8,8 +8,8 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <Header />
+      <StudentHeader />
 
       <main className="container py-8">
         <motion.div
@@ -175,7 +175,7 @@ export default function Settings() {
         </motion.div>
       </main>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

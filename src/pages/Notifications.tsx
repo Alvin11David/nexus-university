@@ -1,22 +1,35 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import gsap from 'gsap';
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
 import {
-  Bell, Check, CheckCheck, Filter, X, ArrowRight, Clock, 
-  AlertCircle, Info, CheckCircle2, AlertTriangle, Sparkles,
-  Inbox, Loader2, FileText, Award, Megaphone
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Header } from '@/components/layout/Header';
-import { BottomNav } from '@/components/layout/BottomNav';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { formatDistanceToNow } from 'date-fns';
-
+  Bell,
+  Check,
+  CheckCheck,
+  Filter,
+  X,
+  ArrowRight,
+  Clock,
+  AlertCircle,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  Sparkles,
+  Inbox,
+  Loader2,
+  FileText,
+  Award,
+  Megaphone,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { formatDistanceToNow } from "date-fns";
 
 interface Notification {
   id: string;
@@ -28,7 +41,7 @@ interface Notification {
   created_at: string;
 }
 
-type FilterType = 'all' | 'unread' | 'read';
+type FilterType = "all" | "unread" | "read";
 
 const notificationIcons = {
   info: Info,
@@ -41,13 +54,13 @@ const notificationIcons = {
 };
 
 const notificationColors = {
-  info: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
-  success: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
-  warning: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
-  error: 'text-red-500 bg-red-500/10 border-red-500/20',
-  assignment: 'text-purple-500 bg-purple-500/10 border-purple-500/20',
-  grade: 'text-indigo-500 bg-indigo-500/10 border-indigo-500/20',
-  announcement: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
+  info: "text-blue-500 bg-blue-500/10 border-blue-500/20",
+  success: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
+  warning: "text-amber-500 bg-amber-500/10 border-amber-500/20",
+  error: "text-red-500 bg-red-500/10 border-red-500/20",
+  assignment: "text-purple-500 bg-purple-500/10 border-purple-500/20",
+  grade: "text-indigo-500 bg-indigo-500/10 border-indigo-500/20",
+  announcement: "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
 };
 
 export default function Notifications() {
@@ -55,7 +68,7 @@ export default function Notifications() {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterType>('all');
+  const [filter, setFilter] = useState<FilterType>("all");
   const titleRef = useRef<HTMLDivElement>(null);
   const subtitleRef = useRef<HTMLDivElement>(null);
 
@@ -66,13 +79,15 @@ export default function Notifications() {
   useEffect(() => {
     // GSAP Text Animation for Title
     if (titleRef.current) {
-      const chars = titleRef.current.textContent?.split('') || [];
-      titleRef.current.innerHTML = chars.map(char => 
-        char === ' ' ? ' ' : `<span class="inline-block">${char}</span>`
-      ).join('');
-      
+      const chars = titleRef.current.textContent?.split("") || [];
+      titleRef.current.innerHTML = chars
+        .map((char) =>
+          char === " " ? " " : `<span class="inline-block">${char}</span>`
+        )
+        .join("");
+
       gsap.fromTo(
-        titleRef.current.querySelectorAll('span'),
+        titleRef.current.querySelectorAll("span"),
         {
           opacity: 0,
           y: 50,
@@ -84,7 +99,7 @@ export default function Notifications() {
           rotationX: 0,
           duration: 0.8,
           stagger: 0.03,
-          ease: 'back.out(1.7)',
+          ease: "back.out(1.7)",
         }
       );
     }
@@ -102,7 +117,7 @@ export default function Notifications() {
           y: 0,
           duration: 0.6,
           delay: 0.4,
-          ease: 'power3.out',
+          ease: "power3.out",
         }
       );
     }
@@ -110,19 +125,19 @@ export default function Notifications() {
 
   const fetchNotifications = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .from("notifications")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setNotifications(data || []);
     } catch (error) {
-      console.error('Error fetching notifications:', error);
+      console.error("Error fetching notifications:", error);
     } finally {
       setLoading(false);
     }
@@ -131,53 +146,63 @@ export default function Notifications() {
   const markAsRead = async (id: string) => {
     try {
       const { error } = await supabase
-        .from('notifications')
+        .from("notifications")
         .update({ is_read: true })
-        .eq('id', id);
+        .eq("id", id);
 
       if (error) throw error;
-      
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, is_read: true } : n))
+
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
+
+      // Notify header to refresh badge immediately
+      window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      console.error("Error marking notification as read:", error);
     }
   };
 
   const markAllAsRead = async () => {
     if (!user) return;
-    
+
     try {
       const { error } = await supabase
-        .from('notifications')
+        .from("notifications")
         .update({ is_read: true })
-        .eq('user_id', user.id)
-        .eq('is_read', false);
+        .eq("user_id", user.id)
+        .eq("is_read", false);
 
       if (error) throw error;
-      
-      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+
+      // Notify header to refresh badge immediately
+      window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      console.error("Error marking all as read:", error);
     }
   };
 
-  const filteredNotifications = notifications.filter(n => {
-    if (filter === 'unread') return !n.is_read;
-    if (filter === 'read') return n.is_read;
+  const filteredNotifications = notifications.filter((n) => {
+    if (filter === "unread") return !n.is_read;
+    if (filter === "read") return n.is_read;
     return true;
   });
 
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   const getNotificationIcon = (type: string) => {
-    const IconComponent = notificationIcons[type as keyof typeof notificationIcons] || Bell;
+    const IconComponent =
+      notificationIcons[type as keyof typeof notificationIcons] || Bell;
     return IconComponent;
   };
 
   const getNotificationColor = (type: string) => {
-    return notificationColors[type as keyof typeof notificationColors] || notificationColors.info;
+    return (
+      notificationColors[type as keyof typeof notificationColors] ||
+      notificationColors.info
+    );
   };
 
   if (loading) {
@@ -193,15 +218,18 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <Header />
-      
+      <StudentHeader />
+
       {/* Hero Section with GSAP Animations */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--secondary)/0.2)_0%,_transparent_50%)]" />
-        <div className="absolute inset-0 opacity-5" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-        }} />
-        
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          }}
+        />
+
         <div className="container relative">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -212,14 +240,14 @@ export default function Notifications() {
               <Bell className="h-4 w-4" />
               <span>Stay Updated</span>
             </div>
-            
-            <h1 
+
+            <h1
               ref={titleRef}
               className="font-display text-3xl md:text-4xl lg:text-5xl font-bold text-primary-foreground mb-4"
             >
               Notifications
             </h1>
-            <p 
+            <p
               ref={subtitleRef}
               className="text-primary-foreground/80 text-lg max-w-2xl"
             >
@@ -250,7 +278,7 @@ export default function Notifications() {
                   </div>
                 </CardContent>
               </Card>
-              
+
               {unreadCount > 0 && (
                 <Card className="border-0 shadow-lg bg-gradient-to-br from-amber-500/10 to-amber-500/5">
                   <CardContent className="p-4 flex items-center gap-3">
@@ -258,7 +286,9 @@ export default function Notifications() {
                       <Sparkles className="h-6 w-6 text-amber-500" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-amber-500">{unreadCount}</p>
+                      <p className="text-2xl font-bold text-amber-500">
+                        {unreadCount}
+                      </p>
                       <p className="text-xs text-muted-foreground">Unread</p>
                     </div>
                   </CardContent>
@@ -279,7 +309,11 @@ export default function Notifications() {
           </div>
 
           {/* Filter Tabs */}
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterType)} className="mb-6">
+          <Tabs
+            value={filter}
+            onValueChange={(v) => setFilter(v as FilterType)}
+            className="mb-6"
+          >
             <TabsList className="grid w-full max-w-md grid-cols-3 bg-muted/50">
               <TabsTrigger value="all" className="gap-2">
                 All
@@ -299,9 +333,9 @@ export default function Notifications() {
               </TabsTrigger>
               <TabsTrigger value="read" className="gap-2">
                 Read
-                {notifications.filter(n => n.is_read).length > 0 && (
+                {notifications.filter((n) => n.is_read).length > 0 && (
                   <Badge variant="secondary" className="ml-1 text-xs">
-                    {notifications.filter(n => n.is_read).length}
+                    {notifications.filter((n) => n.is_read).length}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -318,12 +352,14 @@ export default function Notifications() {
                     <Inbox className="h-12 w-12 text-muted-foreground/50" />
                   </div>
                   <h3 className="font-display text-xl font-semibold mb-2">
-                    {filter === 'unread' ? 'No Unread Notifications' : 
-                     filter === 'read' ? 'No Read Notifications' : 
-                     'No Notifications Yet'}
+                    {filter === "unread"
+                      ? "No Unread Notifications"
+                      : filter === "read"
+                      ? "No Read Notifications"
+                      : "No Notifications Yet"}
                   </h3>
                   <p className="text-muted-foreground max-w-md mx-auto">
-                    {filter === 'all' 
+                    {filter === "all"
                       ? "You're all caught up! New notifications will appear here."
                       : `You don't have any ${filter} notifications at the moment.`}
                   </p>
@@ -333,28 +369,30 @@ export default function Notifications() {
                   <AnimatePresence mode="popLayout">
                     {filteredNotifications.map((notification, index) => {
                       const Icon = getNotificationIcon(notification.type);
-                      const colorClass = getNotificationColor(notification.type);
-                      
+                      const colorClass = getNotificationColor(
+                        notification.type
+                      );
+
                       return (
                         <motion.div
                           key={notification.id}
                           initial={{ opacity: 0, x: -20, scale: 0.95 }}
                           animate={{ opacity: 1, x: 0, scale: 1 }}
                           exit={{ opacity: 0, x: 20, scale: 0.95 }}
-                          transition={{ 
+                          transition={{
                             delay: index * 0.05,
                             type: "spring",
                             stiffness: 300,
-                            damping: 30
+                            damping: 30,
                           }}
                           layout
                         >
-                          <Card 
+                          <Card
                             className={`group cursor-pointer transition-all duration-300 hover:shadow-lg border-l-4 ${
-                              notification.is_read 
-                                ? 'bg-muted/30 opacity-75 hover:opacity-100' 
-                                : 'bg-background shadow-md'
-                            } ${colorClass.split(' ')[2]}`}
+                              notification.is_read
+                                ? "bg-muted/30 opacity-75 hover:opacity-100"
+                                : "bg-background shadow-md"
+                            } ${colorClass.split(" ")[2]}`}
                             onClick={() => {
                               if (!notification.is_read) {
                                 markAsRead(notification.id);
@@ -366,39 +404,51 @@ export default function Notifications() {
                           >
                             <CardContent className="p-5">
                               <div className="flex items-start gap-4">
-                                <div className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${colorClass}`}>
+                                <div
+                                  className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform group-hover:scale-110 ${colorClass}`}
+                                >
                                   <Icon className="h-6 w-6" />
                                 </div>
-                                
+
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-start justify-between gap-3 mb-2">
-                                    <h3 className={`font-semibold text-lg group-hover:text-secondary transition-colors ${
-                                      !notification.is_read ? 'text-foreground' : 'text-muted-foreground'
-                                    }`}>
+                                    <h3
+                                      className={`font-semibold text-lg group-hover:text-secondary transition-colors ${
+                                        !notification.is_read
+                                          ? "text-foreground"
+                                          : "text-muted-foreground"
+                                      }`}
+                                    >
                                       {notification.title}
                                     </h3>
                                     {!notification.is_read && (
                                       <div className="h-2 w-2 rounded-full bg-secondary flex-shrink-0 mt-2" />
                                     )}
                                   </div>
-                                  
+
                                   <p className="text-muted-foreground mb-3 line-clamp-2">
                                     {notification.message}
                                   </p>
-                                  
+
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                       <div className="flex items-center gap-1">
                                         <Clock className="h-3 w-3" />
                                         <span>
-                                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                                          {formatDistanceToNow(
+                                            new Date(notification.created_at),
+                                            { addSuffix: true }
+                                          )}
                                         </span>
                                       </div>
-                                      <Badge variant="outline" className="text-xs capitalize">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs capitalize"
+                                      >
                                         {notification.type}
                                       </Badge>
                                     </div>
-                                    
+
                                     {notification.link && (
                                       <Button
                                         variant="ghost"
@@ -415,7 +465,7 @@ export default function Notifications() {
                                     )}
                                   </div>
                                 </div>
-                                
+
                                 {!notification.is_read && (
                                   <Button
                                     variant="ghost"
@@ -442,9 +492,8 @@ export default function Notifications() {
           </Tabs>
         </motion.div>
       </main>
-      
-      <BottomNav />
+
+      <StudentBottomNav />
     </div>
   );
 }
-

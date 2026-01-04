@@ -383,6 +383,11 @@ CREATE POLICY "Users can view their own roles"
   TO authenticated
   USING (user_id = auth.uid());
 
+CREATE POLICY "Users can insert their own role during signup"
+  ON public.user_roles FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
 CREATE POLICY "Admins can manage all roles"
   ON public.user_roles FOR ALL
   TO authenticated

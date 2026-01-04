@@ -1,26 +1,17 @@
 import { Link, useLocation } from "react-router-dom";
-import {
-  Home,
-  BookOpen,
-  Video,
-  User,
-  Bell,
-  BarChart3,
-  Mail,
-  Target,
-} from "lucide-react";
+import { Home, BookOpen, Calendar, Bell, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
-const navItems = [
-  { label: "Home", href: "/lecturer", icon: Home },
-  { label: "Grades", href: "/lecturer/gradebook", icon: BookOpen },
-  { label: "Messages", href: "/lecturer/messages", icon: Mail },
-  { label: "Analytics", href: "/lecturer/analytics", icon: BarChart3 },
+const studentNavItems = [
+  { label: "Home", href: "/dashboard", icon: Home },
+  { label: "Courses", href: "/courses", icon: BookOpen },
+  { label: "Schedule", href: "/schedule", icon: Calendar },
+  { label: "Alerts", href: "/notifications", icon: Bell },
   { label: "Profile", href: "/profile", icon: User },
 ];
 
-export function BottomNav() {
+export function StudentBottomNav() {
   const location = useLocation();
   const { user } = useAuth();
 
@@ -29,14 +20,14 @@ export function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-xl border-t border-border safe-area-bottom">
       <div className="flex items-center justify-around h-16">
-        {navItems.map((item) => {
+        {studentNavItems.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
               key={item.label}
               to={item.href}
               className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors",
+                "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-all",
                 isActive ? "text-secondary" : "text-muted-foreground"
               )}
             >

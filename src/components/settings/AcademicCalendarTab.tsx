@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Calendar,
@@ -31,6 +31,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CalendarEvent {
   id: string;
@@ -256,6 +258,7 @@ const months = [
 const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function AcademicCalendarTab() {
+  const { user } = useAuth();
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
@@ -270,6 +273,87 @@ export function AcademicCalendarTab() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [dynamicAssignments, setDynamicAssignments] = useState<CalendarEvent[]>(
+    []
+  );
+
+  // Fetch assignments from Supabase and convert to calendar events
+  useEffect(() => {
+    const fetchAssignments = async () => {
+      if (!user) return;
+
+      try {
+        // Get student's enrolled courses
+        const { data: enrollments, error: enrollError } = await supabase
+          .from("enrollments")
+          .select("course_id")
+          .eq("student_id", user.id);
+
+        if (enrollError) throw enrollError;
+
+        if (enrollments && enrollments.length > 0) {
+          const courseIds = enrollments.map((e) => e.course_id);
+
+          // Fetch assignments for enrolled courses
+          try {
+            // @ts-ignore - New table not yet in types
+            const assignmentsResult = await supabase
+              .from("assignments")
+              .select("*")
+              .in("course_id", courseIds)
+              .in("status", ["active", "closed"]);
+
+            if (assignmentsResult.error) throw assignmentsResult.error;
+
+            if (assignmentsResult.data) {
+              // Convert assignments to calendar events
+              const assignmentEvents: CalendarEvent[] = (
+                assignmentsResult.data as any[]
+              ).map((a) => ({
+                id: `assign-${a.id}`,
+                title: a.title,
+                date: new Date(a.due_date).toISOString().split("T")[0],
+                type: "assignment" as const,
+                description: a.description || "",
+                important: false,
+              }));
+
+              setDynamicAssignments(assignmentEvents);
+            }
+          } catch (err) {
+            console.error("Assignments fetch error:", err);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching assignments:", error);
+      }
+    };
+
+    fetchAssignments();
+
+    // Set up real-time listener for new assignments
+    const subscription = supabase
+      .channel("assignment-changes")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "assignments",
+        },
+        () => {
+          fetchAssignments();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [user]);
+
+  // Combine static academic events with dynamic assignments
+  const allEvents = [...academicEvents, ...dynamicAssignments];
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
@@ -337,7 +421,7 @@ export function AcademicCalendarTab() {
       2,
       "0"
     )}-${String(day).padStart(2, "0")}`;
-    return academicEvents.filter((event) => {
+    return allEvents.filter((event) => {
       const eventStart = new Date(event.date);
       const eventEnd = event.endDate ? new Date(event.endDate) : eventStart;
       const currentDate = new Date(dateStr);
@@ -345,7 +429,7 @@ export function AcademicCalendarTab() {
     });
   };
 
-  const monthEvents = academicEvents.filter((event) => {
+  const monthEvents = allEvents.filter((event) => {
     const eventDate = new Date(event.date);
     return (
       eventDate.getMonth() === selectedMonth &&
@@ -353,14 +437,14 @@ export function AcademicCalendarTab() {
     );
   });
 
-  const upcomingEvents = academicEvents
+  const upcomingEvents = allEvents
     .filter((event) => new Date(event.date) >= new Date())
     .slice(0, 5);
 
-  const importantDates = academicEvents.filter((event) => event.important);
+  const importantDates = allEvents.filter((event) => event.important);
 
   const selectedDateEvents = selectedDate
-    ? academicEvents.filter((event) => {
+    ? allEvents.filter((event) => {
         const eventDate = new Date(event.date).toDateString();
         return eventDate === new Date(selectedDate).toDateString();
       })

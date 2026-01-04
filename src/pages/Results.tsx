@@ -7,8 +7,8 @@ import {
   ArrowLeft,
   Sparkles,
 } from "lucide-react";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -247,7 +247,7 @@ export default function Results() {
         </div>
       </main>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

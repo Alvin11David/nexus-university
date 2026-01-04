@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -52,20 +52,32 @@
     --emerald: 160 84% 39%;
     --coral: 16 85% 60%;
     --lavender: 262 83% 68%;
-    
+
     /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(222 60% 20%), hsl(222 50% 30%), hsl(174 72% 40%));
+    --gradient-hero: linear-gradient(
+      135deg,
+      hsl(222 60% 20%),
+      hsl(222 50% 30%),
+      hsl(174 72% 40%)
+    );
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 30% 98%));
     --gradient-amber: linear-gradient(135deg, hsl(38 92% 50%), hsl(40 95% 65%));
-    --gradient-success: linear-gradient(135deg, hsl(160 84% 39%), hsl(174 60% 55%));
-    
+    --gradient-success: linear-gradient(
+      135deg,
+      hsl(160 84% 39%),
+      hsl(174 60% 55%)
+    );
+
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 hsl(222 60% 20% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(222 60% 20% / 0.1), 0 2px 4px -2px hsl(222 60% 20% / 0.1);
-    --shadow-lg: 0 10px 15px -3px hsl(222 60% 20% / 0.1), 0 4px 6px -4px hsl(222 60% 20% / 0.1);
-    --shadow-xl: 0 20px 25px -5px hsl(222 60% 20% / 0.1), 0 8px 10px -6px hsl(222 60% 20% / 0.1);
+    --shadow-md: 0 4px 6px -1px hsl(222 60% 20% / 0.1),
+      0 2px 4px -2px hsl(222 60% 20% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(222 60% 20% / 0.1),
+      0 4px 6px -4px hsl(222 60% 20% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(222 60% 20% / 0.1),
+      0 8px 10px -6px hsl(222 60% 20% / 0.1);
     --shadow-glow: 0 0 40px hsl(38 92% 50% / 0.3);
-    
+
     /* Glassmorphism */
     --glass-bg: hsl(0 0% 100% / 0.7);
     --glass-border: hsl(0 0% 100% / 0.3);
@@ -132,11 +144,16 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
   }
 
-  h1, h2, h3, h4, h5, h6 {
-    font-family: 'Playfair Display', serif;
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: "Playfair Display", serif;
     @apply font-semibold tracking-tight;
   }
 }
@@ -158,7 +175,11 @@
 
   /* Animated gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--accent)));
+    background: linear-gradient(
+      135deg,
+      hsl(var(--secondary)),
+      hsl(var(--accent))
+    );
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -178,7 +199,7 @@
   .hover-lift {
     @apply transition-all duration-300 ease-out;
   }
-  
+
   .hover-lift:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-xl);
@@ -223,7 +244,7 @@
   }
 
   .animated-underline::after {
-    content: '';
+    content: "";
     @apply absolute bottom-0 left-0 w-full h-0.5 bg-secondary scale-x-0 origin-left transition-transform duration-300;
   }
 
@@ -237,7 +258,7 @@
   }
 
   .pulse-dot::after {
-    content: '';
+    content: "";
     @apply absolute -top-1 -right-1 w-3 h-3 bg-coral rounded-full;
     animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
@@ -251,39 +272,79 @@
 @layer utilities {
   /* Animation keyframes */
   @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
   }
 
   @keyframes pulse-ring {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.5); opacity: 0.5; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(1.5);
+      opacity: 0.5;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 
   @keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
   }
 
   @keyframes slide-up {
-    0% { transform: translateY(20px); opacity: 0; }
-    100% { transform: translateY(0); opacity: 1; }
+    0% {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 
   @keyframes slide-down {
-    0% { transform: translateY(-20px); opacity: 0; }
-    100% { transform: translateY(0); opacity: 1; }
+    0% {
+      transform: translateY(-20px);
+      opacity: 0;
+    }
+    100% {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 
   @keyframes fade-in {
-    0% { opacity: 0; }
-    100% { opacity: 1; }
+    0% {
+      opacity: 0;
+    }
+    100% {
+      opacity: 1;
+    }
   }
 
   @keyframes scale-in {
-    0% { transform: scale(0.95); opacity: 0; }
-    100% { transform: scale(1); opacity: 1; }
+    0% {
+      transform: scale(0.95);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
   }
 
   .animate-float {
@@ -291,7 +352,12 @@
   }
 
   .animate-shimmer {
-    background: linear-gradient(90deg, transparent, hsl(var(--muted-foreground) / 0.1), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      hsl(var(--muted-foreground) / 0.1),
+      transparent
+    );
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
   }
@@ -313,9 +379,65 @@
   }
 
   /* Stagger animations */
-  .stagger-1 { animation-delay: 0.1s; }
-  .stagger-2 { animation-delay: 0.2s; }
-  .stagger-3 { animation-delay: 0.3s; }
-  .stagger-4 { animation-delay: 0.4s; }
-  .stagger-5 { animation-delay: 0.5s; }
+  .stagger-1 {
+    animation-delay: 0.1s;
+  }
+  .stagger-2 {
+    animation-delay: 0.2s;
+  }
+  .stagger-3 {
+    animation-delay: 0.3s;
+  }
+  .stagger-4 {
+    animation-delay: 0.4s;
+  }
+  .stagger-5 {
+    animation-delay: 0.5s;
+  }
+
+  /* Mobile responsiveness utilities */
+  @media (max-width: 640px) {
+    /* Improve text wrapping for buttons on mobile */
+    button {
+      word-break: break-word;
+      overflow-wrap: break-word;
+      hyphens: auto;
+    }
+
+    /* Ensure full-width buttons don't overflow */
+    .w-full {
+      max-width: 100%;
+    }
+
+    /* Reduce padding on small screens for form elements */
+    .p-6 {
+      @apply p-4;
+    }
+    .p-8 {
+      @apply p-4;
+    }
+    .px-6 {
+      @apply px-4;
+    }
+    .px-8 {
+      @apply px-4;
+    }
+
+    /* Improve spacing for button groups */
+    .gap-4 {
+      @apply gap-2;
+    }
+    .gap-8 {
+      @apply gap-4;
+    }
+  }
+
+  /* Touch-friendly button sizing for mobile */
+  @supports (padding: max(0px)) {
+    button,
+    a[role="button"] {
+      padding: max(0.5rem, calc(0.5rem + env(safe-area-inset-bottom)))
+        max(1rem, calc(1rem + env(safe-area-inset-left)));
+    }
+  }
 }

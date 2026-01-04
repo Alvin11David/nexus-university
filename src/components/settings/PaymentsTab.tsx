@@ -20,6 +20,7 @@ import {
   ChevronRight,
   FileText,
   Building2,
+  Banknote,
   Smartphone,
   Globe,
   Search,
@@ -234,6 +235,37 @@ export function PaymentsTab() {
     return Globe;
   };
 
+  const paymentMethods = [
+    {
+      title: "Mobile Money",
+      subtitle: "MTN MoMo, Airtel Money",
+      timing: "Instant",
+      icon: Smartphone,
+      bg: "from-emerald-500 to-teal-500",
+    },
+    {
+      title: "Bank Transfer",
+      subtitle: "All major banks",
+      timing: "Same-day",
+      icon: Banknote,
+      bg: "from-primary to-primary/70",
+    },
+    {
+      title: "Bank Branch",
+      subtitle: "Cash deposit",
+      timing: "Same-day",
+      icon: Building2,
+      bg: "from-amber-500 to-orange-500",
+    },
+    {
+      title: "Online Portal",
+      subtitle: "Visa/Mastercard",
+      timing: "Instant",
+      icon: Globe,
+      bg: "from-secondary to-secondary/70",
+    },
+  ];
+
   return (
     <div className="relative">
       {/* Ambient Background */}
@@ -427,6 +459,57 @@ export function PaymentsTab() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        {/* Payment Methods */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+                    <CreditCard className="h-5 w-5 text-secondary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Payment Methods</CardTitle>
+                    <CardDescription>
+                      Choose how you want to pay
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {paymentMethods.map((method) => {
+                const Icon = method.icon;
+                return (
+                  <div
+                    key={method.title}
+                    className="p-4 rounded-2xl border border-border/50 bg-muted/20 hover:border-primary/30 transition-all"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div
+                        className={`h-10 w-10 rounded-xl bg-gradient-to-br ${method.bg} flex items-center justify-center shadow-lg`}
+                      >
+                        <Icon className="h-5 w-5 text-white" />
+                      </div>
+                      <Badge variant="secondary" className="text-xs">
+                        {method.timing}
+                      </Badge>
+                    </div>
+                    <p className="font-semibold text-sm">{method.title}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {method.subtitle}
+                    </p>
+                  </div>
+                );
+              })}
             </CardContent>
           </Card>
         </motion.div>

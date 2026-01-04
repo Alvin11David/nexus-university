@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Calendar as CalendarIcon,
@@ -19,12 +19,17 @@ import {
   Link as LinkIcon,
   Check,
   X as CloseIcon,
+  FileCheck,
+  AlertCircle,
+  Loader2,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +51,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+
+interface Assignment {
+  id: string;
+  title: string;
+  description: string | null;
+  due_date: string;
+  course_id: string;
+  total_points: number | null;
+  status: string | null;
+  course?: {
+    code: string;
+    title: string;
+  };
+}
 
 // Sample course data - In production, this would come from your database
 const courses = [
@@ -255,16 +274,80 @@ const timeSlots = [
 const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 export default function Timetable() {
+  const { user } = useAuth();
   const [view, setView] = useState<"week" | "list">("week");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(true);
   const timetableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const currentDay = days[new Date().getDay() - 1] || "Monday";
   const timetableUrl = window.location.origin + "/timetable";
+
+  // Fetch assignments from enrolled courses
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchAssignments = async () => {
+      try {
+        setLoadingAssignments(true);
+
+        // Get enrolled courses
+        const { data: enrollments, error: enrollError } = await supabase
+          .from("enrollments")
+          .select("course_id")
+          .eq("student_id", user.id)
+          .eq("status", "approved");
+
+        if (enrollError) throw enrollError;
+
+        if (!enrollments || enrollments.length === 0) {
+          setAssignments([]);
+          return;
+        }
+
+        const courseIds = enrollments.map((e) => e.course_id);
+
+        // Fetch assignments for enrolled courses
+        const { data: assignmentsData, error: assignError } = await supabase
+          .from("assignments")
+          .select(
+            `
+            id,
+            title,
+            description,
+            due_date,
+            course_id,
+            total_points,
+            status,
+            course:courses(code, title)
+          `
+          )
+          .in("course_id", courseIds)
+          .gte("due_date", new Date().toISOString())
+          .order("due_date", { ascending: true });
+
+        if (assignError) throw assignError;
+
+        setAssignments(assignmentsData || []);
+      } catch (error) {
+        console.error("Error fetching assignments:", error);
+        toast({
+          title: "Could not load assignments",
+          description: "Please refresh the page to try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingAssignments(false);
+      }
+    };
+
+    fetchAssignments();
+  }, [user]);
 
   const getCourseById = (id: number) => courses.find((c) => c.id === id);
 
@@ -643,7 +726,7 @@ export default function Timetable() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <Header />
+      <StudentHeader />
 
       <main className="container py-8">
         <motion.div
@@ -781,6 +864,111 @@ export default function Timetable() {
             </Card>
           </div>
 
+          {/* Upcoming Assignments Section */}
+          {assignments.length > 0 && (
+            <Card className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <FileCheck className="h-5 w-5 text-primary" />
+                  <h3 className="font-semibold text-lg">
+                    Upcoming Assignments
+                  </h3>
+                </div>
+                <Badge variant="secondary">{assignments.length} due</Badge>
+              </div>
+              <div className="space-y-3">
+                {assignments.slice(0, 5).map((assignment, index) => {
+                  const dueDate = new Date(assignment.due_date);
+                  const daysUntilDue = Math.ceil(
+                    (dueDate.getTime() - new Date().getTime()) /
+                      (1000 * 60 * 60 * 24)
+                  );
+                  const isUrgent = daysUntilDue <= 3;
+
+                  return (
+                    <motion.div
+                      key={assignment.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-lg border-l-4 hover:shadow-md transition-all cursor-pointer",
+                        isUrgent
+                          ? "bg-red-50 border-red-500"
+                          : "bg-blue-50 border-blue-500"
+                      )}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4
+                            className={cn(
+                              "font-semibold text-sm",
+                              isUrgent ? "text-red-700" : "text-blue-700"
+                            )}
+                          >
+                            {assignment.title}
+                          </h4>
+                          <Badge variant="outline" className="text-xs">
+                            {assignment.course?.code}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {assignment.course?.title}
+                        </p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <CalendarIcon className="h-3 w-3" />
+                            <span>Due {dueDate.toLocaleDateString()}</span>
+                          </div>
+                          {assignment.total_points && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <FileText className="h-3 w-3" />
+                              <span>{assignment.total_points} points</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={cn(
+                            "text-xl font-bold",
+                            isUrgent ? "text-red-600" : "text-blue-600"
+                          )}
+                        >
+                          {daysUntilDue}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {daysUntilDue === 1 ? "day" : "days"}
+                        </p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {loadingAssignments && (
+            <Card className="p-6">
+              <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <p className="text-sm">Loading assignments...</p>
+              </div>
+            </Card>
+          )}
+
+          {!loadingAssignments && assignments.length === 0 && (
+            <Card className="p-6">
+              <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground py-4">
+                <AlertCircle className="h-8 w-8" />
+                <p className="text-sm font-medium">No upcoming assignments</p>
+                <p className="text-xs">
+                  Assignments will appear here when they are created
+                </p>
+              </div>
+            </Card>
+          )}
+
           {/* View Tabs */}
           <div ref={timetableRef}>
             <Tabs
@@ -913,7 +1101,7 @@ export default function Timetable() {
         </DialogContent>
       </Dialog>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

@@ -17,6 +17,18 @@ import Webmail from "./pages/Webmail";
 import Results from "./pages/Results";
 import Timetable from "./pages/Timetable";
 import LecturerDashboard from "./pages/LecturerDashboard";
+import LecturerCourseSelection from "./pages/LecturerCourseSelection";
+import MarksManagement from "./pages/MarksManagement";
+import LecturerAttendance from "./pages/LecturerAttendance";
+import LecturerClasses from "./pages/LecturerClasses";
+import LecturerMessages from "./pages/LecturerMessages";
+import LecturerGradeBook from "./pages/LecturerGradeBook";
+import LecturerAssignments from "./pages/LecturerAssignments";
+import LecturerAnnouncements from "./pages/LecturerAnnouncements";
+import LecturerRoster from "./pages/LecturerRoster";
+import LecturerRubrics from "./pages/LecturerRubrics";
+import LecturerAnalytics from "./pages/LecturerAnalytics";
+import LecturerEnrollments from "./pages/LecturerEnrollments";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -154,6 +166,102 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LecturerDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/courses"
+        element={
+          <ProtectedRoute>
+            <LecturerCourseSelection />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/marks"
+        element={
+          <ProtectedRoute>
+            <MarksManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/attendance"
+        element={
+          <ProtectedRoute>
+            <LecturerAttendance />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/classes"
+        element={
+          <ProtectedRoute>
+            <LecturerClasses />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/messages"
+        element={
+          <ProtectedRoute>
+            <LecturerMessages />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/gradebook"
+        element={
+          <ProtectedRoute>
+            <LecturerGradeBook />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/assignments"
+        element={
+          <ProtectedRoute>
+            <LecturerAssignments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/enrollments"
+        element={
+          <ProtectedRoute>
+            <LecturerEnrollments />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/announcements"
+        element={
+          <ProtectedRoute>
+            <LecturerAnnouncements />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/roster"
+        element={
+          <ProtectedRoute>
+            <LecturerRoster />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/rubrics"
+        element={
+          <ProtectedRoute>
+            <LecturerRubrics />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/lecturer/analytics"
+        element={
+          <ProtectedRoute>
+            <LecturerAnalytics />
           </ProtectedRoute>
         }
       />

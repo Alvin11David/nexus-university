@@ -19,6 +19,7 @@ interface Profile {
   college: string | null;
   phone: string | null;
   bio: string | null;
+  role?: "student" | "lecturer";
 }
 
 interface StudentRecord {
@@ -317,31 +318,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
 
-    // Update profile with student_number and registration_number (for students)
+    // Update profile with student_number, registration_number, department, and role
     if (data.user) {
+      const updateData: any = { role: role };
+
       if (role === "student") {
-        await supabase
-          .from("profiles")
-          .update({
-            student_number: studentNumber,
-            registration_number: registrationNumber,
-          })
-          .eq("id", data.user.id);
+        updateData.student_number = studentNumber;
+        updateData.registration_number = registrationNumber;
       } else if (role === "lecturer") {
         // For lecturers, update profile with department
-        await supabase
-          .from("profiles")
-          .update({
-            department: department,
-          })
-          .eq("id", data.user.id);
+        updateData.department = department;
       }
 
-      // Assign role to user in user_roles table
-      await supabase.from("user_roles").insert({
-        user_id: data.user.id,
-        role: role,
-      });
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update(updateData)
+        .eq("id", data.user.id);
+
+      if (profileError) {
+        console.error("Error updating profile with role:", profileError);
+        return {
+          error: new Error(`Failed to save role: ${profileError.message}`),
+        };
+      }
     }
 
     // Update student record with full name and mark as registered (for students only)

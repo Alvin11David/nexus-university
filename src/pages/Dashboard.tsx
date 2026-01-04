@@ -28,8 +28,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CourseCard } from "@/components/dashboard/CourseCard";
 import { UpcomingCard } from "@/components/dashboard/UpcomingCard";
@@ -469,7 +469,7 @@ export default function Dashboard() {
         <div className="absolute top-20 right-10 w-72 h-72 bg-gradient-to-bl from-secondary/15 via-accent/10 to-primary/10 blur-3xl" />
       </div>
 
-      <Header />
+      <StudentHeader />
 
       <main className="container py-6 space-y-8 relative">
         {/* Welcome */}
@@ -1052,7 +1052,7 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

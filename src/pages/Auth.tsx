@@ -146,18 +146,18 @@ export default function Auth() {
       );
       if (error) throw error;
 
-      // Check user role and redirect accordingly
+      // Check user role from profile and redirect accordingly
       const {
         data: { user: currentUser },
       } = await supabase.auth.getUser();
       if (currentUser) {
-        const { data: roleData } = await supabase
-          .from("user_roles")
+        const { data: profileData } = await supabase
+          .from("profiles")
           .select("role")
-          .eq("user_id", currentUser.id)
+          .eq("id", currentUser.id)
           .single();
 
-        const userRole = roleData?.role || "student";
+        const userRole = profileData?.role || "student";
         toast({ title: "Welcome back!" });
         navigate(userRole === "lecturer" ? "/lecturer" : "/dashboard");
       }
@@ -309,6 +309,17 @@ export default function Auth() {
             }));
           }, 2000);
           return;
+        }
+        // If there's a role assignment error, provide helpful message
+        if (error.message.includes("Failed to assign role")) {
+          toast({
+            title: "Account Creation Partial",
+            description:
+              "Your account was created but there was an issue setting your role. Please contact support.",
+            variant: "destructive",
+            duration: 6000,
+          });
+          throw error;
         }
         throw error;
       }
@@ -979,7 +990,7 @@ export default function Auth() {
       </motion.div>
 
       {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-8 lg:p-12">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

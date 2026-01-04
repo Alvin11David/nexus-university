@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   CalendarClock,
@@ -13,13 +14,18 @@ import {
   Sparkles,
   Target,
   Users,
+  BookOpen,
+  Calculator,
+  Users2,
+  Clock,
 } from "lucide-react";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { LecturerHeader } from "@/components/layout/LecturerHeader";
+import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 const rise = {
   hidden: { opacity: 0, y: 16 },
@@ -32,23 +38,88 @@ const rise = {
 
 export default function LecturerDashboard() {
   const { profile, user } = useAuth();
+  const navigate = useNavigate();
   const displayName =
     profile?.full_name || user?.user_metadata?.full_name || "Lecturer";
   const firstName = displayName.split(" ")[0];
 
+  const [stats, setStats] = useState({
+    courses: 0,
+    students: 0,
+    pendingMarks: 0,
+    submissions: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+    loadStats();
+  }, [user]);
+
+  const loadStats = async () => {
+    try {
+      const currentYear = new Date().getFullYear().toString();
+
+      // Get courses - using existing courses table
+      const { data: coursesData } = await supabase
+        .from("courses")
+        .select("id")
+        .limit(10);
+
+      // Get total enrollments
+      const { data: enrollmentsData } = await supabase
+        .from("enrollments")
+        .select("id")
+        .limit(100);
+
+      setStats({
+        courses: coursesData?.length || 0,
+        students: enrollmentsData?.length || 0,
+        pendingMarks: 12, // Mock data for now
+        submissions: 8, // Mock data for now
+      });
+    } catch (error) {
+      console.error("Error loading stats:", error);
+      // Set default values on error
+      setStats({
+        courses: 6,
+        students: 150,
+        pendingMarks: 12,
+        submissions: 8,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const quickStats = useMemo(
     () => [
-      { label: "Courses", value: 6, hint: "+1 awaiting publish", icon: Layers },
       {
-        label: "Sessions today",
-        value: 3,
-        hint: "2 on-site, 1 live",
-        icon: CalendarClock,
+        label: "Courses",
+        value: stats.courses,
+        hint: "Teaching this semester",
+        icon: Layers,
       },
-      { label: "Grading queue", value: 42, hint: "8 due today", icon: Target },
-      { label: "Feedback", value: 18, hint: "4 unread", icon: MessageCircle },
+      {
+        label: "Students",
+        value: stats.students,
+        hint: "Across all courses",
+        icon: Users2,
+      },
+      {
+        label: "Pending marks",
+        value: stats.pendingMarks,
+        hint: "Need final exam grades",
+        icon: Target,
+      },
+      {
+        label: "Submissions",
+        value: stats.submissions,
+        hint: "This week",
+        icon: CheckCircle2,
+      },
     ],
-    []
+    [stats]
   );
 
   const schedule = useMemo(
@@ -133,32 +204,50 @@ export default function LecturerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
-      <Header />
+      <LecturerHeader />
 
       <main className="px-4 pb-28 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto pt-6 lg:pt-10">
-          <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/70 backdrop-blur-lg p-6 sm:p-8 shadow-xl">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-secondary/5 to-transparent pointer-events-none" />
-            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-2">
-                <p className="text-sm uppercase tracking-[0.3em] text-primary/80">
-                  Lecturer workspace
-                </p>
-                <h1 className="text-3xl font-bold sm:text-4xl flex items-center gap-2 text-foreground">
+          {/* Hero Section with Enhanced Design */}
+          <section className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card/80 via-card/70 to-card/50 backdrop-blur-lg p-8 sm:p-12 shadow-2xl mb-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/5 pointer-events-none" />
+            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/20 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+
+            <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-4 flex-1">
+                <div className="inline-block">
+                  <p className="text-xs uppercase tracking-widest text-primary/70 font-semibold bg-primary/10 px-3 py-1 rounded-full">
+                    Lecturer workspace
+                  </p>
+                </div>
+                <h1 className="text-4xl sm:text-5xl font-bold flex items-center gap-3 text-foreground bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
                   Welcome back, {firstName}
-                  <Sparkles className="h-6 w-6 text-primary" />
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 3, repeat: Infinity }}
+                  >
+                    <Sparkles className="h-8 w-8 text-primary" />
+                  </motion.div>
                 </h1>
-                <p className="text-sm text-muted-foreground max-w-2xl">
-                  Run your day with focus: live sessions, grading,
-                  announcements, and class insights in one clean view.
+                <p className="text-base text-muted-foreground max-w-2xl leading-relaxed">
+                  Manage your courses, track student progress, conduct live
+                  sessions, and stay connected with your cohorts—all in one
+                  powerful dashboard.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-3">
-                <Button variant="secondary" className="border-border/60">
-                  <Mail className="mr-2 h-4 w-4" /> Message cohorts
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Button
+                  variant="outline"
+                  className="border-border/60 hover:bg-muted/50 gap-2"
+                  onClick={() => navigate("/lecturer/messages")}
+                >
+                  <Mail className="h-4 w-4" /> Messages
                 </Button>
-                <Button className="bg-gradient-to-r from-primary to-secondary text-primary-foreground border-0 shadow-lg shadow-primary/30">
-                  <PlayCircle className="mr-2 h-4 w-4" /> Start live session
+                <Button
+                  className="bg-gradient-to-r from-primary to-secondary text-primary-foreground border-0 shadow-lg shadow-primary/30 hover:shadow-primary/50 gap-2"
+                  onClick={() => navigate("/lecturer/courses")}
+                >
+                  <BookOpen className="h-4 w-4" /> My Courses
                 </Button>
               </div>
             </div>
@@ -513,15 +602,67 @@ export default function LecturerDashboard() {
                 </CardHeader>
                 <CardContent className="grid gap-3">
                   {[
-                    { label: "Create announcement", icon: Mail },
-                    { label: "Open grading", icon: CheckCircle2 },
-                    { label: "Start live class", icon: PlayCircle },
-                    { label: "Schedule office hours", icon: CalendarClock },
+                    {
+                      label: "My Courses",
+                      icon: BookOpen,
+                      action: () => navigate("/lecturer/courses"),
+                    },
+                    {
+                      label: "Manage Marks",
+                      icon: Calculator,
+                      action: () => navigate("/lecturer/marks"),
+                    },
+                    {
+                      label: "Attendance",
+                      icon: Users2,
+                      action: () => navigate("/lecturer/attendance"),
+                    },
+                    {
+                      label: "Classes",
+                      icon: PlayCircle,
+                      action: () => navigate("/lecturer/classes"),
+                    },
+                    {
+                      label: "Messages",
+                      icon: Mail,
+                      action: () => navigate("/lecturer/messages"),
+                    },
+                    {
+                      label: "Grade Book",
+                      icon: BarChart3,
+                      action: () => navigate("/lecturer/gradebook"),
+                    },
+                    {
+                      label: "Assignments",
+                      icon: Target,
+                      action: () => navigate("/lecturer/assignments"),
+                    },
+                    {
+                      label: "Announcements",
+                      icon: MessageCircle,
+                      action: () => navigate("/lecturer/announcements"),
+                    },
+                    {
+                      label: "Roster",
+                      icon: Users,
+                      action: () => navigate("/lecturer/roster"),
+                    },
+                    {
+                      label: "Rubrics",
+                      icon: CheckCircle2,
+                      action: () => navigate("/lecturer/rubrics"),
+                    },
+                    {
+                      label: "Analytics",
+                      icon: Flame,
+                      action: () => navigate("/lecturer/analytics"),
+                    },
                   ].map((action) => (
                     <Button
                       key={action.label}
                       variant="secondary"
                       className="justify-start bg-muted/60 text-foreground border-border/60 hover:bg-muted"
+                      onClick={action.action}
                     >
                       <action.icon className="mr-3 h-4 w-4" />
                       {action.label}
@@ -641,7 +782,7 @@ export default function LecturerDashboard() {
         </div>
       </main>
 
-      <BottomNav />
+      <LecturerBottomNav />
     </div>
   );
 }
