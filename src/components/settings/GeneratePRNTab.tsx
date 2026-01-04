@@ -20,6 +20,11 @@ import {
   Layers,
   Eye,
   X,
+  Smartphone,
+  Banknote,
+  Building2,
+  Globe,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,6 +90,50 @@ export function GeneratePRNTab() {
   const [loading, setLoading] = useState(true);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [showMoMoProvider, setShowMoMoProvider] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [showMoMoPhone, setShowMoMoPhone] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+
+  const paymentMethods = [
+    {
+      key: "mobile-money",
+      name: "Mobile Money",
+      desc: "MTN MoMo, Airtel Money",
+      color: "from-emerald-500 to-teal-500",
+      icon: Smartphone,
+      instant: true,
+      timing: "Instant",
+    },
+    {
+      key: "bank-transfer",
+      name: "Bank Transfer",
+      desc: "All major banks",
+      color: "from-primary to-primary/70",
+      icon: Banknote,
+      instant: false,
+      timing: "Same-day",
+    },
+    {
+      key: "bank-branch",
+      name: "Bank Branch",
+      desc: "Cash deposit",
+      color: "from-amber-500 to-orange-500",
+      icon: Building2,
+      instant: false,
+      timing: "Same-day",
+    },
+    {
+      key: "online-portal",
+      name: "Online Portal",
+      desc: "Visa/Mastercard",
+      color: "from-secondary to-secondary/70",
+      icon: Globe,
+      instant: true,
+      timing: "Instant",
+    },
+  ];
 
   useEffect(() => {
     if (user) {
@@ -157,6 +206,152 @@ export function GeneratePRNTab() {
     const selectedPurpose = purposes.find((p) => p.value === value);
     if (selectedPurpose) {
       setAmount(selectedPurpose.amount.toString());
+    }
+  };
+
+  const handleProviderSelect = (provider: string) => {
+    setSelectedProvider(provider);
+    setShowMoMoProvider(false);
+    setShowMoMoPhone(true);
+  };
+
+  const handleMoMoPayment = async () => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast({
+        title: "Invalid Phone Number",
+        description: "Please enter a valid phone number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProcessingPayment(true);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      const transactionRef = `MOMO-${selectedProvider}-${Math.floor(
+        Date.now() / 1000
+      )}-${Math.floor(100 + Math.random() * 900)}`;
+
+      if (generatedPRN?.id && generatedPRN?.fee_id) {
+        const { error: updateError } = await supabase
+          .from("payments")
+          .update({
+            payment_method: `Mobile Money (${selectedProvider})`,
+            transaction_ref: transactionRef,
+            status: "completed",
+          })
+          .eq("id", generatedPRN.id);
+
+        if (updateError) throw updateError;
+      }
+
+      setShowMoMoPhone(false);
+      setPhoneNumber("");
+      setSelectedProvider("");
+
+      toast({
+        title: "Payment Successful! 🎉",
+        description: `UGX ${generatedPRN?.amount.toLocaleString()} has been deducted from ${phoneNumber}`,
+      });
+
+      await fetchFees();
+    } catch (error: any) {
+      console.error("Mobile Money payment error:", error);
+      toast({
+        title: "Payment Failed",
+        description: error.message || "An error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
+  const handlePaymentMethod = async (methodKey: string) => {
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please sign in to make a payment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if there's a generated PRN
+    if (!generatedPRN) {
+      toast({
+        title: "No PRN Available",
+        description:
+          "Please generate a PRN first before selecting a payment method",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Special handling for mobile money - show provider selection
+    if (methodKey === "mobile-money") {
+      setShowMoMoProvider(true);
+      return;
+    }
+
+    const method = paymentMethods.find((m) => m.key === methodKey);
+    if (!method) return;
+
+    setProcessingPayment(true);
+
+    try {
+      // Simulate payment processing
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      const transactionRef = `PAY-${method.key}-${Math.floor(
+        Date.now() / 1000
+      )}-${Math.floor(100 + Math.random() * 900)}`;
+      const status = method.instant ? "completed" : "pending";
+
+      // If PRN already has a fee_id and payment record, update it
+      if (generatedPRN.id && generatedPRN.fee_id) {
+        // Update existing payment record with new method details
+        const { error: updateError } = await supabase
+          .from("payments")
+          .update({
+            payment_method: method.name,
+            transaction_ref: transactionRef,
+            status: status,
+          })
+          .eq("id", generatedPRN.id);
+
+        if (updateError) throw updateError;
+
+        toast({
+          title: method.instant ? "Payment Processed" : "Payment Submitted",
+          description: method.instant
+            ? `Your payment via ${method.name} has been completed successfully.`
+            : `Your payment via ${method.name} is being processed and will be confirmed soon.`,
+        });
+      } else {
+        // No fee linked - just show confirmation
+        toast({
+          title: "Payment Method Selected",
+          description: `You can now proceed to pay UGX ${generatedPRN.amount.toLocaleString()} via ${
+            method.name
+          }`,
+        });
+      }
+
+      // Refresh fees to show updated status
+      await fetchFees();
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast({
+        title: "Payment Failed",
+        description:
+          error.message || "An error occurred while processing your payment",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingPayment(false);
     }
   };
 
@@ -949,51 +1144,60 @@ export function GeneratePRNTab() {
                   <CreditCard className="h-5 w-5 text-primary" />
                   Payment Methods
                 </CardTitle>
+                <CardDescription>Choose how you want to pay</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {[
-                  {
-                    name: "Mobile Money",
-                    desc: "MTN MoMo, Airtel Money",
-                    color: "from-yellow-500 to-amber-500",
-                  },
-                  {
-                    name: "Bank Transfer",
-                    desc: "All major banks",
-                    color: "from-blue-500 to-indigo-500",
-                  },
-                  {
-                    name: "Bank Branch",
-                    desc: "Cash deposit",
-                    color: "from-emerald-500 to-teal-500",
-                  },
-                  {
-                    name: "Online Portal",
-                    desc: "Visa/Mastercard",
-                    color: "from-purple-500 to-pink-500",
-                  },
-                ].map((method, i) => (
-                  <motion.div
-                    key={method.name}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 + i * 0.1 }}
-                    className="flex items-center gap-4 p-4 rounded-2xl bg-muted/50 hover:bg-muted transition-colors group cursor-pointer"
-                  >
-                    <div
-                      className={`h-10 w-10 rounded-xl bg-gradient-to-br ${method.color} flex items-center justify-center shadow-lg`}
+                {paymentMethods.map((method, i) => {
+                  const Icon = method.icon;
+                  return (
+                    <motion.div
+                      key={method.name}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4 + i * 0.1 }}
+                      className="p-4 rounded-2xl border border-border/50 bg-muted/20 hover:border-primary/30 transition-all"
                     >
-                      <Shield className="h-5 w-5 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-semibold text-sm">{method.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {method.desc}
-                      </p>
-                    </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </motion.div>
-                ))}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={`h-12 w-12 rounded-xl bg-gradient-to-br ${method.color} flex items-center justify-center shadow-lg`}
+                        >
+                          <Icon className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-sm">
+                              {method.name}
+                            </p>
+                            <Badge variant="secondary" className="text-xs">
+                              {method.timing}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {method.desc}
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => handlePaymentMethod(method.key)}
+                          disabled={!generatedPRN || processingPayment}
+                          className="gap-1"
+                        >
+                          {processingPayment ? (
+                            <>
+                              <RefreshCw className="h-3 w-3 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              Pay Now
+                              <ArrowRight className="h-3 w-3" />
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </CardContent>
             </Card>
           </motion.div>
@@ -1206,6 +1410,452 @@ export function GeneratePRNTab() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Mobile Money Provider Selection Modal */}
+      <Dialog open={showMoMoProvider} onOpenChange={setShowMoMoProvider}>
+        <DialogContent className="max-w-2xl border-0 overflow-hidden p-0">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="relative"
+          >
+            {/* Epic Header with Gradient */}
+            <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-600 p-8 pb-16">
+              {/* Animated Background Orbs */}
+              <motion.div
+                className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl"
+                animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.5, 0.3] }}
+                transition={{ duration: 4, repeat: Infinity }}
+              />
+              <motion.div
+                className="absolute bottom-0 left-0 w-48 h-48 bg-white/10 rounded-full blur-3xl"
+                animate={{ scale: [1.2, 1, 1.2], opacity: [0.5, 0.3, 0.5] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              />
+
+              <div className="relative z-10">
+                <motion.div
+                  initial={{ y: -20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                  className="flex items-center justify-between mb-6"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-16 w-16 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-2xl">
+                      <Smartphone className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-black text-white">
+                        Mobile Money
+                      </h2>
+                      <p className="text-white/80 text-sm">
+                        Select your provider to continue
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowMoMoProvider(false)}
+                    className="text-white hover:bg-white/20 rounded-xl"
+                  >
+                    <X className="h-6 w-6" />
+                  </Button>
+                </motion.div>
+
+                {generatedPRN && (
+                  <motion.div
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white/70 text-sm mb-1">
+                          Amount to Pay
+                        </p>
+                        <p className="text-4xl font-black text-white">
+                          UGX {generatedPRN.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-white/70 text-sm mb-1">For</p>
+                        <p className="text-white font-semibold">
+                          {generatedPRN.purpose}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            {/* Provider Cards */}
+            <div className="p-8 -mt-8">
+              <div className="grid grid-cols-2 gap-6">
+                {/* MTN MoMo */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  whileHover={{ scale: 1.03, y: -5 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleProviderSelect("MTN")}
+                  className="cursor-pointer group"
+                >
+                  <Card className="relative overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 h-64">
+                    {/* Animated Background Pattern */}
+                    <div className="absolute inset-0 opacity-20">
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white rounded-full -translate-y-16 translate-x-16" />
+                      <div className="absolute bottom-0 left-0 w-40 h-40 bg-white rounded-full translate-y-20 -translate-x-20" />
+                    </div>
+
+                    <CardContent className="relative h-full flex flex-col items-center justify-center p-8">
+                      <motion.div
+                        animate={{ rotate: [0, 5, 0, -5, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="mb-6"
+                      >
+                        <div className="h-24 w-24 rounded-3xl bg-white shadow-2xl flex items-center justify-center">
+                          <span className="text-5xl font-black text-yellow-600">
+                            M
+                          </span>
+                        </div>
+                      </motion.div>
+
+                      <h3 className="text-2xl font-black text-white mb-2">
+                        MTN MoMo
+                      </h3>
+                      <p className="text-white/90 text-sm text-center mb-4">
+                        Mobile Money
+                      </p>
+
+                      <motion.div
+                        className="flex items-center gap-2 text-white font-semibold"
+                        animate={{ x: [0, 5, 0] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                      >
+                        Select <ArrowRight className="h-5 w-5" />
+                      </motion.div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+
+                {/* Airtel Money */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                  whileHover={{ scale: 1.03, y: -5 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleProviderSelect("AIRTEL")}
+                  className="cursor-pointer group"
+                >
+                  <Card className="relative overflow-hidden border-0 shadow-2xl bg-gradient-to-br from-red-500 via-red-600 to-red-700 h-64">
+                    {/* Animated Background Pattern */}
+                    <div className="absolute inset-0 opacity-20">
+                      <div className="absolute top-0 left-0 w-32 h-32 bg-white rounded-full -translate-y-16 -translate-x-16" />
+                      <div className="absolute bottom-0 right-0 w-40 h-40 bg-white rounded-full translate-y-20 translate-x-20" />
+                    </div>
+
+                    <CardContent className="relative h-full flex flex-col items-center justify-center p-8">
+                      <motion.div
+                        animate={{ rotate: [0, -5, 0, 5, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="mb-6"
+                      >
+                        <div className="h-24 w-24 rounded-3xl bg-white shadow-2xl flex items-center justify-center">
+                          <span className="text-5xl font-black text-red-600">
+                            A
+                          </span>
+                        </div>
+                      </motion.div>
+
+                      <h3 className="text-2xl font-black text-white mb-2">
+                        Airtel Money
+                      </h3>
+                      <p className="text-white/90 text-sm text-center mb-4">
+                        Mobile Money
+                      </p>
+
+                      <motion.div
+                        className="flex items-center gap-2 text-white font-semibold"
+                        animate={{ x: [0, 5, 0] }}
+                        transition={{
+                          duration: 1.5,
+                          repeat: Infinity,
+                          delay: 0.5,
+                        }}
+                      >
+                        Select <ArrowRight className="h-5 w-5" />
+                      </motion.div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </div>
+
+              {/* Info Banner */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="mt-6 p-4 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200"
+              >
+                <div className="flex items-start gap-3">
+                  <Shield className="h-5 w-5 text-emerald-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-emerald-900 text-sm">
+                      Secure Payment
+                    </p>
+                    <p className="text-emerald-700 text-xs">
+                      Your payment is encrypted and processed securely. Instant
+                      confirmation upon approval.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Mobile Money Phone Number Entry Modal */}
+      <Dialog open={showMoMoPhone} onOpenChange={setShowMoMoPhone}>
+        <DialogContent className="max-w-lg border-0 overflow-hidden p-0">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            {/* Dynamic Header based on Provider */}
+            <div
+              className={`relative overflow-hidden p-8 pb-12 ${
+                selectedProvider === "MTN"
+                  ? "bg-gradient-to-br from-yellow-500 via-yellow-600 to-amber-600"
+                  : "bg-gradient-to-br from-red-600 via-red-700 to-rose-700"
+              }`}
+            >
+              {/* Animated Orbs */}
+              <motion.div
+                className="absolute top-0 right-0 w-40 h-40 bg-white/20 rounded-full blur-2xl"
+                animate={{ scale: [1, 1.3, 1], x: [0, 20, 0], y: [0, -20, 0] }}
+                transition={{ duration: 5, repeat: Infinity }}
+              />
+              <motion.div
+                className="absolute bottom-0 left-0 w-32 h-32 bg-white/20 rounded-full blur-2xl"
+                animate={{
+                  scale: [1.3, 1, 1.3],
+                  x: [0, -15, 0],
+                  y: [0, 15, 0],
+                }}
+                transition={{ duration: 4, repeat: Infinity }}
+              />
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-4">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{
+                        duration: 20,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
+                      className="h-14 w-14 rounded-2xl bg-white/30 backdrop-blur-sm flex items-center justify-center shadow-xl"
+                    >
+                      <Smartphone className="h-7 w-7 text-white" />
+                    </motion.div>
+                    <div>
+                      <h2 className="text-2xl font-black text-white">
+                        {selectedProvider} MoMo
+                      </h2>
+                      <p className="text-white/80 text-sm">
+                        Enter your phone number
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setShowMoMoPhone(false);
+                      setPhoneNumber("");
+                    }}
+                    className="text-white hover:bg-white/20 rounded-xl"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+
+                {generatedPRN && (
+                  <motion.div
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="bg-white/20 backdrop-blur-md rounded-2xl p-5 border border-white/30 shadow-2xl"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white/70 text-xs mb-1">
+                          Payment Amount
+                        </p>
+                        <p className="text-3xl font-black text-white">
+                          UGX {generatedPRN.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="h-16 w-16 rounded-xl bg-white/30 flex items-center justify-center">
+                        <Wallet className="h-8 w-8 text-white" />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            </div>
+
+            {/* Phone Number Input Section */}
+            <div className="p-8 -mt-6">
+              <motion.div
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="space-y-6"
+              >
+                {/* Phone Input Card */}
+                <Card className="border-2 border-border shadow-xl">
+                  <CardContent className="p-6">
+                    <Label className="text-base font-bold mb-3 block">
+                      Phone Number
+                    </Label>
+                    <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                        <div
+                          className={`h-8 w-8 rounded-lg flex items-center justify-center ${
+                            selectedProvider === "MTN"
+                              ? "bg-yellow-100 text-yellow-600"
+                              : "bg-red-100 text-red-600"
+                          }`}
+                        >
+                          <Smartphone className="h-4 w-4" />
+                        </div>
+                        <span className="text-muted-foreground font-mono">
+                          +256
+                        </span>
+                      </div>
+                      <Input
+                        type="tel"
+                        placeholder="7XX XXX XXX"
+                        value={phoneNumber}
+                        onChange={(e) =>
+                          setPhoneNumber(e.target.value.replace(/\D/g, ""))
+                        }
+                        maxLength={9}
+                        className="pl-32 pr-4 h-14 text-lg font-mono rounded-xl border-2 focus:ring-4"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Enter your {selectedProvider} number without the country
+                      code
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Instructions */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className={`p-4 rounded-2xl ${
+                    selectedProvider === "MTN"
+                      ? "bg-yellow-50 border border-yellow-200"
+                      : "bg-red-50 border border-red-200"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                        selectedProvider === "MTN"
+                          ? "bg-yellow-100"
+                          : "bg-red-100"
+                      }`}
+                    >
+                      <Zap
+                        className={`h-5 w-5 ${
+                          selectedProvider === "MTN"
+                            ? "text-yellow-600"
+                            : "text-red-600"
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <p
+                        className={`font-bold text-sm mb-1 ${
+                          selectedProvider === "MTN"
+                            ? "text-yellow-900"
+                            : "text-red-900"
+                        }`}
+                      >
+                        How it works
+                      </p>
+                      <ul
+                        className={`text-xs space-y-1 ${
+                          selectedProvider === "MTN"
+                            ? "text-yellow-800"
+                            : "text-red-800"
+                        }`}
+                      >
+                        <li>• Enter your {selectedProvider} phone number</li>
+                        <li>• You'll receive a prompt on your phone</li>
+                        <li>• Enter your PIN to confirm payment</li>
+                        <li>• Instant confirmation once approved</li>
+                      </ul>
+                    </div>
+                  </div>
+                </motion.div>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowMoMoPhone(false);
+                      setShowMoMoProvider(true);
+                    }}
+                    className="h-14 rounded-xl gap-2 text-base"
+                  >
+                    Back
+                  </Button>
+                  <motion.div
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    <Button
+                      onClick={handleMoMoPayment}
+                      disabled={phoneNumber.length < 9 || processingPayment}
+                      className={`h-14 rounded-xl gap-2 text-base w-full shadow-xl ${
+                        selectedProvider === "MTN"
+                          ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700"
+                          : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800"
+                      }`}
+                    >
+                      {processingPayment ? (
+                        <>
+                          <RefreshCw className="h-5 w-5 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-5 w-5" />
+                          Pay Now
+                        </>
+                      )}
+                    </Button>
+                  </motion.div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
         </DialogContent>
       </Dialog>
     </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CreditCard,
@@ -48,6 +48,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Fee {
   id: string;
@@ -96,6 +97,7 @@ interface CourseFeesBreakdown {
 
 export function PaymentsTab() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [fees, setFees] = useState<Fee[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -168,7 +170,6 @@ export function PaymentsTab() {
       if (enrollmentsError) {
         console.error("Error fetching enrollments:", enrollmentsError);
       } else if (enrollmentsData) {
-        // Transform the data to match our interface
         const transformedEnrollments = enrollmentsData.map((e: any) => ({
           id: e.id,
           course_id: e.course_id,
@@ -177,32 +178,6 @@ export function PaymentsTab() {
           course: e.courses,
         }));
         setEnrollments(transformedEnrollments);
-
-        // Build course fees breakdown
-        if (feesData) {
-          const breakdown = transformedEnrollments.map((enrollment) => {
-            const semesterFees = feesData.filter(
-              (fee) => fee.semester === enrollment.course?.semester
-            );
-            const totalCost = semesterFees.reduce(
-              (sum, fee) => sum + fee.amount,
-              0
-            );
-            const totalPaid = semesterFees.reduce(
-              (sum, fee) => sum + fee.paid_amount,
-              0
-            );
-
-            return {
-              course: enrollment.course,
-              enrollment,
-              semesterFees,
-              totalCost,
-              totalPaid,
-            };
-          });
-          setCourseFeesBreakdown(breakdown);
-        }
       }
     } catch (error) {
       console.error("Error fetching payment data:", error);
@@ -211,9 +186,22 @@ export function PaymentsTab() {
     }
   };
 
-  const totalFees = fees.reduce((acc, f) => acc + f.amount, 0);
-  const totalPaid = fees.reduce((acc, f) => acc + (f.paid_amount || 0), 0);
-  const outstanding = totalFees - totalPaid;
+  const paymentTotalsByFee = useMemo(() => {
+    const map = new Map<string, number>();
+    payments
+      .filter((p) => p.status === "completed")
+      .forEach((p) => {
+        map.set(p.fee_id, (map.get(p.fee_id) || 0) + Number(p.amount));
+      });
+    return map;
+  }, [payments]);
+
+  const totalFees = fees.reduce((acc, f) => acc + Number(f.amount || 0), 0);
+  const totalPaid = Array.from(paymentTotalsByFee.values()).reduce(
+    (acc, v) => acc + v,
+    0
+  );
+  const outstanding = Math.max(totalFees - totalPaid, 0);
   const paymentProgress = totalFees > 0 ? (totalPaid / totalFees) * 100 : 0;
 
   const getPaymentStatusColor = (status: string) => {
@@ -237,34 +225,141 @@ export function PaymentsTab() {
 
   const paymentMethods = [
     {
+      key: "mobile-money",
       title: "Mobile Money",
       subtitle: "MTN MoMo, Airtel Money",
       timing: "Instant",
       icon: Smartphone,
       bg: "from-emerald-500 to-teal-500",
+      instant: true,
     },
     {
+      key: "bank-transfer",
       title: "Bank Transfer",
       subtitle: "All major banks",
       timing: "Same-day",
       icon: Banknote,
       bg: "from-primary to-primary/70",
+      instant: false,
     },
     {
+      key: "bank-branch",
       title: "Bank Branch",
       subtitle: "Cash deposit",
       timing: "Same-day",
       icon: Building2,
       bg: "from-amber-500 to-orange-500",
+      instant: false,
     },
     {
+      key: "online-portal",
       title: "Online Portal",
       subtitle: "Visa/Mastercard",
       timing: "Instant",
       icon: Globe,
       bg: "from-secondary to-secondary/70",
+      instant: true,
     },
   ];
+
+  const paymentTotalsForFee = (feeId: string) =>
+    paymentTotalsByFee.get(feeId) || 0;
+
+  const findNextOutstandingFee = () =>
+    fees.find(
+      (f) => Math.max(Number(f.amount || 0) - paymentTotalsForFee(f.id), 0) > 0
+    );
+
+  const handlePay = async (methodKey: string) => {
+    if (!user) return;
+    const method = paymentMethods.find((m) => m.key === methodKey);
+    if (!method) return;
+
+    const targetFee = findNextOutstandingFee();
+    if (!targetFee) {
+      toast({
+        title: "No outstanding fees",
+        description: "You have no unpaid balance to pay right now.",
+      });
+      return;
+    }
+
+    const alreadyPaid = paymentTotalsForFee(targetFee.id);
+    const amount = Math.max(Number(targetFee.amount || 0) - alreadyPaid, 0);
+
+    if (amount <= 0) {
+      toast({
+        title: "Nothing to pay",
+        description: "Your selected fee is already fully paid.",
+      });
+      return;
+    }
+
+    const transactionRef = `PAY-${method.key}-${Math.floor(
+      Date.now() / 1000
+    )}-${Math.floor(100 + Math.random() * 900)}`;
+    const status = method.instant ? "completed" : "pending";
+
+    try {
+      const { data, error } = await supabase
+        .from("payments")
+        .insert({
+          fee_id: targetFee.id,
+          student_id: user.id,
+          amount,
+          payment_method: method.title,
+          transaction_ref: transactionRef,
+          status,
+          paid_at: new Date().toISOString(),
+        })
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      setPayments((prev) => [data as Payment, ...prev]);
+      toast({
+        title: method.instant ? "Payment recorded" : "Payment submitted",
+        description: method.instant
+          ? "Your payment has been marked completed."
+          : "We received your payment request. It will be confirmed soon.",
+      });
+    } catch (error: any) {
+      console.error("Payment error", error);
+      toast({
+        title: "Payment failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Recompute course fee breakdown whenever fees/enrollments/payments change
+  useEffect(() => {
+    const paymentTotals = paymentTotalsByFee;
+    const breakdown = enrollments.map((enrollment) => {
+      const semesterFees = fees.filter(
+        (fee) => fee.semester === enrollment.course?.semester
+      );
+      const totalCost = semesterFees.reduce(
+        (sum, fee) => sum + Number(fee.amount || 0),
+        0
+      );
+      const totalPaidForSemester = semesterFees.reduce(
+        (sum, fee) => sum + (paymentTotals.get(fee.id) || 0),
+        0
+      );
+
+      return {
+        course: enrollment.course,
+        enrollment,
+        semesterFees,
+        totalCost,
+        totalPaid: totalPaidForSemester,
+      };
+    });
+    setCourseFeesBreakdown(breakdown);
+  }, [fees, enrollments, paymentTotalsByFee]);
 
   return (
     <div className="relative">
@@ -491,9 +586,9 @@ export function PaymentsTab() {
                 return (
                   <div
                     key={method.title}
-                    className="p-4 rounded-2xl border border-border/50 bg-muted/20 hover:border-primary/30 transition-all"
+                    className="p-4 rounded-2xl border border-border/50 bg-muted/20 hover:border-primary/30 transition-all flex flex-col gap-3"
                   >
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between">
                       <div
                         className={`h-10 w-10 rounded-xl bg-gradient-to-br ${method.bg} flex items-center justify-center shadow-lg`}
                       >
@@ -503,10 +598,20 @@ export function PaymentsTab() {
                         {method.timing}
                       </Badge>
                     </div>
-                    <p className="font-semibold text-sm">{method.title}</p>
-                    <p className="text-muted-foreground text-sm">
-                      {method.subtitle}
-                    </p>
+                    <div className="space-y-1">
+                      <p className="font-semibold text-sm">{method.title}</p>
+                      <p className="text-muted-foreground text-sm">
+                        {method.subtitle}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="mt-auto"
+                      onClick={() => handlePay(method.key)}
+                      disabled={outstanding <= 0}
+                    >
+                      Pay Now
+                    </Button>
                   </div>
                 );
               })}
@@ -631,13 +736,17 @@ export function PaymentsTab() {
                               <>
                                 <div className="space-y-3 mb-5">
                                   {breakdown.semesterFees.map((fee, feeIdx) => {
-                                    const isPaid =
-                                      fee.paid_amount >= fee.amount;
+                                    const paid = paymentTotalsForFee(fee.id);
+                                    const isPaid = paid >= fee.amount;
                                     const isPartial =
-                                      fee.paid_amount > 0 &&
-                                      fee.paid_amount < fee.amount;
+                                      paid > 0 && paid < fee.amount;
                                     const progress =
-                                      (fee.paid_amount / fee.amount) * 100;
+                                      fee.amount > 0
+                                        ? Math.min(
+                                            (paid / fee.amount) * 100,
+                                            100
+                                          )
+                                        : 0;
 
                                     return (
                                       <motion.div
@@ -669,7 +778,7 @@ export function PaymentsTab() {
                                             {isPartial && (
                                               <p className="text-xs text-emerald-600">
                                                 Paid: UGX{" "}
-                                                {fee.paid_amount.toLocaleString()}
+                                                {paid.toLocaleString()}
                                               </p>
                                             )}
                                           </div>
