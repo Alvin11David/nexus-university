@@ -85,6 +85,50 @@ export type Database = {
           },
         ]
       }
+      assignment_submissions: {
+        Row: {
+          assignment_id: string
+          created_at: string | null
+          feedback: string | null
+          file_url: string | null
+          id: string
+          score: number | null
+          student_id: string
+          submission_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string | null
+          feedback?: string | null
+          file_url?: string | null
+          id?: string
+          score?: number | null
+          student_id: string
+          submission_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string | null
+          feedback?: string | null
+          file_url?: string | null
+          id?: string
+          score?: number | null
+          student_id?: string
+          submission_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_submissions_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assignments: {
         Row: {
           allow_late_submission: boolean | null
@@ -94,8 +138,11 @@ export type Database = {
           due_date: string
           id: string
           instructions: string | null
+          lecturer_id: string | null
           max_score: number | null
+          status: string | null
           title: string
+          updated_at: string | null
           weight: number | null
         }
         Insert: {
@@ -106,8 +153,11 @@ export type Database = {
           due_date: string
           id?: string
           instructions?: string | null
+          lecturer_id?: string | null
           max_score?: number | null
+          status?: string | null
           title: string
+          updated_at?: string | null
           weight?: number | null
         }
         Update: {
@@ -118,8 +168,11 @@ export type Database = {
           due_date?: string
           id?: string
           instructions?: string | null
+          lecturer_id?: string | null
           max_score?: number | null
+          status?: string | null
           title?: string
+          updated_at?: string | null
           weight?: number | null
         }
         Relationships: [
