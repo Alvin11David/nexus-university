@@ -54,6 +54,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { functions } from "@/integrations/firebase/client";
+import { httpsCallable } from "firebase/functions";
 
 interface GeneratedPRN {
   id?: string;
@@ -95,6 +97,13 @@ export function GeneratePRNTab() {
   const [selectedProvider, setSelectedProvider] = useState<string>("");
   const [showMoMoPhone, setShowMoMoPhone] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [showPhonePrompt, setShowPhonePrompt] = useState(false);
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [verifyingPin, setVerifyingPin] = useState(false);
+  const [smsSid, setSmsSid] = useState("");
+  const [transactionId, setTransactionId] = useState("");
+  const [paymentChecking, setPaymentChecking] = useState(false);
 
   const paymentMethods = [
     {
@@ -210,13 +219,13 @@ export function GeneratePRNTab() {
   };
 
   const handleProviderSelect = (provider: string) => {
-    setSelectedProvider(provider);
+    setSelectedProvider(provider.toLowerCase());
     setShowMoMoProvider(false);
     setShowMoMoPhone(true);
   };
 
   const handleMoMoPayment = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
+    if (!phoneNumber || phoneNumber.length < 9) {
       toast({
         title: "Invalid Phone Number",
         description: "Please enter a valid phone number",
@@ -228,44 +237,146 @@ export function GeneratePRNTab() {
     setProcessingPayment(true);
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      const transactionRef = `MOMO-${selectedProvider}-${Math.floor(
+      // Generate transaction ID
+      const txnId = `MOMO-${selectedProvider}-${Math.floor(
         Date.now() / 1000
       )}-${Math.floor(100 + Math.random() * 900)}`;
+      setTransactionId(txnId);
 
-      if (generatedPRN?.id && generatedPRN?.fee_id) {
-        const { error: updateError } = await supabase
-          .from("payments")
-          .update({
-            payment_method: `Mobile Money (${selectedProvider})`,
-            transaction_ref: transactionRef,
-            status: "completed",
-          })
-          .eq("id", generatedPRN.id);
-
-        if (updateError) throw updateError;
+      // Call appropriate Firebase Cloud Function based on provider
+      if (selectedProvider === "mtn") {
+        const sendMTNPaymentPrompt = httpsCallable(
+          functions,
+          "sendMTNPaymentPrompt"
+        );
+        const response = await sendMTNPaymentPrompt({
+          phoneNumber: phoneNumber,
+          provider: selectedProvider,
+          amount: generatedPRN?.amount || 0,
+          purpose: generatedPRN?.purpose || "University Payment",
+          transactionId: txnId,
+        });
+      } else if (selectedProvider === "airtel") {
+        const sendAIRTELPaymentPrompt = httpsCallable(
+          functions,
+          "sendAIRTELPaymentPrompt"
+        );
+        const response = await sendAIRTELPaymentPrompt({
+          phoneNumber: phoneNumber,
+          provider: selectedProvider,
+          amount: generatedPRN?.amount || 0,
+          purpose: generatedPRN?.purpose || "University Payment",
+          transactionId: txnId,
+        });
       }
 
+      // Show the payment waiting modal
+      setShowPhonePrompt(true);
       setShowMoMoPhone(false);
-      setPhoneNumber("");
-      setSelectedProvider("");
 
       toast({
-        title: "Payment Successful! 🎉",
-        description: `UGX ${generatedPRN?.amount.toLocaleString()} has been deducted from ${phoneNumber}`,
+        title: "USSD Prompt Sent! 📱",
+        description: `Check your phone +256${phoneNumber} and enter your PIN to confirm payment of UGX ${generatedPRN?.amount.toLocaleString()}`,
       });
-
-      await fetchFees();
     } catch (error: any) {
-      console.error("Mobile Money payment error:", error);
+      console.error("Payment error:", error);
       toast({
         title: "Payment Failed",
-        description: error.message || "An error occurred",
+        description:
+          error.message ||
+          "Failed to initiate payment. Check your number and try again.",
         variant: "destructive",
       });
     } finally {
       setProcessingPayment(false);
+    }
+  };
+
+  const checkPaymentStatus = async () => {
+    if (!transactionId) return;
+
+    try {
+      // Call appropriate Cloud Function based on provider
+      let checkPaymentFunction;
+
+      if (selectedProvider === "mtn") {
+        checkPaymentFunction = httpsCallable(
+          functions,
+          "checkMTNPaymentStatus"
+        );
+      } else if (selectedProvider === "airtel") {
+        checkPaymentFunction = httpsCallable(
+          functions,
+          "checkAIRTELPaymentStatus"
+        );
+      } else {
+        return;
+      }
+
+      const response = await checkPaymentFunction({
+        transactionId: transactionId,
+      });
+
+      const responseData = response.data as any;
+
+      if (responseData.success && responseData.status === "successful") {
+        // Payment confirmed - update database
+        if (generatedPRN?.id && generatedPRN?.fee_id) {
+          const { error: updateError } = await supabase
+            .from("payments")
+            .update({
+              payment_method: `Mobile Money (${
+                selectedProvider === "mtn" ? "MTN" : "AIRTEL"
+              })`,
+              transaction_ref: transactionId,
+              status: "completed",
+            })
+            .eq("id", generatedPRN.id);
+
+          if (updateError) throw updateError;
+        }
+
+        // Close modals and reset state
+        setShowPhonePrompt(false);
+        setPhoneNumber("");
+        setPin("");
+        setSelectedProvider("");
+        setTransactionId("");
+
+        toast({
+          title: "Payment Successful! 🎉",
+          description: `UGX ${generatedPRN?.amount.toLocaleString()} has been deducted from your account`,
+        });
+
+        await fetchFees();
+      }
+    } catch (error: any) {
+      console.error("Error checking payment status:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!showPhonePrompt || !transactionId) return;
+
+    // Poll payment status every 3 seconds
+    const interval = setInterval(() => {
+      checkPaymentStatus();
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [showPhonePrompt, transactionId]);
+
+  const handlePinVerification = async () => {
+    setPinError("");
+    setVerifyingPin(true);
+
+    try {
+      await checkPaymentStatus();
+    } catch (error: any) {
+      console.error("Payment status error:", error);
+      setPinError("Failed to verify payment. Retrying...");
+    } finally {
+      setVerifyingPin(false);
     }
   };
 
@@ -1632,7 +1743,7 @@ export function GeneratePRNTab() {
             {/* Dynamic Header based on Provider */}
             <div
               className={`relative overflow-hidden p-8 pb-12 ${
-                selectedProvider === "MTN"
+                selectedProvider === "mtn"
                   ? "bg-gradient-to-br from-yellow-500 via-yellow-600 to-amber-600"
                   : "bg-gradient-to-br from-red-600 via-red-700 to-rose-700"
               }`}
@@ -1732,7 +1843,7 @@ export function GeneratePRNTab() {
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                         <div
                           className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                            selectedProvider === "MTN"
+                            selectedProvider === "mtn"
                               ? "bg-yellow-100 text-yellow-600"
                               : "bg-red-100 text-red-600"
                           }`}
@@ -1767,7 +1878,7 @@ export function GeneratePRNTab() {
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
                   className={`p-4 rounded-2xl ${
-                    selectedProvider === "MTN"
+                    selectedProvider === "mtn"
                       ? "bg-yellow-50 border border-yellow-200"
                       : "bg-red-50 border border-red-200"
                   }`}
@@ -1782,7 +1893,7 @@ export function GeneratePRNTab() {
                     >
                       <Zap
                         className={`h-5 w-5 ${
-                          selectedProvider === "MTN"
+                          selectedProvider === "mtn"
                             ? "text-yellow-600"
                             : "text-red-600"
                         }`}
@@ -1791,7 +1902,7 @@ export function GeneratePRNTab() {
                     <div>
                       <p
                         className={`font-bold text-sm mb-1 ${
-                          selectedProvider === "MTN"
+                          selectedProvider === "mtn"
                             ? "text-yellow-900"
                             : "text-red-900"
                         }`}
@@ -1800,7 +1911,7 @@ export function GeneratePRNTab() {
                       </p>
                       <ul
                         className={`text-xs space-y-1 ${
-                          selectedProvider === "MTN"
+                          selectedProvider === "mtn"
                             ? "text-yellow-800"
                             : "text-red-800"
                         }`}
@@ -1834,7 +1945,7 @@ export function GeneratePRNTab() {
                       onClick={handleMoMoPayment}
                       disabled={phoneNumber.length < 9 || processingPayment}
                       className={`h-14 rounded-xl gap-2 text-base w-full shadow-xl ${
-                        selectedProvider === "MTN"
+                        selectedProvider === "mtn"
                           ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700"
                           : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800"
                       }`}
@@ -1854,6 +1965,228 @@ export function GeneratePRNTab() {
                   </motion.div>
                 </div>
               </motion.div>
+            </div>
+          </motion.div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MTN/Airtel Phone Prompt Modal - Looks like phone notification */}
+      <Dialog open={showPhonePrompt} onOpenChange={setShowPhonePrompt}>
+        <DialogContent className="max-w-sm border-0 overflow-hidden p-0">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="relative"
+          >
+            {/* Phone Frame - Mimics phone notification */}
+            <div
+              className={`relative overflow-hidden ${
+                selectedProvider === "mtn"
+                  ? "bg-gradient-to-b from-yellow-400 to-yellow-500"
+                  : "bg-gradient-to-b from-red-500 to-red-600"
+              } p-6 pt-12`}
+            >
+              {/* Top Status Bar Effect */}
+              <div className="absolute top-0 inset-x-0 h-8 bg-black/20 flex items-center justify-between px-6 text-white text-xs">
+                <span>9:41</span>
+                <div className="flex gap-1">
+                  <div className="w-4 h-3 border border-white/50" />
+                  <div className="w-4 h-3 border border-white/50" />
+                  <div className="w-4 h-3 border border-white/50 fill-white/50" />
+                </div>
+              </div>
+
+              {/* Main Notification Card */}
+              <motion.div
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.2 }}
+                className="bg-white rounded-3xl shadow-2xl overflow-hidden"
+              >
+                {/* Header */}
+                <div
+                  className={`${
+                    selectedProvider === "mtn"
+                      ? "bg-gradient-to-r from-yellow-400 to-amber-500"
+                      : "bg-gradient-to-r from-red-500 to-red-600"
+                  } p-6 text-white`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-12 w-12 rounded-full bg-white/30 flex items-center justify-center">
+                      <Smartphone className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg">
+                        {selectedProvider} MoMo
+                      </p>
+                      <p className="text-white/90 text-sm">
+                        Payment Confirmation
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 space-y-6">
+                  {/* Payment Details */}
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                    className="text-center"
+                  >
+                    <p className="text-muted-foreground text-sm mb-2">
+                      Amount to Pay
+                    </p>
+                    <div className="text-4xl font-black bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent mb-4">
+                      UGX {generatedPRN?.amount.toLocaleString()}
+                    </div>
+                    <p className="text-muted-foreground text-sm">
+                      {generatedPRN?.purpose}
+                    </p>
+                  </motion.div>
+
+                  {/* Phone Number Display */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.35 }}
+                    className="flex items-center justify-center gap-2 py-4 bg-muted/50 rounded-2xl"
+                  >
+                    <span className="text-muted-foreground">+256</span>
+                    <span className="font-mono font-bold">{phoneNumber}</span>
+                  </motion.div>
+
+                  {/* PIN Entry Section */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                    className="space-y-3"
+                  >
+                    <Label className="text-base font-bold block">
+                      Enter Your PIN
+                    </Label>
+                    <div className="relative">
+                      <input
+                        type="password"
+                        inputMode="numeric"
+                        placeholder="••••"
+                        value={pin}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, "");
+                          if (value.length <= 4) {
+                            setPin(value);
+                            setPinError("");
+                          }
+                        }}
+                        maxLength={4}
+                        className="w-full h-16 text-center text-4xl font-bold rounded-2xl border-2 border-border focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                      />
+                      <motion.div
+                        className="absolute right-4 top-1/2 -translate-y-1/2 flex gap-1"
+                        animate={{ scale: pin.length === 4 ? 1.1 : 1 }}
+                      >
+                        {[0, 1, 2, 3].map((i) => (
+                          <motion.div
+                            key={i}
+                            className={`h-3 w-3 rounded-full ${
+                              i < pin.length
+                                ? "bg-emerald-500 shadow-lg shadow-emerald-500/50"
+                                : "bg-muted"
+                            }`}
+                            animate={
+                              i < pin.length ? { scale: [1, 1.2, 1] } : {}
+                            }
+                            transition={{ duration: 0.3 }}
+                          />
+                        ))}
+                      </motion.div>
+                    </div>
+                    {pinError && (
+                      <motion.p
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="text-destructive text-sm font-medium"
+                      >
+                        {pinError}
+                      </motion.p>
+                    )}
+                  </motion.div>
+
+                  {/* Security Info */}
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.45 }}
+                    className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200"
+                  >
+                    <div className="flex items-start gap-3">
+                      <Shield className="h-5 w-5 text-emerald-600 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-emerald-900 text-sm">
+                          Secure Payment
+                        </p>
+                        <p className="text-emerald-700 text-xs">
+                          Never share your PIN. This is a secure transaction.
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+
+                  {/* Action Buttons */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="grid grid-cols-2 gap-3 pt-4"
+                  >
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowPhonePrompt(false);
+                        setShowMoMoPhone(true);
+                        setPin("");
+                        setPinError("");
+                      }}
+                      className="h-12 rounded-xl font-semibold"
+                      disabled={verifyingPin}
+                    >
+                      Cancel
+                    </Button>
+                    <motion.div
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                    >
+                      <Button
+                        onClick={handlePinVerification}
+                        disabled={pin.length !== 4 || verifyingPin}
+                        className={`h-12 rounded-xl gap-2 w-full font-semibold shadow-lg ${
+                          selectedProvider === "mtn"
+                            ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 disabled:opacity-50"
+                            : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50"
+                        }`}
+                      >
+                        {verifyingPin ? (
+                          <>
+                            <RefreshCw className="h-5 w-5 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-5 w-5" />
+                            Confirm
+                          </>
+                        )}
+                      </Button>
+                    </motion.div>
+                  </motion.div>
+                </div>
+              </motion.div>
+
+              {/* Phone Bottom Bezel Effect */}
+              <div className="h-6" />
             </div>
           </motion.div>
         </DialogContent>
