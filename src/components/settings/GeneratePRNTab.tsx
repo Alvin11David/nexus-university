@@ -1447,10 +1447,10 @@ export function GeneratePRNTab() {
                       <Smartphone className="h-8 w-8 text-white" />
                     </div>
                     <div>
-                      <h2 className="text-3xl font-black text-white">
+                      <h2 className="text-3xl font-black text-black">
                         Mobile Money
                       </h2>
-                      <p className="text-white/80 text-sm">
+                      <p className="text-black/60 text-sm">
                         Select your provider to continue
                       </p>
                     </div>
@@ -1474,16 +1474,16 @@ export function GeneratePRNTab() {
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-white/70 text-sm mb-1">
+                        <p className="text-black/70 text-sm mb-1">
                           Amount to Pay
                         </p>
-                        <p className="text-4xl font-black text-white">
+                        <p className="text-4xl font-black text-black">
                           UGX {generatedPRN.amount.toLocaleString()}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-white/70 text-sm mb-1">For</p>
-                        <p className="text-white font-semibold">
+                        <p className="text-black/70 text-sm mb-1">For</p>
+                        <p className="text-black font-semibold">
                           {generatedPRN.purpose}
                         </p>
                       </div>
