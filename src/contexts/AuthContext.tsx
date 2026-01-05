@@ -82,29 +82,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-
-      if (session?.user) {
-        setTimeout(() => {
-          fetchProfile(session.user.id);
-        }, 0);
-      } else {
-        setProfile(null);
-      }
-    });
-
+    // Check for existing session on mount
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      setLoading(false);
+
+      if (session?.user) {
+        fetchProfile(session.user.id).finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth state changed:", event, session?.user?.email);
+      setSession(session);
+      setUser(session?.user ?? null);
 
       if (session?.user) {
         fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
       }
     });
 
@@ -120,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data && !error) {
       setProfile(data);
+      console.log("Profile loaded:", { id: data.id, role: data.role }); // Debug log
 
       // If student_number is missing, try to get it from student_records
       if (!data.student_number) {
@@ -298,6 +300,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           full_name: fullName,
           registration_number: registrationNumber,
           student_number: studentNumber,
+          role: role, // Pass role to be set in profile during trigger
         },
       },
     });
@@ -320,6 +323,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Update profile with student_number, registration_number, department, and role
     if (data.user) {
+      console.log(
+        "Updating profile for user:",
+        data.user.id,
+        "with role:",
+        role
+      );
       const updateData: any = { role: role };
 
       if (role === "student") {
@@ -330,6 +339,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         updateData.department = department;
       }
 
+      console.log("Profile update data:", updateData);
       const { error: profileError } = await supabase
         .from("profiles")
         .update(updateData)
@@ -341,6 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           error: new Error(`Failed to save role: ${profileError.message}`),
         };
       }
+      console.log("Profile updated successfully with role:", role);
     }
 
     // Update student record with full name and mark as registered (for students only)

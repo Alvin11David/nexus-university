@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -63,6 +64,17 @@ type TermResult = {
   >;
 };
 
+type DashboardAssignment = {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  courseTitle: string;
+  courseCode: string;
+  totalPoints: number | null;
+  status: "submitted" | "pending";
+  rawStatus: string | null;
+};
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const displayName =
@@ -83,6 +95,9 @@ export default function Dashboard() {
   const [joinCode, setJoinCode] = useState("");
   const [className, setClassName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [assignments, setAssignments] = useState<DashboardAssignment[]>([]);
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+  const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
 
   const classroomCourses = [
     {
@@ -153,33 +168,6 @@ export default function Dashboard() {
     },
   ];
 
-  const classroomAssignments = [
-    {
-      title: "Binary Trees Implementation",
-      course: "Advanced Data Structures",
-      due: "Due Today, 11:59 PM",
-      points: 30,
-      status: "pending",
-      type: "coding",
-    },
-    {
-      title: "SQL Replication Lab",
-      course: "Database Systems & Cloud",
-      due: "Due Tomorrow, 5:00 PM",
-      points: 25,
-      status: "pending",
-      type: "lab",
-    },
-    {
-      title: "Design Review: Sprint 2",
-      course: "Software Engineering Studio",
-      due: "Jan 12, 10:00 AM",
-      points: 20,
-      status: "completed",
-      type: "presentation",
-    },
-  ];
-
   const meetSessions = [
     {
       course: "Database Systems & Cloud",
@@ -194,6 +182,19 @@ export default function Dashboard() {
       isLive: false,
     },
   ];
+
+  const formatDueDate = (date: string | null) => {
+    if (!date) return "No due date";
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return "No due date";
+
+    return parsed.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -263,6 +264,100 @@ export default function Dashboard() {
     };
 
     loadStats();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let isActive = true;
+
+    const loadAssignments = async () => {
+      try {
+        setAssignmentsLoading(true);
+        setAssignmentsError(null);
+
+        const { data: enrollments, error: enrollError } = await supabase
+          .from("enrollments")
+          .select("course_id, status")
+          .eq("student_id", user.id)
+          .in("status", ["approved", "pending"]);
+
+        if (enrollError) throw enrollError;
+
+        const courseIds = (enrollments || [])
+          .map((enrollment) => enrollment.course_id)
+          .filter(Boolean);
+
+        if (!courseIds.length) {
+          if (isActive) {
+            setAssignments([]);
+            setAssignmentsLoading(false);
+          }
+          return;
+        }
+
+        const { data: assignmentsData, error: assignmentsError } =
+          await supabase
+            .from("assignments")
+            .select(
+              "id, title, due_date, total_points, status, course_id, courses(code, title)"
+            )
+            .in("course_id", courseIds)
+            .order("due_date", { ascending: true });
+
+        if (assignmentsError) throw assignmentsError;
+
+        const assignmentIds = (assignmentsData || []).map((a) => a.id);
+        let submissions:
+          | {
+              assignment_id: string;
+              status: string | null;
+              submitted_at?: string;
+            }[] = [];
+
+        if (assignmentIds.length) {
+          const { data: subs, error: subsError } = await supabase
+            .from("submissions")
+            .select("assignment_id, status, submitted_at")
+            .eq("student_id", user.id)
+            .in("assignment_id", assignmentIds);
+
+          if (subsError) throw subsError;
+          submissions = subs || [];
+        }
+
+        const mappedAssignments = (assignmentsData || []).map((assignment) => {
+          const submission = submissions.find(
+            (s) => s.assignment_id === assignment.id
+          );
+
+          return {
+            id: assignment.id,
+            title: assignment.title,
+            dueDate: assignment.due_date,
+            courseTitle: assignment.courses?.title || "Course",
+            courseCode: assignment.courses?.code || "",
+            totalPoints: assignment.total_points,
+            status:
+              submission?.status === "submitted" ? "submitted" : "pending",
+            rawStatus: assignment.status,
+          } as DashboardAssignment;
+        });
+
+        if (isActive) setAssignments(mappedAssignments);
+      } catch (error) {
+        console.error("Error loading dashboard assignments", error);
+        if (isActive) setAssignmentsError("Failed to load assignments.");
+      } finally {
+        if (isActive) setAssignmentsLoading(false);
+      }
+    };
+
+    loadAssignments();
+
+    return () => {
+      isActive = false;
+    };
   }, [user]);
 
   useEffect(() => {
@@ -782,48 +877,88 @@ export default function Dashboard() {
             {/* Assignments & Stream */}
             <div className="grid lg:grid-cols-2 gap-4">
               <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-5 shadow-lg space-y-4">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-secondary" />
-                  <h3 className="font-display text-lg font-semibold">
-                    Assignments
-                  </h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-secondary" />
+                    <h3 className="font-display text-lg font-semibold">
+                      Assignments
+                    </h3>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="text-xs"
+                  >
+                    <RouterLink to="/assignments">View All</RouterLink>
+                  </Button>
                 </div>
                 <div className="space-y-3">
-                  {classroomAssignments.map((item, i) => (
-                    <motion.div
-                      key={item.title}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="p-4 rounded-xl border border-border/60 bg-muted/30 flex items-start justify-between gap-3"
-                    >
-                      <div className="space-y-1">
-                        <p className="text-sm font-semibold">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.course}
-                        </p>
-                        <p className="text-xs font-semibold text-amber-600">
-                          {item.due}
-                        </p>
-                      </div>
-                      <div className="text-right space-y-1">
-                        <span
-                          className={`text-[11px] px-2 py-1 rounded-full border ${
-                            item.status === "completed"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}
+                  {assignmentsLoading && (
+                    <p className="text-sm text-muted-foreground">
+                      Loading assignments…
+                    </p>
+                  )}
+
+                  {!assignmentsLoading && assignmentsError && (
+                    <p className="text-sm text-destructive">
+                      {assignmentsError}
+                    </p>
+                  )}
+
+                  {!assignmentsLoading &&
+                    !assignmentsError &&
+                    assignments.length === 0 && (
+                      <p className="text-sm text-muted-foreground">
+                        No assignments yet.
+                      </p>
+                    )}
+
+                  {!assignmentsLoading &&
+                    !assignmentsError &&
+                    assignments.map((item, i) => {
+                      const isSubmitted = item.status === "submitted";
+                      const dueLabel = formatDueDate(item.dueDate);
+
+                      return (
+                        <motion.div
+                          key={item.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="p-4 rounded-xl border border-border/60 bg-muted/30 flex items-start justify-between gap-3"
                         >
-                          {item.status === "completed"
-                            ? "Submitted"
-                            : "Pending"}
-                        </span>
-                        <p className="text-xs text-muted-foreground">
-                          {item.points} pts
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold">
+                              {item.title}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {item.courseTitle}
+                              {item.courseCode ? ` · ${item.courseCode}` : ""}
+                            </p>
+                            <p className="text-xs font-semibold text-amber-600">
+                              Due {dueLabel}
+                            </p>
+                          </div>
+                          <div className="text-right space-y-1">
+                            <span
+                              className={`text-[11px] px-2 py-1 rounded-full border ${
+                                isSubmitted
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}
+                            >
+                              {isSubmitted ? "Submitted" : "Pending"}
+                            </span>
+                            <p className="text-xs text-muted-foreground">
+                              {item.totalPoints != null
+                                ? `${item.totalPoints} pts`
+                                : "Points N/A"}
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                 </div>
               </div>
 

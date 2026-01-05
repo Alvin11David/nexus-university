@@ -13,6 +13,7 @@ import {
   Mail,
   Calendar,
   Zap,
+  Clipboard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,9 +84,11 @@ export function StudentHeader() {
 
   const studentNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: Zap },
-    { label: "Courses", href: "/courses", icon: BookOpen },
+    { label: "Programs", href: "/programs", icon: BookOpen },
+    { label: "Assignments", href: "/assignments", icon: Clipboard },
     { label: "Schedule", href: "/schedule", icon: Calendar },
     { label: "Webmail", href: "/webmail", icon: Mail },
+    { label: "Settings", href: "/settings", icon: Settings },
   ];
 
   return (

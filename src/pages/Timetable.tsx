@@ -301,7 +301,7 @@ export default function Timetable() {
           .from("enrollments")
           .select("course_id")
           .eq("student_id", user.id)
-          .eq("status", "approved");
+          .in("status", ["approved", "pending"]); // allow pending so students see upcoming work
 
         if (enrollError) throw enrollError;
 
@@ -393,10 +393,15 @@ export default function Timetable() {
 
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(timetableRef.current, {
+      const element = timetableRef.current;
+      const canvas = await html2canvas(element, {
         scale: 2,
         backgroundColor: "#ffffff",
         logging: false,
+        useCORS: true,
+        allowTaint: true,
+        windowHeight: element.scrollHeight,
+        windowWidth: element.scrollWidth,
       });
 
       const link = document.createElement("a");
@@ -427,10 +432,15 @@ export default function Timetable() {
 
     setIsExporting(true);
     try {
-      const canvas = await html2canvas(timetableRef.current, {
+      const element = timetableRef.current;
+      const canvas = await html2canvas(element, {
         scale: 2,
         backgroundColor: "#ffffff",
         logging: false,
+        useCORS: true,
+        allowTaint: true,
+        windowHeight: element.scrollHeight,
+        windowWidth: element.scrollWidth,
       });
 
       const imgData = canvas.toDataURL("image/png");
@@ -470,9 +480,9 @@ export default function Timetable() {
             <div
               key={day}
               className={cn(
-                "text-center py-3 px-2 rounded-lg font-semibold transition-colors",
+                "text-center py-3 px-2 rounded-lg font-semibold transition-all relative",
                 day === currentDay
-                  ? "bg-secondary text-secondary-foreground"
+                  ? "bg-gradient-to-br from-secondary to-secondary/80 text-secondary-foreground shadow-lg ring-2 ring-secondary/50"
                   : "bg-muted/50 text-foreground"
               )}
             >
@@ -480,6 +490,11 @@ export default function Timetable() {
                 {day.slice(0, 3)}
               </div>
               <div className="text-lg">{day}</div>
+              {day === currentDay && (
+                <div className="absolute -top-2 -right-2 h-5 w-5 bg-emerald-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold">
+                  ✓
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -502,7 +517,13 @@ export default function Timetable() {
           {days.map((day) => {
             const daySchedule = schedule.find((s) => s.day === day);
             return (
-              <div key={day} className="space-y-2">
+              <div
+                key={day}
+                className={cn(
+                  "space-y-2 p-2 rounded-lg transition-colors",
+                  day === currentDay ? "bg-secondary/5" : ""
+                )}
+              >
                 {timeSlots.map((time, index) => {
                   const session = daySchedule?.sessions.find((s) => {
                     const sessionStartHour = parseInt(s.time.split(":")[0]);
@@ -595,7 +616,12 @@ export default function Timetable() {
                   return (
                     <div
                       key={`${day}-${time}`}
-                      className="h-20 rounded-lg bg-muted/20 border border-dashed border-muted-foreground/20"
+                      className={cn(
+                        "h-20 rounded-lg border border-dashed transition-colors",
+                        day === currentDay
+                          ? "bg-secondary/10 border-secondary/30"
+                          : "bg-muted/20 border-muted-foreground/20"
+                      )}
                     />
                   );
                 })}

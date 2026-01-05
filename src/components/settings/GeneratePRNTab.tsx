@@ -225,6 +225,16 @@ export function GeneratePRNTab() {
   };
 
   const handleMoMoPayment = async () => {
+    // Check if user is authenticated
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to make a payment",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (!phoneNumber || phoneNumber.length < 9) {
       toast({
         title: "Invalid Phone Number",

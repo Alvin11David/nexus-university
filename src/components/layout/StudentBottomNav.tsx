@@ -1,14 +1,24 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, BookOpen, Calendar, Bell, User } from "lucide-react";
+import {
+  Home,
+  BookOpen,
+  Calendar,
+  Bell,
+  User,
+  Clipboard,
+  GraduationCap,
+  Settings,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const studentNavItems = [
   { label: "Home", href: "/dashboard", icon: Home },
-  { label: "Courses", href: "/courses", icon: BookOpen },
+  { label: "Programs", href: "/programs", icon: GraduationCap },
+  { label: "Assignments", href: "/assignments", icon: Clipboard },
   { label: "Schedule", href: "/schedule", icon: Calendar },
   { label: "Alerts", href: "/notifications", icon: Bell },
-  { label: "Profile", href: "/profile", icon: User },
+  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function StudentBottomNav() {

@@ -144,7 +144,8 @@ const academicEvents: CalendarEvent[] = [
   },
 ];
 
-// Assignment data with full details
+// Mock assignment data - kept for reference but not used; real data comes from Supabase
+/*
 const assignmentsData: Assignment[] = [
   {
     id: "asg-1",
@@ -239,6 +240,7 @@ const assignmentsData: Assignment[] = [
     ],
   },
 ];
+*/
 
 const months = [
   "January",
@@ -276,56 +278,103 @@ export function AcademicCalendarTab() {
   const [dynamicAssignments, setDynamicAssignments] = useState<CalendarEvent[]>(
     []
   );
+  const [supabaseAssignments, setSupabaseAssignments] = useState<
+    Array<{
+      id: string;
+      title: string;
+      due_date: string;
+      total_points: number | null;
+      description: string | null;
+      status: string | null;
+      course_id: string;
+      courses?: { code: string; title: string };
+    }>
+  >([]);
+  const [submissionStatuses, setSubmissionStatuses] = useState<
+    Map<string, string>
+  >(new Map());
+  const [assignmentsLoading, setAssignmentsLoading] = useState(true);
 
   // Fetch assignments from Supabase and convert to calendar events
   useEffect(() => {
     const fetchAssignments = async () => {
-      if (!user) return;
+      if (!user) {
+        setAssignmentsLoading(false);
+        return;
+      }
 
       try {
+        setAssignmentsLoading(true);
+
         // Get student's enrolled courses
         const { data: enrollments, error: enrollError } = await supabase
           .from("enrollments")
-          .select("course_id")
-          .eq("student_id", user.id);
+          .select("course_id, status")
+          .eq("student_id", user.id)
+          .in("status", ["approved", "pending"]);
 
         if (enrollError) throw enrollError;
 
         if (enrollments && enrollments.length > 0) {
           const courseIds = enrollments.map((e) => e.course_id);
 
-          // Fetch assignments for enrolled courses
-          try {
-            // @ts-ignore - New table not yet in types
-            const assignmentsResult = await supabase
+          // Fetch assignments for enrolled courses with course info
+          const { data: assignmentsResult, error: assignmentsError } =
+            await supabase
               .from("assignments")
-              .select("*")
-              .in("course_id", courseIds)
-              .in("status", ["active", "closed"]);
+              .select(
+                "id, title, due_date, total_points, description, status, course_id, courses(code, title)"
+              )
+              .in("course_id", courseIds);
 
-            if (assignmentsResult.error) throw assignmentsResult.error;
+          if (assignmentsError) throw assignmentsError;
 
-            if (assignmentsResult.data) {
-              // Convert assignments to calendar events
-              const assignmentEvents: CalendarEvent[] = (
-                assignmentsResult.data as any[]
-              ).map((a) => ({
-                id: `assign-${a.id}`,
-                title: a.title,
-                date: new Date(a.due_date).toISOString().split("T")[0],
-                type: "assignment" as const,
-                description: a.description || "",
-                important: false,
-              }));
+          if (assignmentsResult) {
+            setSupabaseAssignments(
+              assignmentsResult as typeof supabaseAssignments
+            );
 
-              setDynamicAssignments(assignmentEvents);
+            // Fetch submission statuses for each assignment
+            const assignmentIds = assignmentsResult.map((a) => a.id);
+            if (assignmentIds.length > 0) {
+              const { data: submissions, error: subError } = await supabase
+                .from("submissions")
+                .select("assignment_id, status")
+                .eq("student_id", user.id)
+                .in("assignment_id", assignmentIds);
+
+              if (subError) throw subError;
+
+              const statusMap = new Map<string, string>();
+              (submissions || []).forEach((sub) => {
+                statusMap.set(sub.assignment_id, sub.status || "pending");
+              });
+              setSubmissionStatuses(statusMap);
             }
-          } catch (err) {
-            console.error("Assignments fetch error:", err);
+
+            // Convert assignments to calendar events
+            const assignmentEvents: CalendarEvent[] = (
+              assignmentsResult as any[]
+            ).map((a) => ({
+              id: `assign-${a.id}`,
+              title: a.title,
+              date: new Date(a.due_date).toISOString().split("T")[0],
+              type: "assignment" as const,
+              description: a.description || "",
+              important: false,
+            }));
+
+            setDynamicAssignments(assignmentEvents);
           }
+        } else {
+          setSupabaseAssignments([]);
+          setDynamicAssignments([]);
         }
       } catch (error) {
         console.error("Error fetching assignments:", error);
+        setSupabaseAssignments([]);
+      } finally {
+        setAssignmentsLoading(false);
       }
     };
 
@@ -337,7 +386,7 @@ export function AcademicCalendarTab() {
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "assignments",
         },
@@ -351,6 +400,35 @@ export function AcademicCalendarTab() {
       subscription.unsubscribe();
     };
   }, [user]);
+
+  // Convert Supabase assignments to mock Assignment format for display
+  const displayAssignments: Assignment[] = supabaseAssignments.map(
+    (supaAsg) => {
+      const submissionStatus = submissionStatuses.get(supaAsg.id) || "pending";
+      return {
+        id: supaAsg.id,
+        title: supaAsg.title,
+        course: supaAsg.courses?.title || "Unknown Course",
+        dueDate: supaAsg.due_date,
+        points: supaAsg.total_points || 0,
+        status:
+          submissionStatus === "submitted"
+            ? "submitted"
+            : submissionStatus === "graded"
+            ? "graded"
+            : "pending",
+        type: "coding" as const, // Default type; could be enhanced with db field
+        instructions: supaAsg.description || "No instructions provided",
+        attachments: [],
+        submissions:
+          submissionStatus === "graded"
+            ? [{ id: "sub", date: new Date().toISOString(), fileName: "" }]
+            : submissionStatus === "submitted"
+            ? [{ id: "sub", date: new Date().toISOString(), fileName: "" }]
+            : [],
+      };
+    }
+  );
 
   // Combine static academic events with dynamic assignments
   const allEvents = [...academicEvents, ...dynamicAssignments];
@@ -405,7 +483,7 @@ export function AcademicCalendarTab() {
       2,
       "0"
     )}-${String(day).padStart(2, "0")}`;
-    return assignmentsData.filter((assignment) => {
+    return displayAssignments.filter((assignment) => {
       const assignDate = new Date(assignment.dueDate);
       const currentDate = new Date(dateStr);
       return (
@@ -441,7 +519,14 @@ export function AcademicCalendarTab() {
     .filter((event) => new Date(event.date) >= new Date())
     .slice(0, 5);
 
-  const importantDates = allEvents.filter((event) => event.important);
+  // Remove duplicate important dates (same date + title)
+  const importantDates = Array.from(
+    new Map(
+      allEvents
+        .filter((event) => event.important)
+        .map((event) => [`${event.date}-${event.title}`, event])
+    ).values()
+  );
 
   const selectedDateEvents = selectedDate
     ? allEvents.filter((event) => {
@@ -1303,7 +1388,7 @@ export function AcademicCalendarTab() {
                 <div>
                   <h3 className="font-semibold text-lg">My Assignments</h3>
                   <p className="text-sm text-muted-foreground">
-                    {assignmentsData.length} total assignments
+                    {displayAssignments.length} total assignments
                   </p>
                 </div>
               </div>
@@ -1321,7 +1406,7 @@ export function AcademicCalendarTab() {
                     </p>
                     <p className="text-2xl font-bold text-amber-600">
                       {
-                        assignmentsData.filter((a) => a.status === "pending")
+                        displayAssignments.filter((a) => a.status === "pending")
                           .length
                       }
                     </p>
@@ -1340,8 +1425,9 @@ export function AcademicCalendarTab() {
                     </p>
                     <p className="text-2xl font-bold text-blue-600">
                       {
-                        assignmentsData.filter((a) => a.status === "submitted")
-                          .length
+                        displayAssignments.filter(
+                          (a) => a.status === "submitted"
+                        ).length
                       }
                     </p>
                   </div>
@@ -1357,7 +1443,7 @@ export function AcademicCalendarTab() {
                     <p className="text-xs text-muted-foreground mb-1">Graded</p>
                     <p className="text-2xl font-bold text-emerald-600">
                       {
-                        assignmentsData.filter((a) => a.status === "graded")
+                        displayAssignments.filter((a) => a.status === "graded")
                           .length
                       }
                     </p>
@@ -1369,157 +1455,176 @@ export function AcademicCalendarTab() {
           </div>
 
           {/* Assignments List */}
-          <div className="grid gap-4">
-            {assignmentsData.map((assignment, idx) => {
-              const daysUntilDue = Math.ceil(
-                (new Date(assignment.dueDate).getTime() -
-                  new Date().getTime()) /
-                  (1000 * 60 * 60 * 24)
-              );
-              const isOverdue = daysUntilDue < 0;
-              const isDueSoon = daysUntilDue <= 3 && daysUntilDue >= 0;
+          {assignmentsLoading && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading assignments…</p>
+            </div>
+          )}
 
-              return (
-                <motion.div
-                  key={assignment.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                  onClick={() => setSelectedAssignment(assignment)}
-                  className="relative overflow-hidden rounded-2xl cursor-pointer group"
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+          {!assignmentsLoading && displayAssignments.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">
+                No assignments yet for your enrolled courses.
+              </p>
+            </div>
+          )}
 
-                  <Card className="border-2 relative group-hover:border-primary/50 transition-all backdrop-blur-sm bg-gradient-to-r from-card/80 to-card/60">
-                    <CardContent className="p-5">
-                      <div className="flex items-start gap-4">
-                        {/* Icon & Type */}
-                        <div
-                          className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                            assignment.status === "graded"
-                              ? "bg-emerald-500/20"
-                              : assignment.status === "submitted"
-                              ? "bg-blue-500/20"
-                              : "bg-purple-500/20"
-                          }`}
-                        >
-                          <FileText
-                            className={`h-6 w-6 ${
+          {!assignmentsLoading && displayAssignments.length > 0 && (
+            <div className="grid gap-4">
+              {displayAssignments.map((assignment, idx) => {
+                const daysUntilDue = Math.ceil(
+                  (new Date(assignment.dueDate).getTime() -
+                    new Date().getTime()) /
+                    (1000 * 60 * 60 * 24)
+                );
+                const isOverdue = daysUntilDue < 0;
+                const isDueSoon = daysUntilDue <= 3 && daysUntilDue >= 0;
+
+                return (
+                  <motion.div
+                    key={assignment.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    onClick={() => setSelectedAssignment(assignment)}
+                    className="relative overflow-hidden rounded-2xl cursor-pointer group"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-accent/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    <Card className="border-2 relative group-hover:border-primary/50 transition-all backdrop-blur-sm bg-gradient-to-r from-card/80 to-card/60">
+                      <CardContent className="p-5">
+                        <div className="flex items-start gap-4">
+                          {/* Icon & Type */}
+                          <div
+                            className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
                               assignment.status === "graded"
-                                ? "text-emerald-600"
+                                ? "bg-emerald-500/20"
                                 : assignment.status === "submitted"
-                                ? "text-blue-600"
-                                : "text-purple-600"
+                                ? "bg-blue-500/20"
+                                : "bg-purple-500/20"
                             }`}
-                          />
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
-                                {assignment.title}
-                              </h3>
-                              <p className="text-sm text-muted-foreground">
-                                {assignment.course}
-                              </p>
-                            </div>
-
-                            {/* Badges */}
-                            <div className="flex gap-2 flex-wrap justify-end">
-                              <Badge className="bg-purple-500/20 text-purple-600 border-purple-500/30 capitalize text-xs">
-                                {assignment.type}
-                              </Badge>
-                              {isOverdue ? (
-                                <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-xs">
-                                  Overdue
-                                </Badge>
-                              ) : isDueSoon ? (
-                                <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 text-xs">
-                                  {daysUntilDue === 0
-                                    ? "Due Today"
-                                    : `Due in ${daysUntilDue}d`}
-                                </Badge>
-                              ) : null}
-                              {assignment.status === "graded" &&
-                                assignment.submissions[0]?.grade && (
-                                  <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30 text-xs">
-                                    {assignment.submissions[0].grade}%
-                                  </Badge>
-                                )}
-                            </div>
+                          >
+                            <FileText
+                              className={`h-6 w-6 ${
+                                assignment.status === "graded"
+                                  ? "text-emerald-600"
+                                  : assignment.status === "submitted"
+                                  ? "text-blue-600"
+                                  : "text-purple-600"
+                              }`}
+                            />
                           </div>
 
-                          {/* Progress & Details */}
-                          <div className="space-y-3">
-                            {assignment.status === "submitted" ||
-                            assignment.status === "graded" ? (
-                              <div>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-medium text-muted-foreground">
-                                    Submission Status
-                                  </span>
-                                  <span className="text-xs font-semibold text-emerald-600">
-                                    {assignment.submissions[0]?.date &&
-                                      new Date(
-                                        assignment.submissions[0].date
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex-1">
+                                <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">
+                                  {assignment.title}
+                                </h3>
+                                <p className="text-sm text-muted-foreground">
+                                  {assignment.course}
+                                </p>
+                              </div>
+
+                              {/* Badges */}
+                              <div className="flex gap-2 flex-wrap justify-end">
+                                <Badge className="bg-purple-500/20 text-purple-600 border-purple-500/30 capitalize text-xs">
+                                  {assignment.type}
+                                </Badge>
+                                {isOverdue ? (
+                                  <Badge className="bg-destructive/20 text-destructive border-destructive/30 text-xs">
+                                    Overdue
+                                  </Badge>
+                                ) : isDueSoon ? (
+                                  <Badge className="bg-amber-500/20 text-amber-600 border-amber-500/30 text-xs">
+                                    {daysUntilDue === 0
+                                      ? "Due Today"
+                                      : `Due in ${daysUntilDue}d`}
+                                  </Badge>
+                                ) : null}
+                                {assignment.status === "graded" &&
+                                  assignment.submissions[0]?.grade && (
+                                    <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30 text-xs">
+                                      {assignment.submissions[0].grade}%
+                                    </Badge>
+                                  )}
+                              </div>
+                            </div>
+
+                            {/* Progress & Details */}
+                            <div className="space-y-3">
+                              {assignment.status === "submitted" ||
+                              assignment.status === "graded" ? (
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      Submission Status
+                                    </span>
+                                    <span className="text-xs font-semibold text-emerald-600">
+                                      {assignment.submissions[0]?.date &&
+                                        new Date(
+                                          assignment.submissions[0].date
+                                        ).toLocaleDateString("en-US", {
+                                          month: "short",
+                                          day: "numeric",
+                                        })}
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={100}
+                                    className="h-2 bg-muted"
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="text-xs font-medium text-muted-foreground">
+                                      Due:{" "}
+                                      {new Date(
+                                        assignment.dueDate
                                       ).toLocaleDateString("en-US", {
                                         month: "short",
                                         day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
                                       })}
-                                  </span>
+                                    </span>
+                                    <span className="text-xs font-semibold text-amber-600">
+                                      {assignment.points} pts
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={0}
+                                    className="h-2 bg-muted"
+                                  />
                                 </div>
-                                <Progress
-                                  value={100}
-                                  className="h-2 bg-muted"
-                                />
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-xs font-medium text-muted-foreground">
-                                    Due:{" "}
-                                    {new Date(
-                                      assignment.dueDate
-                                    ).toLocaleDateString("en-US", {
-                                      month: "short",
-                                      day: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
-                                  <span className="text-xs font-semibold text-amber-600">
-                                    {assignment.points} pts
-                                  </span>
-                                </div>
-                                <Progress value={0} className="h-2 bg-muted" />
-                              </div>
-                            )}
+                              )}
 
-                            {/* Description Preview */}
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                              {assignment.instructions}
-                            </p>
+                              {/* Description Preview */}
+                              <p className="text-sm text-muted-foreground line-clamp-2">
+                                {assignment.instructions}
+                              </p>
 
-                            {/* Action Button */}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full group-hover:border-primary/50 group-hover:text-primary"
-                            >
-                              View Assignment Details
-                              <ChevronRight className="h-4 w-4 ml-2" />
-                            </Button>
+                              {/* Action Button */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full group-hover:border-primary/50 group-hover:text-primary"
+                              >
+                                View Assignment Details
+                                <ChevronRight className="h-4 w-4 ml-2" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

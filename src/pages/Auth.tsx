@@ -182,13 +182,6 @@ export default function Auth() {
       const isLecturer = emailPattern.test(formData.email);
 
       if (isLecturer) {
-        // Validate email format: surname.othernames@lecturer.com
-        if (!emailPattern.test(formData.email)) {
-          throw new Error(
-            "Email must be in format: surname.othernames@lecturer.com"
-          );
-        }
-
         // Set lecturer flag and move to personal details step
         setIsLecturerSignup(true);
         setStep("lecturer-personal-details");

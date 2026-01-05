@@ -13,6 +13,8 @@ import {
   Edit2,
   Trash2,
   Download,
+  Upload as UploadIcon,
+  X,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -34,6 +36,9 @@ interface Assignment {
   status: "draft" | "active" | "closed" | "graded";
   rubric?: string;
   averageScore?: number;
+  courseTitle?: string;
+  instructionDocumentUrl?: string;
+  instructionDocumentName?: string;
 }
 
 interface CourseOption {
@@ -63,73 +68,74 @@ export default function LecturerAssignments() {
   >("all");
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [viewing, setViewing] = useState<Assignment | null>(null);
+  const [editing, setEditing] = useState<Assignment | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     dueDate: "",
     totalPoints: 100,
+    instructionDocument: null as File | null,
   });
+  const [editFormData, setEditFormData] = useState({
+    title: "",
+    description: "",
+    dueDate: "",
+    totalPoints: 100,
+    courseId: "",
+    instructionDocument: null as File | null,
+  });
+  const [uploadingDocument, setUploadingDocument] = useState(false);
 
-  const mockAssignments: Assignment[] = [
-    {
-      id: "1",
-      title: "Algorithm Design Challenge",
-      description: "Implement sorting algorithms and analyze their complexity",
-      dueDate: "2025-01-10",
-      totalPoints: 100,
-      submissions: 28,
-      totalStudents: 30,
-      status: "active",
-      averageScore: 82,
-    },
-    {
-      id: "2",
-      title: "Data Structure Project",
-      description: "Build a binary search tree with operations",
-      dueDate: "2025-01-05",
-      totalPoints: 100,
-      submissions: 25,
-      totalStudents: 30,
-      status: "closed",
-      averageScore: 78,
-    },
-    {
-      id: "3",
-      title: "Midterm Exam",
-      description: "Comprehensive exam covering weeks 1-7",
-      dueDate: "2025-01-15",
-      totalPoints: 200,
-      submissions: 0,
-      totalStudents: 30,
-      status: "draft",
-    },
-    {
-      id: "4",
-      title: "Code Review Assignment",
-      description: "Peer review and improve given code samples",
-      dueDate: "2024-12-28",
-      totalPoints: 50,
-      submissions: 29,
-      totalStudents: 30,
-      status: "graded",
-      averageScore: 85,
-    },
-    {
-      id: "5",
-      title: "Research Paper",
-      description: "Write a paper on latest AI technologies",
-      dueDate: "2025-01-20",
-      totalPoints: 150,
-      submissions: 5,
-      totalStudents: 30,
-      status: "active",
-      averageScore: 88,
-    },
-  ];
-
+  // Load assignments created by this lecturer from Supabase
   useEffect(() => {
-    setAssignments(mockAssignments);
-  }, []);
+    if (!user) return;
+
+    const loadAssignments = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("assignments")
+        .select(
+          `id, title, description, due_date, total_points, status, course_id,
+           lecturer_id,
+           assignment_submissions(count),
+           courses:course_id(title, code)
+          `
+        )
+        .eq("lecturer_id", user.id)
+        .order("due_date", { ascending: true });
+
+      if (error) {
+        console.error("Error loading assignments", error);
+        toast({
+          title: "Could not load assignments",
+          description: error.message,
+          variant: "destructive",
+        });
+        setLoading(false);
+        return;
+      }
+
+      const mapped: Assignment[] = (data || []).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        description: a.description || "",
+        dueDate: a.due_date,
+        totalPoints: a.total_points ?? 100,
+        submissions: a.assignment_submissions?.[0]?.count ?? 0,
+        totalStudents: 0, // Unknown here; could be filled from enrollment later
+        status: (a.status as Assignment["status"]) || "draft",
+        courseTitle: a.courses?.title,
+        instructionDocumentUrl: a.instruction_document_url,
+        instructionDocumentName: a.instruction_document_name,
+      }));
+
+      setAssignments(mapped);
+      setLoading(false);
+    };
+
+    loadAssignments();
+  }, [user, toast]);
 
   // Load lecturer courses from Supabase so we use real UUIDs, not placeholders
   useEffect(() => {
@@ -175,14 +181,16 @@ export default function LecturerAssignments() {
     activeCount: assignments.filter((a) => a.status === "active").length,
     closedCount: assignments.filter((a) => a.status === "closed").length,
     gradedCount: assignments.filter((a) => a.status === "graded").length,
-    averageSubmissionRate: (
-      (assignments.reduce(
-        (acc, a) => acc + a.submissions / a.totalStudents,
-        0
-      ) /
-        assignments.length) *
-      100
-    ).toFixed(1),
+    averageSubmissionRate: assignments.length
+      ? (
+          assignments.reduce((acc, a) => {
+            if (!a.totalStudents || a.totalStudents === 0) return acc;
+            return acc + a.submissions / a.totalStudents;
+          }, 0) /
+            assignments.filter((a) => a.totalStudents && a.totalStudents > 0)
+              .length || 0
+        ).toFixed(1)
+      : "0.0",
   };
 
   const getStatusColor = (status: string) => {
@@ -222,6 +230,33 @@ export default function LecturerAssignments() {
 
     setLoading(true);
     try {
+      let instructionDocUrl: string | null = null;
+      let instructionDocName: string | null = null;
+
+      // Upload instruction document if provided
+      if (formData.instructionDocument) {
+        setUploadingDocument(true);
+        const fileName = `${user.id}/${Date.now()}-${
+          formData.instructionDocument.name
+        }`;
+        const { data, error } = await supabase.storage
+          .from("assignment-documents")
+          .upload(fileName, formData.instructionDocument);
+
+        if (error) throw new Error(`Document upload failed: ${error.message}`);
+
+        if (data) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage
+            .from("assignment-documents")
+            .getPublicUrl(fileName);
+          instructionDocUrl = publicUrl;
+          instructionDocName = formData.instructionDocument.name;
+        }
+        setUploadingDocument(false);
+      }
+
       // Create assignment in database
       const { data: assignmentData, error: assignmentError } = await supabase
         .from("assignments")
@@ -233,6 +268,8 @@ export default function LecturerAssignments() {
           due_date: new Date(formData.dueDate).toISOString(),
           total_points: formData.totalPoints,
           status: "draft",
+          instruction_document_url: instructionDocUrl,
+          instruction_document_name: instructionDocName,
         })
         .select()
         .single();
@@ -269,6 +306,7 @@ export default function LecturerAssignments() {
       }
 
       // Add to local state
+      const course = courses.find((c) => c.id === selectedCourse);
       const newAssignment: Assignment = {
         id: assignmentData.id,
         title: formData.title,
@@ -278,14 +316,18 @@ export default function LecturerAssignments() {
         submissions: 0,
         totalStudents: enrolledStudents?.length || 0,
         status: "draft",
+        courseTitle: course?.title,
+        instructionDocumentUrl: instructionDocUrl || undefined,
+        instructionDocumentName: instructionDocName || undefined,
       };
 
-      setAssignments([...assignments, newAssignment]);
+      setAssignments((prev) => [...prev, newAssignment]);
       setFormData({
         title: "",
         description: "",
         dueDate: "",
         totalPoints: 100,
+        instructionDocument: null,
       });
       setShowCreateModal(false);
 
@@ -304,11 +346,155 @@ export default function LecturerAssignments() {
       });
     } finally {
       setLoading(false);
+      setUploadingDocument(false);
+    }
+  };
+
+  const handleDeleteAssignment = async (assignmentId: string) => {
+    if (!user) return;
+    const confirmed = window.confirm("Delete this assignment?");
+    if (!confirmed) return;
+
+    const { error } = await supabase
+      .from("assignments")
+      .delete()
+      .eq("id", assignmentId)
+      .eq("lecturer_id", user.id);
+
+    if (error) {
+      toast({
+        title: "Delete failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+    toast({ title: "Assignment deleted" });
+  };
+
+  const handleOpenEdit = (assignment: Assignment) => {
+    const course = courses.find((c) => c.title === assignment.courseTitle);
+    setEditing(assignment);
+    setEditFormData({
+      title: assignment.title,
+      description: assignment.description,
+      dueDate: assignment.dueDate.slice(0, 10),
+      totalPoints: assignment.totalPoints,
+      courseId: course?.id || selectedCourse || courses[0]?.id || "",
+      instructionDocument: null,
+    });
+  };
+
+  const handleUpdateAssignment = async () => {
+    if (!editing || !user) return;
+    if (
+      !editFormData.title ||
+      !editFormData.dueDate ||
+      !editFormData.courseId
+    ) {
+      toast({
+        title: "Missing information",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let instructionDocUrl = editing.instructionDocumentUrl;
+      let instructionDocName = editing.instructionDocumentName;
+
+      // Upload new instruction document if provided
+      if (editFormData.instructionDocument) {
+        setUploadingDocument(true);
+        const fileName = `${user.id}/${Date.now()}-${
+          editFormData.instructionDocument.name
+        }`;
+        const { data, error } = await supabase.storage
+          .from("assignment-documents")
+          .upload(fileName, editFormData.instructionDocument);
+
+        if (error) throw new Error(`Document upload failed: ${error.message}`);
+
+        if (data) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage
+            .from("assignment-documents")
+            .getPublicUrl(fileName);
+          instructionDocUrl = publicUrl;
+          instructionDocName = editFormData.instructionDocument.name;
+        }
+        setUploadingDocument(false);
+      }
+
+      const { error, data } = await supabase
+        .from("assignments")
+        .update({
+          title: editFormData.title,
+          description: editFormData.description,
+          due_date: new Date(editFormData.dueDate).toISOString(),
+          total_points: editFormData.totalPoints,
+          course_id: editFormData.courseId,
+          instruction_document_url: instructionDocUrl,
+          instruction_document_name: instructionDocName,
+        })
+        .eq("id", editing.id)
+        .eq("lecturer_id", user.id)
+        .select(
+          `id, title, description, due_date, total_points, status, course_id,
+           instruction_document_url, instruction_document_name,
+           assignment_submissions(count),
+           courses:course_id(title, code)`
+        )
+        .single();
+
+      if (error) {
+        toast({
+          title: "Update failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const updated: Assignment = {
+        id: (data as any).id,
+        title: (data as any).title,
+        description: (data as any).description || "",
+        dueDate: (data as any).due_date,
+        totalPoints: (data as any).total_points ?? 100,
+        submissions: (data as any).assignment_submissions?.[0]?.count ?? 0,
+        totalStudents: editing.totalStudents,
+        status: ((data as any).status as Assignment["status"]) || "draft",
+        courseTitle: (data as any).courses?.title,
+        instructionDocumentUrl: instructionDocUrl,
+        instructionDocumentName: instructionDocName,
+      };
+
+      setAssignments((prev) =>
+        prev.map((a) => (a.id === editing.id ? updated : a))
+      );
+      setEditing(null);
+      toast({ title: "Assignment updated" });
+    } catch (error: any) {
+      console.error("Error updating assignment:", error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update assignment",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setUploadingDocument(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
+    <div className="min-h-screen bg-gradient-to-br from-black via-orange-900/20 to-background pb-28">
       <LecturerHeader />
 
       <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
@@ -340,8 +526,8 @@ export default function LecturerAssignments() {
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <FileText className="h-6 w-6 text-primary" />
+              <div className="p-3 bg-gradient-to-br from-orange-500 to-black rounded-lg">
+                <FileText className="h-6 w-6 text-white" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold">Assignments</h1>
@@ -351,7 +537,7 @@ export default function LecturerAssignments() {
               </div>
             </div>
             <Button
-              className="bg-gradient-to-r from-primary to-secondary gap-2"
+              className="bg-gradient-to-r from-orange-500 to-black text-white hover:shadow-lg gap-2"
               onClick={() => setShowCreateModal(true)}
             >
               <Plus className="h-4 w-4" /> New Assignment
@@ -410,12 +596,12 @@ export default function LecturerAssignments() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="bg-primary/10 border-primary/30">
+              <Card className="bg-gradient-to-br from-orange-500/15 to-black/15 border-orange-500/40">
                 <CardContent className="pt-4">
                   <p className="text-sm text-muted-foreground">
                     Avg Submission Rate
                   </p>
-                  <p className="text-2xl font-bold text-primary">
+                  <p className="text-2xl font-bold text-orange-600">
                     {stats.averageSubmissionRate}%
                   </p>
                 </CardContent>
@@ -437,7 +623,7 @@ export default function LecturerAssignments() {
               onClick={() => setSelectedFilter(filter)}
               className={`px-4 py-2 rounded-lg font-medium transition-all ${
                 selectedFilter === filter
-                  ? "bg-primary text-primary-foreground"
+                  ? "bg-gradient-to-r from-orange-500 to-black text-white"
                   : "bg-muted/60 text-foreground hover:bg-muted"
               }`}
             >
@@ -456,13 +642,13 @@ export default function LecturerAssignments() {
               animate="visible"
               custom={i}
             >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg hover:shadow-lg transition-shadow">
+              <Card className="border-orange-500/40 bg-gradient-to-br from-orange-900/10 to-black/10 backdrop-blur-lg hover:shadow-lg hover:border-orange-500/60 transition-all">
                 <CardContent className="pt-6">
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <FileText className="h-5 w-5 text-primary" />
+                          <FileText className="h-5 w-5 text-orange-500" />
                           <h3 className="text-lg font-semibold text-foreground">
                             {assignment.title}
                           </h3>
@@ -478,6 +664,12 @@ export default function LecturerAssignments() {
                             {assignment.status.charAt(0).toUpperCase() +
                               assignment.status.slice(1)}
                           </Badge>
+                          {assignment.courseTitle && (
+                            <Badge variant="secondary" className="gap-1">
+                              <FileText className="h-3 w-3" />
+                              {assignment.courseTitle}
+                            </Badge>
+                          )}
                           <Badge variant="outline" className="gap-1">
                             <Calendar className="h-3 w-3" />
                             {new Date(assignment.dueDate).toLocaleDateString()}
@@ -493,13 +685,28 @@ export default function LecturerAssignments() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => setViewing(assignment)}
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" className="gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => handleOpenEdit(assignment)}
+                        >
                           <Edit2 className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline" className="gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1"
+                          onClick={() => handleDeleteAssignment(assignment.id)}
+                        >
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </Button>
                       </div>
@@ -512,11 +719,13 @@ export default function LecturerAssignments() {
                           Submission Progress
                         </span>
                         <span className="font-semibold">
-                          {(
-                            (assignment.submissions /
-                              assignment.totalStudents) *
-                            100
-                          ).toFixed(0)}
+                          {assignment.totalStudents > 0
+                            ? (
+                                (assignment.submissions /
+                                  assignment.totalStudents) *
+                                100
+                              ).toFixed(0)
+                            : "0"}
                           %
                         </span>
                       </div>
@@ -525,13 +734,15 @@ export default function LecturerAssignments() {
                           initial={{ width: 0 }}
                           animate={{
                             width: `${
-                              (assignment.submissions /
-                                assignment.totalStudents) *
-                              100
+                              assignment.totalStudents > 0
+                                ? (assignment.submissions /
+                                    assignment.totalStudents) *
+                                  100
+                                : 0
                             }%`,
                           }}
                           transition={{ delay: 0.5, duration: 1 }}
-                          className="h-full bg-gradient-to-r from-primary to-secondary"
+                          className="h-full bg-gradient-to-r from-orange-500 to-black"
                         />
                       </div>
                     </div>
@@ -664,21 +875,323 @@ export default function LecturerAssignments() {
                 </div>
               </div>
 
+              <div>
+                <label className="text-sm font-medium block mb-1">
+                  Instruction Document (Optional)
+                </label>
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".doc,.docx,.pdf,.txt"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        instructionDocument: e.target.files?.[0] || null,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    disabled={uploadingDocument}
+                  />
+                </div>
+                {formData.instructionDocument && (
+                  <div className="mt-2 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground truncate">
+                      {formData.instructionDocument.name}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          instructionDocument: null,
+                        })
+                      }
+                      className="text-destructive hover:text-destructive/80"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Supported formats: .doc, .docx, .pdf, .txt
+                </p>
+              </div>
+
               <div className="flex gap-2 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1"
-                  disabled={loading}
+                  disabled={loading || uploadingDocument}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateAssignment}
-                  disabled={loading}
+                  disabled={loading || uploadingDocument}
                   className="flex-1 bg-gradient-to-r from-primary to-secondary"
                 >
-                  {loading ? "Creating..." : "Create"}
+                  {uploadingDocument
+                    ? "Uploading..."
+                    : loading
+                    ? "Creating..."
+                    : "Create"}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* View Assignment Modal */}
+        {viewing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-card border border-border/60 rounded-2xl p-6 max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <h2 className="text-2xl font-bold">{viewing.title}</h2>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {viewing.description}
+              </p>
+              <div className="space-y-2 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Due: </span>
+                  {new Date(viewing.dueDate).toLocaleString()}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Points: </span>
+                  {viewing.totalPoints}
+                </p>
+                {viewing.courseTitle && (
+                  <p>
+                    <span className="text-muted-foreground">Course: </span>
+                    {viewing.courseTitle}
+                  </p>
+                )}
+              </div>
+
+              {viewing.instructionDocumentUrl && (
+                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Instruction Document
+                  </p>
+                  <a
+                    href={viewing.instructionDocumentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
+                  >
+                    <Download className="h-4 w-4" />
+                    {viewing.instructionDocumentName || "Download Instructions"}
+                  </a>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setViewing(null)}
+                >
+                  Close
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    handleOpenEdit(viewing);
+                    setViewing(null);
+                  }}
+                >
+                  Edit
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Edit Assignment Modal */}
+        {editing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-card border border-border/60 rounded-2xl p-6 max-w-md w-full space-y-4"
+            >
+              <h2 className="text-2xl font-bold">Edit Assignment</h2>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Course</label>
+                <select
+                  value={editFormData.courseId}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      courseId: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <option value="">Select a course...</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.code
+                        ? `${course.code} - ${course.title}`
+                        : course.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">Title</label>
+                <input
+                  type="text"
+                  value={editFormData.title}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, title: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  placeholder="Assignment title"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={editFormData.description}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      description: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                  placeholder="Assignment description"
+                  rows={3}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium block mb-1">
+                    Due Date
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.dueDate}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        dueDate: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium block mb-1">
+                    Total Points
+                  </label>
+                  <input
+                    type="number"
+                    value={editFormData.totalPoints}
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        totalPoints: parseInt(e.target.value || "0"),
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium block mb-1">
+                  Instruction Document (Optional)
+                </label>
+                {editing?.instructionDocumentUrl && (
+                  <div className="mb-2 p-2 bg-muted/50 rounded-lg">
+                    <p className="text-xs text-muted-foreground mb-1">
+                      Current document:
+                    </p>
+                    <a
+                      href={editing.instructionDocumentUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 text-xs text-primary hover:text-primary/80"
+                    >
+                      <Download className="h-3 w-3" />
+                      {editing.instructionDocumentName || "Download Current"}
+                    </a>
+                  </div>
+                )}
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".doc,.docx,.pdf,.txt"
+                    onChange={(e) =>
+                      setEditFormData({
+                        ...editFormData,
+                        instructionDocument: e.target.files?.[0] || null,
+                      })
+                    }
+                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    disabled={uploadingDocument}
+                  />
+                </div>
+                {editFormData.instructionDocument && (
+                  <div className="mt-2 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground truncate">
+                      {editFormData.instructionDocument.name}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setEditFormData({
+                          ...editFormData,
+                          instructionDocument: null,
+                        })
+                      }
+                      className="text-destructive hover:text-destructive/80"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Upload to replace current document (optional)
+                </p>
+              </div>
+
+              <div className="flex gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditing(null)}
+                  className="flex-1"
+                  disabled={loading || uploadingDocument}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleUpdateAssignment}
+                  disabled={loading || uploadingDocument}
+                  className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                >
+                  {uploadingDocument
+                    ? "Uploading..."
+                    : loading
+                    ? "Saving..."
+                    : "Save"}
                 </Button>
               </div>
             </motion.div>

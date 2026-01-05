@@ -18,6 +18,13 @@ import {
   Calculator,
   Users2,
   Clock,
+  TrendingUp,
+  AlertCircle,
+  Award,
+  Brain,
+  Zap,
+  Eye,
+  Heart,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -204,55 +211,89 @@ export default function LecturerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
+      {/* Animated background elements */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-br from-primary/20 to-secondary/10 blur-3xl rounded-full opacity-60" />
+        <div className="absolute top-1/3 -right-40 w-96 h-96 bg-gradient-to-bl from-secondary/15 via-primary/10 to-transparent blur-3xl rounded-full opacity-40" />
+        <div className="absolute bottom-0 left-1/4 w-72 h-72 bg-gradient-to-tr from-accent/10 to-transparent blur-3xl rounded-full opacity-50" />
+      </div>
+
       <LecturerHeader />
 
-      <main className="px-4 pb-28 sm:px-6 lg:px-8">
+      <main className="px-4 pb-28 sm:px-6 lg:px-8 relative">
         <div className="max-w-7xl mx-auto pt-6 lg:pt-10">
           {/* Hero Section with Enhanced Design */}
-          <section className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card/80 via-card/70 to-card/50 backdrop-blur-lg p-8 sm:p-12 shadow-2xl mb-8">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-secondary/5 pointer-events-none" />
-            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/20 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <section className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card/90 via-card/80 to-card/60 backdrop-blur-xl p-8 sm:p-12 shadow-2xl mb-8">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-secondary/10 pointer-events-none rounded-3xl" />
+            <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-primary/25 to-transparent rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
+            <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-secondary/20 to-transparent rounded-full blur-3xl translate-y-1/4 -translate-x-1/4" />
 
             <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
               <div className="space-y-4 flex-1">
                 <div className="inline-block">
-                  <p className="text-xs uppercase tracking-widest text-primary/70 font-semibold bg-primary/10 px-3 py-1 rounded-full">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="inline-flex items-center gap-2 text-xs uppercase tracking-widest text-primary/80 font-bold bg-gradient-to-r from-primary/15 to-secondary/10 px-4 py-1.5 rounded-full border border-primary/30"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
                     Lecturer workspace
-                  </p>
+                  </motion.div>
                 </div>
-                <h1 className="text-4xl sm:text-5xl font-bold flex items-center gap-3 text-foreground bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
+                <motion.h1
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-4xl sm:text-5xl font-display font-bold flex items-center gap-3 text-foreground"
+                >
                   Welcome back, {firstName}
                   <motion.div
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 3, repeat: Infinity }}
+                    animate={{ rotate: 360, scale: [1, 1.1, 1] }}
+                    transition={{
+                      duration: 4,
+                      repeat: Infinity,
+                      repeatDelay: 1,
+                    }}
                   >
                     <Sparkles className="h-8 w-8 text-primary" />
                   </motion.div>
-                </h1>
-                <p className="text-base text-muted-foreground max-w-2xl leading-relaxed">
+                </motion.h1>
+                <motion.p
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-base text-muted-foreground max-w-2xl leading-relaxed"
+                >
                   Manage your courses, track student progress, conduct live
-                  sessions, and stay connected with your cohorts—all in one
-                  powerful dashboard.
-                </p>
+                  sessions, analyze performance trends, and stay connected with
+                  your cohorts—all in one powerful dashboard.
+                </motion.p>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-col gap-3 sm:flex-row"
+              >
                 <Button
                   variant="outline"
-                  className="border-border/60 hover:bg-muted/50 gap-2"
+                  className="border-border/60 hover:bg-muted/50 gap-2 transition-all hover:shadow-lg"
                   onClick={() => navigate("/lecturer/messages")}
                 >
                   <Mail className="h-4 w-4" /> Messages
                 </Button>
                 <Button
-                  className="bg-gradient-to-r from-primary to-secondary text-primary-foreground border-0 shadow-lg shadow-primary/30 hover:shadow-primary/50 gap-2"
+                  className="bg-gradient-to-r from-primary via-primary/90 to-secondary text-primary-foreground border-0 shadow-xl shadow-primary/40 hover:shadow-primary/60 gap-2 transition-all"
                   onClick={() => navigate("/lecturer/courses")}
                 >
                   <BookOpen className="h-4 w-4" /> My Courses
                 </Button>
-              </div>
+              </motion.div>
             </div>
           </section>
 
+          {/* Main Stats Grid */}
           <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {quickStats.map((stat, idx) => (
               <motion.div
@@ -261,19 +302,24 @@ export default function LecturerDashboard() {
                 initial="hidden"
                 animate="visible"
                 custom={idx}
+                className="group"
               >
-                <Card className="border-border/60 bg-card/80 backdrop-blur-sm">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
+                <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-sm hover:shadow-xl transition-all duration-300 cursor-pointer overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 relative">
+                    <CardTitle className="text-sm text-muted-foreground font-semibold">
                       {stat.label}
                     </CardTitle>
-                    <stat.icon className="h-4 w-4 text-primary" />
+                    <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                      <stat.icon className="h-4 w-4 text-primary" />
+                    </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-semibold text-foreground">
+                  <CardContent className="relative">
+                    <div className="text-3xl font-bold text-foreground">
                       {stat.value}
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3 text-emerald-500" />
                       {stat.hint}
                     </p>
                   </CardContent>
@@ -290,31 +336,37 @@ export default function LecturerDashboard() {
               custom={1}
               className="space-y-4 xl:col-span-2"
             >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
-                <CardHeader className="flex items-center justify-between">
+              {/* Today's Schedule Card */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <CardHeader className="flex items-center justify-between relative">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-primary" />
                       Today's schedule
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Live sessions, labs, and seminars
                     </p>
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-primary/10 text-primary border-primary/30"
+                    className="bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30"
                   >
-                    Focus mode
+                    <Zap className="h-3 w-3 mr-1" /> Focus mode
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {schedule.map((item) => (
-                    <div
+                  {schedule.map((item, idx) => (
+                    <motion.div
                       key={item.time}
-                      className="flex items-center justify-between rounded-2xl border border-border/60 bg-muted/30 px-4 py-3"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="flex items-center justify-between rounded-2xl border border-border/60 bg-gradient-to-r from-muted/30 to-muted/10 px-4 py-3 hover:bg-muted/40 transition-colors group cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center font-semibold text-sm">
+                        <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground flex items-center justify-center font-bold text-sm group-hover:shadow-lg transition-shadow">
                           {item.time}
                         </div>
                         <div>
@@ -328,38 +380,44 @@ export default function LecturerDashboard() {
                       </div>
                       <Badge
                         variant="outline"
-                        className="border-primary/40 text-primary"
+                        className="border-primary/40 text-primary bg-primary/5"
                       >
                         {item.mode}
                       </Badge>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
-                <CardHeader className="flex items-center justify-between">
+              {/* Grading Queue Card */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-br from-amber/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <CardHeader className="flex items-center justify-between relative">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Target className="h-5 w-5 text-amber-500" />
                       Grading queue
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       What needs your attention now
                     </p>
                   </div>
                   <Badge className="bg-amber-50 text-amber-700 border-amber-200/60">
-                    Auto-save on
+                    <Flame className="h-3 w-3 mr-1" /> Auto-save on
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {gradingQueue.map((item) => (
-                    <div
+                  {gradingQueue.map((item, idx) => (
+                    <motion.div
                       key={item.course}
-                      className="rounded-2xl border border-border/60 bg-muted/30 p-4"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="rounded-2xl border border-border/60 bg-gradient-to-r from-muted/30 to-muted/10 p-4 hover:shadow-lg transition-all group cursor-pointer"
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-semibold text-foreground">
+                          <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
                             {item.course}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -368,23 +426,26 @@ export default function LecturerDashboard() {
                         </div>
                         <Badge
                           variant="secondary"
-                          className="bg-primary/10 text-primary border-primary/30"
+                          className="bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30"
                         >
                           {item.progress}% reviewed
                         </Badge>
                       </div>
-                      <div className="mt-3 h-2 rounded-full bg-muted/60">
-                        <div
+                      <div className="mt-3 h-2 rounded-full bg-border/50 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${item.progress}%` }}
+                          transition={{ duration: 1, delay: idx * 0.2 }}
                           className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                          style={{ width: `${item.progress}%` }}
                         />
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
             </motion.div>
 
+            {/* Right Side Widgets */}
             <motion.div
               variants={rise}
               initial="hidden"
@@ -392,73 +453,98 @@ export default function LecturerDashboard() {
               custom={2}
               className="space-y-4"
             >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Announcements */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <MessageCircle className="h-5 w-5 text-blue-500" />
                       Announcements
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Push to cohorts instantly
                     </p>
                   </div>
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="bg-muted/60 text-foreground border-border/60"
+                    className="bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30 hover:bg-primary/30"
                   >
                     <Mail className="mr-2 h-4 w-4" /> New
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {announcements.map((item) => (
-                    <div
+                  {announcements.map((item, idx) => (
+                    <motion.div
                       key={item.title}
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3 hover:bg-muted/50 transition-colors group cursor-pointer"
                     >
                       <div>
-                        <p className="font-semibold text-foreground">
+                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
                           {item.title}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {item.audience}
                         </p>
                       </div>
-                      <span className="text-xs text-primary">{item.when}</span>
-                    </div>
+                      <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded">
+                        {item.when}
+                      </span>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Engagement Pulse */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
-                  <CardTitle className="text-lg text-foreground">
+                  <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                    <Heart className="h-5 w-5 text-rose-500" />
                     Engagement pulse
                   </CardTitle>
-                  <Flame className="h-4 w-4 text-amber-500" />
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  >
+                    <Flame className="h-4 w-4 text-amber-500" />
+                  </motion.div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {engagement.map((item) => (
-                    <div key={item.label} className="space-y-2">
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        <span>{item.label}</span>
-                        <span className="font-semibold text-foreground">
+                  {engagement.map((item, idx) => (
+                    <motion.div
+                      key={item.label}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {item.label}
+                        </span>
+                        <span className="font-bold text-primary">
                           {item.value}%
                         </span>
                       </div>
-                      <div className="h-2 rounded-full bg-muted/60">
-                        <div
+                      <div className="h-2 rounded-full bg-border/50 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${item.value}%` }}
+                          transition={{ duration: 1.5, delay: idx * 0.2 }}
                           className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                          style={{ width: `${item.value}%` }}
                         />
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
             </motion.div>
           </section>
 
+          {/* Insights Section */}
           <section className="mt-8 grid gap-4 lg:grid-cols-3">
             <motion.div
               variants={rise}
@@ -467,18 +553,22 @@ export default function LecturerDashboard() {
               custom={3}
               className="space-y-4 lg:col-span-2"
             >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
-                <CardHeader className="flex items-center justify-between">
+              {/* Cohort Insights */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple/5 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                <CardHeader className="flex items-center justify-between relative">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Brain className="h-5 w-5 text-purple-500" />
                       Cohort insights
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Health of your classes at a glance
                     </p>
                   </div>
                   <Badge className="bg-purple-500/20 text-purple-100 border-purple-300/30">
-                    Updated 5m ago
+                    <Eye className="h-3 w-3 mr-1" />
+                    Real-time
                   </Badge>
                 </CardHeader>
                 <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -488,92 +578,110 @@ export default function LecturerDashboard() {
                       value: "92%",
                       trend: "+3% week",
                       icon: Users,
+                      color: "emerald",
                     },
                     {
                       title: "Assignment on-time",
                       value: "78%",
                       trend: "-2% week",
                       icon: CheckCircle2,
+                      color: "blue",
                     },
                     {
                       title: "Live join rate",
                       value: "64%",
                       trend: "+5% week",
                       icon: PlayCircle,
+                      color: "cyan",
                     },
                     {
                       title: "Feedback response",
                       value: "86%",
                       trend: "+1% week",
                       icon: MessageCircle,
+                      color: "pink",
                     },
                   ].map((item, idx) => (
-                    <div
+                    <motion.div
                       key={item.title}
-                      className="rounded-2xl border border-border/60 bg-muted/30 p-4"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className={`rounded-2xl border border-border/60 bg-gradient-to-br from-${item.color}-500/5 to-transparent p-4 hover:shadow-lg transition-all cursor-pointer group`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="space-y-1">
                           <p className="text-sm text-muted-foreground">
                             {item.title}
                           </p>
-                          <p className="text-2xl font-semibold text-foreground">
+                          <p className="text-2xl font-bold text-foreground">
                             {item.value}
                           </p>
-                          <p className="text-xs text-primary">{item.trend}</p>
+                          <p className="text-xs text-primary font-semibold">
+                            {item.trend}
+                          </p>
                         </div>
-                        <div className="h-10 w-10 rounded-xl bg-muted/60 text-primary flex items-center justify-center">
-                          <item.icon className="h-5 w-5" />
+                        <div
+                          className={`h-12 w-12 rounded-xl bg-${item.color}-500/20 text-${item.color}-600 flex items-center justify-center group-hover:scale-110 transition-transform`}
+                        >
+                          <item.icon className="h-6 w-6" />
                         </div>
                       </div>
-                      <div className="mt-3 h-1.5 rounded-full bg-muted/60">
+                      <div className="mt-3 h-2 rounded-full bg-border/50 overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                          style={{ width: `${80 + idx * 5}%` }}
+                          className={`h-full rounded-full bg-gradient-to-r from-${item.color}-500 to-${item.color}-400`}
+                          style={{ width: `${parseInt(item.value)}%` }}
                         />
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Inbox/Messages */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Mail className="h-5 w-5 text-blue-500" />
                       Inbox
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Latest pings across courses
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Latest communications across courses
                     </p>
                   </div>
                   <Badge
                     variant="secondary"
-                    className="bg-muted/60 text-foreground border-border/60"
+                    className="bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30"
                   >
-                    Realtime
+                    Real-time
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {messages.map((item) => (
-                    <div
+                  {messages.map((item, idx) => (
+                    <motion.div
                       key={item.text}
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-3 hover:bg-muted/50 transition-colors group cursor-pointer"
                     >
                       <div>
-                        <p className="font-semibold text-foreground">
+                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
                           {item.from}
                         </p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground line-clamp-1">
                           {item.text}
                         </p>
                       </div>
-                      <span className="text-xs text-primary">{item.time}</span>
-                    </div>
+                      <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded whitespace-nowrap ml-2">
+                        {item.time}
+                      </span>
+                    </motion.div>
                   ))}
                   <Button
                     variant="secondary"
-                    className="w-full bg-muted/60 text-foreground border-border/60"
+                    className="w-full bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30 hover:bg-primary/30"
                   >
                     View all messages
                   </Button>
@@ -581,6 +689,7 @@ export default function LecturerDashboard() {
               </Card>
             </motion.div>
 
+            {/* Right Column - Quick Actions & Course Signals */}
             <motion.div
               variants={rise}
               initial="hidden"
@@ -588,192 +697,183 @@ export default function LecturerDashboard() {
               custom={4}
               className="space-y-4"
             >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Quick Actions */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Zap className="h-5 w-5 text-primary" />
                       Quick actions
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Launch the things you do most
                     </p>
                   </div>
-                  <Sparkles className="h-4 w-4 text-primary" />
                 </CardHeader>
-                <CardContent className="grid gap-3">
+                <CardContent className="grid gap-2">
                   {[
                     {
                       label: "My Courses",
                       icon: BookOpen,
                       action: () => navigate("/lecturer/courses"),
-                    },
-                    {
-                      label: "Manage Marks",
-                      icon: Calculator,
-                      action: () => navigate("/lecturer/marks"),
-                    },
-                    {
-                      label: "Attendance",
-                      icon: Users2,
-                      action: () => navigate("/lecturer/attendance"),
-                    },
-                    {
-                      label: "Classes",
-                      icon: PlayCircle,
-                      action: () => navigate("/lecturer/classes"),
-                    },
-                    {
-                      label: "Messages",
-                      icon: Mail,
-                      action: () => navigate("/lecturer/messages"),
+                      color: "blue",
                     },
                     {
                       label: "Grade Book",
                       icon: BarChart3,
                       action: () => navigate("/lecturer/gradebook"),
+                      color: "emerald",
                     },
                     {
                       label: "Assignments",
                       icon: Target,
                       action: () => navigate("/lecturer/assignments"),
+                      color: "purple",
                     },
                     {
-                      label: "Announcements",
-                      icon: MessageCircle,
-                      action: () => navigate("/lecturer/announcements"),
+                      label: "Classes",
+                      icon: PlayCircle,
+                      action: () => navigate("/lecturer/classes"),
+                      color: "cyan",
                     },
                     {
-                      label: "Roster",
-                      icon: Users,
-                      action: () => navigate("/lecturer/roster"),
+                      label: "Messages",
+                      icon: Mail,
+                      action: () => navigate("/lecturer/messages"),
+                      color: "pink",
                     },
                     {
-                      label: "Rubrics",
-                      icon: CheckCircle2,
-                      action: () => navigate("/lecturer/rubrics"),
+                      label: "Attendance",
+                      icon: Users2,
+                      action: () => navigate("/lecturer/attendance"),
+                      color: "amber",
                     },
-                    {
-                      label: "Analytics",
-                      icon: Flame,
-                      action: () => navigate("/lecturer/analytics"),
-                    },
-                  ].map((action) => (
-                    <Button
+                  ].map((action, idx) => (
+                    <motion.div
                       key={action.label}
-                      variant="secondary"
-                      className="justify-start bg-muted/60 text-foreground border-border/60 hover:bg-muted"
-                      onClick={action.action}
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
                     >
-                      <action.icon className="mr-3 h-4 w-4" />
-                      {action.label}
-                    </Button>
+                      <Button
+                        variant="secondary"
+                        className="justify-start w-full bg-gradient-to-r from-muted/60 to-muted/30 text-foreground border-border/60 hover:bg-muted hover:shadow-md transition-all group"
+                        onClick={action.action}
+                      >
+                        <action.icon className="mr-3 h-4 w-4 group-hover:scale-110 transition-transform" />
+                        {action.label}
+                      </Button>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Course Signals */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
                       Course signals
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground mt-1">
                       Where to lean in this week
                     </p>
                   </div>
-                  <BarChart3 className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {[
-                    { title: "Algorithms", status: "Stable", tag: "Green" },
+                    { title: "Algorithms", status: "Stable", tag: "emerald" },
                     {
                       title: "Systems Design",
                       status: "Needs support",
-                      tag: "Amber",
+                      tag: "amber",
                     },
-                    { title: "Data Mining", status: "At risk", tag: "Red" },
-                  ].map((course) => (
-                    <div
+                    { title: "Data Mining", status: "At risk", tag: "rose" },
+                  ].map((course, idx) => (
+                    <motion.div
                       key={course.title}
-                      className="rounded-xl border border-border/60 bg-muted/30 p-3"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="rounded-xl border border-border/60 bg-muted/30 p-3 hover:shadow-lg transition-all group cursor-pointer"
                     >
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold text-foreground">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors">
                           {course.title}
                         </p>
                         <Badge
                           variant="outline"
-                          className={
-                            course.tag === "Green"
-                              ? "border-emerald-300/40 text-emerald-50"
-                              : course.tag === "Amber"
-                              ? "border-amber-300/40 text-amber-50"
-                              : "border-rose-300/40 text-rose-50"
-                          }
+                          className={`text-xs font-semibold border-${course.tag}-300/40 text-${course.tag}-600 bg-${course.tag}-500/10`}
                         >
                           {course.status}
                         </Badge>
                       </div>
-                      <div className="mt-3 h-1.5 rounded-full bg-muted/60">
-                        <div
-                          className={`h-full rounded-full ${
-                            course.tag === "Green"
-                              ? "bg-emerald-500"
-                              : course.tag === "Amber"
-                              ? "bg-amber-500"
-                              : "bg-rose-500"
-                          }`}
-                          style={{
+                      <div className="h-2 rounded-full bg-border/50 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{
                             width:
-                              course.tag === "Green"
+                              course.tag === "emerald"
                                 ? "82%"
-                                : course.tag === "Amber"
+                                : course.tag === "amber"
                                 ? "64%"
                                 : "42%",
                           }}
+                          transition={{ duration: 1, delay: idx * 0.2 }}
+                          className={`h-full rounded-full bg-${course.tag}-500`}
                         />
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>
 
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+              {/* Performance Summary */}
+              <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg overflow-hidden hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-lg text-foreground">
-                      Energy meter
+                    <CardTitle className="text-lg text-foreground flex items-center gap-2">
+                      <Award className="h-5 w-5 text-gold-500" />
+                      Workload summary
                     </CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Workload vs momentum
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your time allocation
                     </p>
                   </div>
-                  <Target className="h-4 w-4 text-primary" />
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-3">
                   {[
-                    { label: "Teaching load", value: "73%" },
-                    { label: "Research", value: "46%" },
-                    { label: "Admin", value: "32%" },
-                    { label: "Student support", value: "58%" },
-                  ].map((item) => (
-                    <div
+                    { label: "Teaching", value: "73%", icon: BookOpen },
+                    { label: "Research", value: "46%", icon: Brain },
+                    { label: "Admin", value: "32%", icon: Calculator },
+                    { label: "Support", value: "58%", icon: Heart },
+                  ].map((item, idx) => (
+                    <motion.div
                       key={item.label}
-                      className="rounded-xl border border-border/60 bg-muted/30 p-3"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: idx * 0.1 }}
+                      className="rounded-xl border border-border/60 bg-muted/30 p-3 hover:shadow-lg transition-all group"
                     >
-                      <p className="text-xs text-muted-foreground">
-                        {item.label}
-                      </p>
-                      <p className="text-xl font-semibold text-foreground">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-muted-foreground font-semibold">
+                          {item.label}
+                        </p>
+                        <item.icon className="h-3.5 w-3.5 text-primary group-hover:scale-110 transition-transform" />
+                      </div>
+                      <p className="text-xl font-bold text-foreground">
                         {item.value}
                       </p>
-                      <div className="mt-2 h-1.5 rounded-full bg-muted/60">
-                        <div
+                      <div className="mt-2 h-1.5 rounded-full bg-border/50 overflow-hidden">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: item.value }}
+                          transition={{ duration: 1.5, delay: idx * 0.2 }}
                           className="h-full rounded-full bg-gradient-to-r from-primary to-secondary"
-                          style={{ width: item.value }}
                         />
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </CardContent>
               </Card>

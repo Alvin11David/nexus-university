@@ -104,6 +104,7 @@ export default function Webmail() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
+  const [showingAllUsers, setShowingAllUsers] = useState(false);
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -156,12 +157,24 @@ export default function Webmail() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, email, avatar_url")
+        .select("id, full_name, email, avatar_url, role")
         .neq("id", user?.id)
         .order("full_name");
 
       if (error) throw error;
-      setUsers(data || []);
+      const allUsers = data || [];
+      const lecturers = allUsers.filter(
+        (u) => u.role && u.role.toLowerCase() === "lecturer"
+      );
+
+      if (lecturers.length > 0) {
+        setUsers(lecturers);
+        setShowingAllUsers(false);
+      } else {
+        // Fallback: show everyone (student asked for lecturers, but none exist yet)
+        setUsers(allUsers);
+        setShowingAllUsers(true);
+      }
     } catch (error) {
       console.error("Error fetching users:", error);
     }
@@ -263,9 +276,24 @@ export default function Webmail() {
         subject: composeSubject,
         body: composeBody,
         thread_id: crypto.randomUUID(),
+        is_read: false,
+        is_starred: false,
+        is_archived: false,
+        is_deleted_by_sender: false,
+        is_deleted_by_recipient: false,
       });
 
       if (error) throw error;
+
+      // Notify the recipient lecturer
+      const senderName = profile?.full_name || "Student";
+      await supabase.from("notifications").insert({
+        user_id: composeToId,
+        title: `New message from ${senderName}`,
+        message: composeSubject || "You have a new message",
+        type: "info",
+        link: "/webmail",
+      });
 
       // Reset compose form
       setComposeTo("");
@@ -276,6 +304,8 @@ export default function Webmail() {
 
       // Refresh messages
       fetchMessages();
+
+      alert("Message sent successfully!");
     } catch (error) {
       console.error("Error sending message:", error);
       alert(
@@ -307,8 +337,11 @@ export default function Webmail() {
       setComposeToId(null);
       setIsComposeOpen(false);
       fetchDrafts();
+
+      alert("Draft saved successfully!");
     } catch (error) {
       console.error("Error saving draft:", error);
+      alert("Failed to save draft. Error: " + (error as any).message);
     } finally {
       setSavingDraft(false);
     }
@@ -419,7 +452,7 @@ export default function Webmail() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-0">
-      <Header />
+      <StudentHeader />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">
@@ -936,6 +969,11 @@ export default function Webmail() {
                 {composeToId && (
                   <p className="text-xs text-green-600">✓ Recipient selected</p>
                 )}
+                {showingAllUsers && (
+                  <p className="text-xs text-amber-600">
+                    No lecturers found yet. Showing all users as fallback.
+                  </p>
+                )}
                 {composeTo && (
                   <ScrollArea className="max-h-32 rounded-md border">
                     <div className="p-2 space-y-1">
@@ -1033,7 +1071,7 @@ export default function Webmail() {
         </DialogContent>
       </Dialog>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

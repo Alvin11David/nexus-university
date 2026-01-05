@@ -17,6 +17,7 @@ import {
   CheckCircle,
   Target,
   MessageCircle,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,6 +87,7 @@ export function LecturerHeader() {
     { label: "My Courses", href: "/lecturer/courses", icon: BookOpen },
     { label: "Grades", href: "/lecturer/gradebook", icon: BarChart3 },
     { label: "Assignments", href: "/lecturer/assignments", icon: FileText },
+    { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
     { label: "Enrollments", href: "/lecturer/enrollments", icon: Users },
     {
       label: "Announcements",
@@ -192,7 +194,7 @@ export function LecturerHeader() {
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link
-                      to="/settings"
+                      to="/lecturer/settings"
                       className="flex items-center gap-2 cursor-pointer"
                     >
                       <Settings className="h-4 w-4" />
@@ -256,6 +258,14 @@ export function LecturerHeader() {
                     {item.label}
                   </Link>
                 ))}
+              <Link
+                to="/lecturer/settings"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
+              >
+                <Settings className="h-5 w-5" />
+                Settings
+              </Link>
             </nav>
           </motion.div>
         )}

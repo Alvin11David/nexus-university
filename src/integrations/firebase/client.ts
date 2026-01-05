@@ -19,7 +19,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 // Initialize Cloud Functions
-export const functions = getFunctions(app, "africa-south1");
+// Note: Functions are deployed to us-central1 region
+export const functions = getFunctions(app, "us-central1");
 
 // Connect to emulator in development
 if (

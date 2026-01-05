@@ -29,6 +29,10 @@ import LecturerRoster from "./pages/LecturerRoster";
 import LecturerRubrics from "./pages/LecturerRubrics";
 import LecturerAnalytics from "./pages/LecturerAnalytics";
 import LecturerEnrollments from "./pages/LecturerEnrollments";
+import LecturerSettings from "./pages/LecturerSettings";
+import LecturerQuiz from "./pages/LecturerQuiz";
+import StudentAssignments from "./pages/StudentAssignments";
+import Programs from "./pages/Programs";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,6 +55,52 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function StudentRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // Redirect lecturers to lecturer dashboard
+  if (profile?.role === "lecturer") {
+    return <Navigate to="/lecturer" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function LecturerRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // Redirect students to student dashboard
+  if (profile?.role !== "lecturer") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -60,209 +110,241 @@ function AppRoutes() {
       <Route
         path="/dashboard"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/registration"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Registration />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/enrollment"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Enrollment />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/portal"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Portal />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/courses"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/live"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/profile"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/schedule"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Dashboard />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/notifications"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Notifications />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/webmail"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Webmail />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/results"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Results />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/settings"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Settings />
-          </ProtectedRoute>
+          </StudentRoute>
         }
       />
       <Route
         path="/timetable"
         element={
-          <ProtectedRoute>
+          <StudentRoute>
             <Timetable />
+          </StudentRoute>
+        }
+      />
+      <Route
+        path="/assignments"
+        element={
+          <StudentRoute>
+            <StudentAssignments />
+          </StudentRoute>
+        }
+      />
+      <Route
+        path="/programs"
+        element={
+          <ProtectedRoute>
+            <Programs />
           </ProtectedRoute>
         }
       />
       <Route
         path="/lecturer"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerDashboard />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/courses"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerCourseSelection />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/marks"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <MarksManagement />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/attendance"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerAttendance />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/classes"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerClasses />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/messages"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerMessages />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/gradebook"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerGradeBook />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/assignments"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerAssignments />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/enrollments"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerEnrollments />
-          </ProtectedRoute>
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/settings"
+        element={
+          <LecturerRoute>
+            <LecturerSettings />
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/announcements"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerAnnouncements />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/roster"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerRoster />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/rubrics"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerRubrics />
-          </ProtectedRoute>
+          </LecturerRoute>
         }
       />
       <Route
         path="/lecturer/analytics"
         element={
-          <ProtectedRoute>
+          <LecturerRoute>
             <LecturerAnalytics />
-          </ProtectedRoute>
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/quiz"
+        element={
+          <LecturerRoute>
+            <LecturerQuiz />
+          </LecturerRoute>
         }
       />
       <Route path="*" element={<NotFound />} />

@@ -1,12 +1,19 @@
 import { Link, useLocation } from "react-router-dom";
-import { Home, BookOpen, Mail, CheckCircle2, User } from "lucide-react";
+import {
+  Home,
+  BookOpen,
+  Mail,
+  CheckCircle2,
+  User,
+  HelpCircle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const lecturerNavItems = [
   { label: "Home", href: "/lecturer", icon: Home },
   { label: "Courses", href: "/lecturer/courses", icon: BookOpen },
-  { label: "Enrollments", href: "/lecturer/enrollments", icon: CheckCircle2 },
+  { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
   { label: "Messages", href: "/lecturer/messages", icon: Mail },
   { label: "Profile", href: "/profile", icon: User },
 ];
