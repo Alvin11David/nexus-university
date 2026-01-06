@@ -27,6 +27,17 @@ export default function Index() {
   const { user, profile, loading } = useAuth();
   const heroRef = useRef<HTMLDivElement>(null);
 
+  // Only use scroll effects if we're actually going to render the landing page
+  const shouldRender = !loading && !(user && profile);
+
+  const { scrollYProgress } = useScroll({
+    target: shouldRender ? heroRef : null,
+    offset: ["start start", "end start"],
+  });
+
+  const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
+
   // Redirect authenticated users to their dashboard
   if (loading) {
     return (
@@ -43,13 +54,6 @@ export default function Index() {
     console.log("Redirecting to:", destination, "Role:", profile.role);
     return <Navigate to={destination} replace />;
   }
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ["start start", "end start"],
-  });
-
-  const heroY = useTransform(scrollYProgress, [0, 1], [0, 150]);
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0]);
 
   const stats = [
     { value: "50K+", label: "Active Students" },

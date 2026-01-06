@@ -3,11 +3,11 @@ import {
   Home,
   BookOpen,
   Calendar,
-  Bell,
   User,
   Clipboard,
   GraduationCap,
   Settings,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,7 +17,7 @@ const studentNavItems = [
   { label: "Programs", href: "/programs", icon: GraduationCap },
   { label: "Assignments", href: "/assignments", icon: Clipboard },
   { label: "Schedule", href: "/schedule", icon: Calendar },
-  { label: "Alerts", href: "/notifications", icon: Bell },
+  { label: "Webmail", href: "/webmail", icon: Mail },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

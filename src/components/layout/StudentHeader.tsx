@@ -14,6 +14,8 @@ import {
   Calendar,
   Zap,
   Clipboard,
+  Megaphone,
+  Award,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,7 +87,9 @@ export function StudentHeader() {
   const studentNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: Zap },
     { label: "Programs", href: "/programs", icon: BookOpen },
+    { label: "Announcements", href: "/announcements", icon: Megaphone },
     { label: "Assignments", href: "/assignments", icon: Clipboard },
+    { label: "Results", href: "/results", icon: Award },
     { label: "Schedule", href: "/schedule", icon: Calendar },
     { label: "Webmail", href: "/webmail", icon: Mail },
     { label: "Settings", href: "/settings", icon: Settings },

@@ -14,6 +14,7 @@ import {
   Inbox,
   Star,
   Clock,
+  Paperclip,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -46,6 +47,9 @@ interface Message {
   is_deleted_by_sender: boolean;
   is_deleted_by_recipient: boolean;
   created_at: string;
+  attachment_url?: string | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
   from_profile?: {
     id: string;
     full_name: string;
@@ -87,6 +91,34 @@ export default function LecturerMessages() {
   const [composeBody, setComposeBody] = useState("");
   const [composeToId, setComposeToId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+
+  const downloadAttachment = async (
+    attachmentUrl: string,
+    attachmentName: string
+  ) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("message-attachments")
+        .download(attachmentUrl);
+
+      if (error) throw error;
+
+      // Create a download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = attachmentName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading attachment:", error);
+      alert("Failed to download attachment");
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -118,13 +150,7 @@ export default function LecturerMessages() {
       setLoading(true);
       let query = supabase
         .from("messages")
-        .select(
-          `
-          *,
-          from_profile:profiles!from_user_id(id, full_name, email, avatar_url),
-          to_profile:profiles!to_user_id(id, full_name, email, avatar_url)
-        `
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (selectedView === "inbox") {
@@ -144,7 +170,42 @@ export default function LecturerMessages() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setMessages(data || []);
+
+      if (!data || data.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      // Get unique user IDs from messages
+      const userIds = new Set<string>();
+      data.forEach((msg) => {
+        userIds.add(msg.from_user_id);
+        userIds.add(msg.to_user_id);
+      });
+
+      // Fetch profiles for all users
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .in("id", Array.from(userIds));
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        setMessages(data);
+        return;
+      }
+
+      // Create a map for quick lookup
+      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+
+      // Attach profiles to messages
+      const messagesWithProfiles = data.map((msg) => ({
+        ...msg,
+        from_profile: profileMap.get(msg.from_user_id) || null,
+        to_profile: profileMap.get(msg.to_user_id) || null,
+      }));
+
+      setMessages(messagesWithProfiles);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -165,6 +226,32 @@ export default function LecturerMessages() {
 
     try {
       setSending(true);
+
+      let attachmentUrl = null;
+      let attachmentName = null;
+      let attachmentSize = null;
+
+      // Upload attachment if present
+      if (attachmentFile) {
+        setUploadingAttachment(true);
+        const fileExt = attachmentFile.name.split(".").pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("message-attachments")
+          .upload(fileName, attachmentFile);
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          throw new Error("Failed to upload attachment");
+        }
+
+        attachmentUrl = fileName;
+        attachmentName = attachmentFile.name;
+        attachmentSize = attachmentFile.size;
+        setUploadingAttachment(false);
+      }
+
       const { error } = await supabase.from("messages").insert({
         from_user_id: user.id,
         to_user_id: composeToId,
@@ -176,25 +263,38 @@ export default function LecturerMessages() {
         is_archived: false,
         is_deleted_by_sender: false,
         is_deleted_by_recipient: false,
+        attachment_url: attachmentUrl,
+        attachment_name: attachmentName,
+        attachment_size: attachmentSize,
       });
 
       if (error) throw error;
 
       // Notify the student recipient
       const senderName = profile?.full_name || "Lecturer";
-      await supabase.from("notifications").insert({
-        user_id: composeToId,
-        title: `New message from ${senderName}`,
-        message: composeSubject || "You have a new message",
-        type: "info",
-        link: "/webmail",
-      });
+      const { error: notifError } = await supabase
+        .from("notifications")
+        .insert({
+          user_id: composeToId,
+          title: `New message from ${senderName}`,
+          message: composeSubject || "You have a new message",
+          type: "info",
+          link: "/webmail",
+        });
+
+      if (notifError) {
+        console.error("Error creating notification:", notifError);
+      } else {
+        // Emit event to update notification counts
+        window.dispatchEvent(new Event("notifications-updated"));
+      }
 
       // Reset compose form
       setComposeTo("");
       setComposeSubject("");
       setComposeBody("");
       setComposeToId(null);
+      setAttachmentFile(null);
       setIsComposeOpen(false);
 
       // Refresh messages
@@ -539,6 +639,63 @@ export default function LecturerMessages() {
                 rows={8}
               />
             </div>
+
+            {/* Attachment Section */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Attachment (Optional):
+              </label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    document
+                      .getElementById("lecturer-attachment-upload")
+                      ?.click()
+                  }
+                  disabled={uploadingAttachment}
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  {attachmentFile ? "Change File" : "Attach File"}
+                </Button>
+                <input
+                  id="lecturer-attachment-upload"
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 10485760) {
+                        alert("File size must be less than 10MB");
+                        return;
+                      }
+                      setAttachmentFile(file);
+                    }
+                  }}
+                />
+                {attachmentFile && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-sm text-muted-foreground truncate">
+                      {attachmentFile.name} (
+                      {(attachmentFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAttachmentFile(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+              </p>
+            </div>
           </div>
           <div className="flex justify-end gap-2">
             <Button
@@ -611,6 +768,30 @@ export default function LecturerMessages() {
                   <div className="prose max-w-none whitespace-pre-wrap">
                     {selectedMessage.body}
                   </div>
+
+                  {/* Attachment */}
+                  {selectedMessage.attachment_url && (
+                    <div className="mt-4 pt-4 border-t">
+                      <p className="text-sm font-medium mb-2">Attachment:</p>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          downloadAttachment(
+                            selectedMessage.attachment_url!,
+                            selectedMessage.attachment_name || "attachment"
+                          )
+                        }
+                        className="gap-2"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        {selectedMessage.attachment_name}{" "}
+                        {selectedMessage.attachment_size &&
+                          `(${(selectedMessage.attachment_size / 1024).toFixed(
+                            1
+                          )} KB)`}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </ScrollArea>
               <div className="flex justify-end gap-2 pt-4">

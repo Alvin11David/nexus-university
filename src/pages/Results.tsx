@@ -1,20 +1,11 @@
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  Trophy,
-  BookOpen,
-  GraduationCap,
-  ArrowLeft,
-  Sparkles,
-  TrendingUp,
-  Zap,
-  Award,
-  Target,
-  Calendar,
-} from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Download, Printer, GraduationCap, QrCode, X } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,6 +29,7 @@ interface ExamResultRow {
 interface TermResult {
   term: string;
   gpa: number;
+  cgpa: number;
   totalCredits: number;
   remark?: string;
   entries: Array<
@@ -45,44 +37,23 @@ interface TermResult {
   >;
 }
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20, scale: 0.95 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring" as const,
-      stiffness: 100,
-    },
-  },
-};
-
 const getGradeColor = (grade: string | null | undefined) => {
-  if (!grade) return "bg-gray-100 text-gray-700";
+  if (!grade) return "text-gray-700";
   const gradeUpper = grade.toUpperCase();
-  if (gradeUpper.startsWith("A")) return "bg-emerald-100 text-emerald-700";
-  if (gradeUpper.startsWith("B")) return "bg-blue-100 text-blue-700";
-  if (gradeUpper.startsWith("C")) return "bg-amber-100 text-amber-700";
-  if (gradeUpper.startsWith("D")) return "bg-orange-100 text-orange-700";
-  return "bg-red-100 text-red-700";
+  if (gradeUpper.startsWith("A")) return "text-emerald-700";
+  if (gradeUpper.startsWith("B")) return "text-blue-700";
+  if (gradeUpper.startsWith("C")) return "text-amber-700";
+  if (gradeUpper.startsWith("D")) return "text-orange-700";
+  return "text-red-700";
 };
 
 export default function Results() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [resultsLoading, setResultsLoading] = useState(true);
   const [termResults, setTermResults] = useState<TermResult[]>([]);
   const [cgpa, setCgpa] = useState(0);
+  const [showQRModal, setShowQRModal] = useState(false);
+  const qrRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -90,23 +61,79 @@ export default function Results() {
     const loadResults = async () => {
       try {
         setResultsLoading(true);
-        const { data, error } = await supabase
-          .from("exam_results")
-          .select(
-            "id, course_id, academic_year, semester, marks, grade, grade_point, courses(title, code, credits)"
-          )
-          .eq("student_id", user.id)
-          .order("academic_year", { ascending: false })
-          .order("semester", { ascending: false });
 
-        if (error) throw error;
+        // First, try to load from student_grades (newer system)
+        let data: any[] | null = null;
+        let error: any = null;
 
-        const normalized = (data as ExamResultRow[] | null)?.map((row) => ({
+        try {
+          console.log("Loading results for student:", user.id);
+
+          const response = await (supabase as any)
+            .from("student_grades")
+            .select(
+              "id, course_id, academic_year, semester, assignment1, assignment2, midterm, participation, final_exam, total, grade, gp, courses(title, code, credits)"
+            )
+            .eq("student_id", user.id)
+            .order("academic_year", { ascending: false })
+            .order("semester", { ascending: false });
+
+          console.log("student_grades response:", response);
+
+          if (!response.error && response.data && response.data.length > 0) {
+            // Successfully loaded from student_grades
+            console.log("Loaded from student_grades:", response.data);
+            data = response.data;
+          } else {
+            // Fall back to exam_results
+            console.log(
+              "No data from student_grades, falling back to exam_results"
+            );
+            throw new Error("Use exam_results");
+          }
+        } catch (fallbackError) {
+          console.log("Falling back to exam_results:", fallbackError);
+
+          // Fall back to exam_results table
+          const { data: examData, error: examError } = await supabase
+            .from("exam_results")
+            .select(
+              "id, course_id, academic_year, semester, marks, grade, grade_point, courses(title, code, credits)"
+            )
+            .eq("student_id", user.id)
+            .order("academic_year", { ascending: false })
+            .order("semester", { ascending: false });
+
+          console.log("exam_results response:", {
+            data: examData,
+            error: examError,
+          });
+
+          data = examData;
+          error = examError;
+        }
+
+        if (error) {
+          console.error("Error in results loading:", error);
+          throw error;
+        }
+
+        // Normalize data from both sources
+        const normalized = (data as any[] | null)?.map((row) => ({
           ...row,
           courseTitle: row.courses?.title || "Course",
           courseCode: row.courses?.code || "",
           credits: row.courses?.credits || 3,
+          marks: row.total || row.marks || 0,
+          grade_point: row.gp || row.grade_point || 0,
+          a1: row.assignment1 || 0,
+          a2: row.assignment2 || 0,
+          mid: row.midterm || 0,
+          part: row.participation || 0,
+          final: row.final_exam || 0,
         }));
+
+        console.log("Normalized data:", normalized);
 
         const termMap = new Map<string, TermResult>();
         (normalized || []).forEach((row) => {
@@ -131,6 +158,8 @@ export default function Results() {
           gpa: t.totalCredits ? Number((t.gpa / t.totalCredits).toFixed(2)) : 0,
         }));
 
+        console.log("Terms:", terms);
+
         const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
         const totalPoints = terms.reduce(
           (sum, t) => sum + t.gpa * t.totalCredits,
@@ -139,6 +168,8 @@ export default function Results() {
         const computedCgpa = totalCredits
           ? Number((totalPoints / totalCredits).toFixed(2))
           : 0;
+
+        console.log("CGPA:", computedCgpa);
 
         setTermResults(terms);
         setCgpa(computedCgpa);
@@ -183,445 +214,361 @@ export default function Results() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-20 md:pb-0 relative overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 -left-20 w-96 h-96 bg-gradient-to-br from-blue-500/10 to-cyan-500/5 blur-3xl" />
-        <div className="absolute top-40 -right-24 w-80 h-80 bg-gradient-to-bl from-purple-500/10 via-pink-500/5 to-blue-500/5 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 w-96 h-96 bg-gradient-to-tr from-emerald-500/10 to-teal-500/5 blur-3xl" />
-      </div>
-
+    <div className="min-h-screen bg-background pb-20 md:pb-8">
       <StudentHeader />
 
-      <main className="container py-8 space-y-8 relative">
-        {/* Header Section */}
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-primary/20 to-secondary/20 text-primary text-xs font-bold uppercase tracking-wide">
-              <Trophy className="h-4 w-4" /> Academic Performance
+      <main className="container py-6 md:py-8 max-w-5xl">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-6"
+        >
+          {/* Header Section with Actions */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+                Academic Transcript
+              </h1>
+              <p className="text-sm text-muted-foreground mt-1">
+                Your complete academic record and grades
+              </p>
             </div>
-            <h1 className="font-display text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
-              Your Results
-            </h1>
-            <p className="text-muted-foreground max-w-2xl">
-              Complete academic transcript with detailed course marks, grades,
-              and comprehensive GPA analysis
-            </p>
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => window.print()}
+              >
+                <Printer className="h-4 w-4" />
+                <span className="hidden sm:inline">Print</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => {
+                  const html = document.documentElement.innerHTML;
+                  const blob = new Blob([html], { type: "text/html" });
+                  const url = URL.createObjectURL(blob);
+                  const link = document.createElement("a");
+                  link.href = url;
+                  link.download = `academic-transcript-${user?.id}.html`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Download</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setShowQRModal(true)}
+              >
+                <QrCode className="h-4 w-4" />
+                <span className="hidden sm:inline">QR Code</span>
+              </Button>
+            </div>
           </div>
 
-          {/* Overall Stats */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-1 md:grid-cols-4 gap-4"
-          >
-            {/* CGPA Card */}
-            <div className="md:col-span-2 rounded-3xl bg-gradient-to-br from-primary/20 via-primary/10 to-transparent border border-primary/30 p-6 relative overflow-hidden group hover:border-primary/50 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="relative space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                    <GraduationCap className="h-5 w-5 text-primary" />
-                  </div>
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    CGPA
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-2">
-                  <p className="text-4xl font-black text-primary">
-                    {resultsLoading ? "—" : cgpa.toFixed(2)}
-                  </p>
-                  <span className="text-sm text-muted-foreground">/5.00</span>
-                </div>
-                {!resultsLoading && (
-                  <div className="flex items-center gap-2 pt-2">
-                    <div className="h-2 flex-1 rounded-full bg-border overflow-hidden">
-                      <div
-                        className="h-2 bg-gradient-to-r from-primary to-secondary"
-                        style={{ width: `${(cgpa / 5) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-xs font-semibold text-primary">
-                      {((cgpa / 5) * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                )}
-              </div>
+          {resultsLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i} className="p-6 animate-pulse h-96 bg-muted/20" />
+              ))}
             </div>
-
-            {/* Performance Level */}
-            {!resultsLoading && cgpa > 0 && (
-              <div
-                className={`rounded-3xl ${
-                  getPerformanceLevel(cgpa).bgColor
-                } border border-current/20 p-6 relative overflow-hidden`}
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`p-2 rounded-lg ${
-                        getPerformanceLevel(cgpa).bgColor
-                      }`}
-                    >
-                      <Zap
-                        className={`h-5 w-5 ${getPerformanceLevel(cgpa).color}`}
-                      />
-                    </div>
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                      Performance
-                    </span>
+          ) : termResults.length === 0 ? (
+            <Card className="p-12 text-center">
+              <GraduationCap className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
+              <p className="text-muted-foreground">
+                No results available yet. Check back soon!
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-8">
+              {/* Student Information Card */}
+              <Card className="p-4 md:p-6 border">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                      Full Name
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      {profile?.full_name || "Not Available"}
+                    </p>
                   </div>
-                  <p
-                    className={`text-2xl font-black ${
-                      getPerformanceLevel(cgpa).color
-                    }`}
-                  >
-                    {getPerformanceLevel(cgpa).label}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Semesters Completed */}
-            <div className="rounded-3xl bg-gradient-to-br from-secondary/20 via-secondary/10 to-transparent border border-secondary/30 p-6 relative overflow-hidden group hover:border-secondary/50 transition-all duration-300">
-              <div className="absolute inset-0 bg-gradient-to-br from-secondary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="relative space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-lg bg-secondary/10 group-hover:bg-secondary/20 transition-colors">
-                    <Calendar className="h-5 w-5 text-secondary" />
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                      Student Number
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      {profile?.student_number || "Not Available"}
+                    </p>
                   </div>
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                    Semesters
-                  </span>
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                      Programme
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      {profile?.programme || "Not Available"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                      Department
+                    </p>
+                    <p className="font-semibold text-foreground">
+                      {profile?.department || "Not Available"}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-4xl font-black text-secondary">
-                  {resultsLoading ? "—" : termResults.length}
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
+              </Card>
 
-        {/* Results by Semester */}
-        {resultsLoading ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="space-y-4"
-          >
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="rounded-2xl bg-muted/30 p-6 h-96 animate-pulse"
-              />
-            ))}
-          </motion.div>
-        ) : termResults.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="rounded-2xl border-2 border-dashed border-border/50 p-12 text-center space-y-3"
-          >
-            <BookOpen className="h-12 w-12 text-muted-foreground mx-auto opacity-50" />
-            <p className="text-muted-foreground">
-              No results available yet. Check back soon!
-            </p>
-          </motion.div>
-        ) : (
-          <motion.div
-            variants={containerVariants}
-            initial="hidden"
-            animate="visible"
-            className="space-y-6"
-          >
-            {termResults.map((term, termIdx) => {
-              const perfLevel = getPerformanceLevel(term.gpa);
-              return (
+              {/* Transcript Results */}
+              {termResults.map((term, idx) => (
                 <motion.div
                   key={term.term}
-                  variants={itemVariants}
-                  className="space-y-3"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.1 }}
+                  className="space-y-2"
                 >
                   {/* Semester Header */}
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-2">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/10 border border-primary/30">
-                        <Calendar className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-bold text-foreground">
-                          {term.term}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Academic semester results
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                          GPA
-                        </p>
-                        <p className="text-3xl font-black text-primary">
-                          {term.gpa.toFixed(2)}
-                        </p>
-                      </div>
-                      <div
-                        className={`px-4 py-2 rounded-xl ${perfLevel.bgColor} border border-current/20`}
-                      >
-                        <p className={`text-xs font-bold ${perfLevel.color}`}>
-                          {perfLevel.label}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                  <h2 className="text-base md:text-lg font-bold text-foreground">
+                    {term.term}
+                  </h2>
 
-                  {/* Courses Table */}
-                  <div className="rounded-2xl overflow-hidden border border-border/50 bg-card/60 backdrop-blur-sm shadow-xl hover:shadow-2xl transition-shadow duration-300">
-                    {/* Table Header - Desktop */}
-                    <div className="hidden md:grid md:grid-cols-12 gap-3 px-6 py-4 bg-gradient-to-r from-primary/10 via-secondary/5 to-accent/5 border-b border-border/50 font-bold text-xs text-muted-foreground uppercase tracking-wider">
-                      <div className="md:col-span-3">Code & Title</div>
-                      <div className="md:col-span-1 text-center">Mark</div>
-                      <div className="md:col-span-1 text-center">CUs</div>
-                      <div className="md:col-span-1 text-center">Grade</div>
-                      <div className="md:col-span-1 text-center">GP</div>
-                      <div className="md:col-span-2 text-center">Remark</div>
-                      <div className="md:col-span-2 text-right">Status</div>
-                    </div>
-
-                    {/* Courses */}
-                    <div className="divide-y divide-border/30">
-                      {term.entries.map((course, courseIdx) => (
-                        <motion.div
-                          key={course.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: courseIdx * 0.05 }}
-                          className="group p-4 md:p-6 hover:bg-primary/5 transition-colors duration-200 cursor-default"
-                        >
-                          {/* Mobile Layout */}
-                          <div className="md:hidden space-y-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <p className="font-bold text-sm text-foreground">
-                                  {course.courseTitle}
-                                </p>
-                                <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider mt-1">
+                  {/* Responsive Table Container */}
+                  <div className="overflow-x-auto">
+                    <Card className="p-0 border">
+                      {/* Desktop Table */}
+                      <div className="hidden sm:block">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-border/50 bg-muted/30">
+                              <th className="px-4 py-2 text-left font-bold text-xs uppercase text-muted-foreground">
+                                Code
+                              </th>
+                              <th className="px-4 py-2 text-left font-bold text-xs uppercase text-muted-foreground">
+                                Title
+                              </th>
+                              <th className="px-4 py-2 text-center font-bold text-xs uppercase text-muted-foreground">
+                                Mark
+                              </th>
+                              <th className="px-4 py-2 text-center font-bold text-xs uppercase text-muted-foreground">
+                                CUs
+                              </th>
+                              <th className="px-4 py-2 text-center font-bold text-xs uppercase text-muted-foreground">
+                                Grade
+                              </th>
+                              <th className="px-4 py-2 text-center font-bold text-xs uppercase text-muted-foreground">
+                                GD Pt
+                              </th>
+                              <th className="px-4 py-2 text-center font-bold text-xs uppercase text-muted-foreground">
+                                Remark
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border/30">
+                            {term.entries.map((course) => (
+                              <tr key={course.id} className="hover:bg-muted/50">
+                                <td className="px-4 py-3 font-mono text-xs font-bold text-primary">
                                   {course.courseCode}
+                                </td>
+                                <td className="px-4 py-3 text-foreground">
+                                  {course.courseTitle}
+                                </td>
+                                <td className="px-4 py-3 text-center font-semibold">
+                                  {course.marks.toFixed(1)}
+                                </td>
+                                <td className="px-4 py-3 text-center font-semibold">
+                                  {course.credits}
+                                </td>
+                                <td
+                                  className={`px-4 py-3 text-center font-bold ${getGradeColor(
+                                    course.grade
+                                  )}`}
+                                >
+                                  {course.grade || "—"}
+                                </td>
+                                <td className="px-4 py-3 text-center font-semibold">
+                                  {course.grade_point?.toFixed(1) || "0.0"}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span className="text-xs font-bold text-emerald-600">
+                                    NP
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Card Layout */}
+                      <div className="sm:hidden divide-y divide-border/30">
+                        {term.entries.map((course) => (
+                          <div key={course.id} className="p-4 space-y-3">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-bold text-xs text-primary font-mono">
+                                  {course.courseCode}
+                                </p>
+                                <p className="font-semibold text-sm text-foreground truncate">
+                                  {course.courseTitle}
                                 </p>
                               </div>
                               <div
-                                className={`px-2 py-1 rounded-lg font-bold text-xs ${getGradeColor(
+                                className={`font-bold ${getGradeColor(
                                   course.grade
                                 )}`}
                               >
                                 {course.grade || "—"}
                               </div>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="bg-muted/50 rounded-lg p-2">
+                            <div className="grid grid-cols-4 gap-2 text-xs">
+                              <div>
                                 <p className="text-muted-foreground">Mark</p>
-                                <p className="font-bold text-primary text-lg">
+                                <p className="font-semibold">
                                   {course.marks.toFixed(1)}
                                 </p>
                               </div>
-                              <div className="bg-muted/50 rounded-lg p-2">
+                              <div>
                                 <p className="text-muted-foreground">CUs</p>
-                                <p className="font-bold text-secondary text-lg">
+                                <p className="font-semibold">
                                   {course.credits}
                                 </p>
                               </div>
-                              <div className="bg-muted/50 rounded-lg p-2">
-                                <p className="text-muted-foreground">GP</p>
-                                <p className="font-bold text-accent text-lg">
-                                  {course.grade_point?.toFixed(2) || "0.00"}
+                              <div>
+                                <p className="text-muted-foreground">GD Pt</p>
+                                <p className="font-semibold">
+                                  {course.grade_point?.toFixed(1) || "0.0"}
                                 </p>
                               </div>
-                              <div className="bg-muted/50 rounded-lg p-2">
-                                <p className="text-muted-foreground">Remark</p>
-                                <p className="font-bold text-emerald-600">NP</p>
-                              </div>
-                            </div>
-
-                            <div className="h-2 rounded-full bg-border/50 overflow-hidden">
-                              <div
-                                className="h-2 bg-gradient-to-r from-primary via-secondary to-accent"
-                                style={{
-                                  width: `${Math.min(
-                                    100,
-                                    (course.marks / 100) * 100
-                                  )}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Desktop Layout */}
-                          <div className="hidden md:grid md:grid-cols-12 gap-3 items-center">
-                            <div className="md:col-span-3">
-                              <p className="font-bold text-sm text-foreground group-hover:text-primary transition-colors">
-                                {course.courseTitle}
-                              </p>
-                              <p className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-                                {course.courseCode}
-                              </p>
-                            </div>
-
-                            <div className="md:col-span-1 text-center">
-                              <p className="font-black text-primary text-lg">
-                                {course.marks.toFixed(1)}
-                              </p>
-                              <div className="h-1 rounded-full bg-border/50 overflow-hidden mt-1">
-                                <div
-                                  className="h-1 bg-gradient-to-r from-primary to-secondary"
-                                  style={{
-                                    width: `${Math.min(
-                                      100,
-                                      (course.marks / 100) * 100
-                                    )}%`,
-                                  }}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="md:col-span-1 text-center">
-                              <p className="font-bold text-secondary">
-                                {course.credits}
-                              </p>
-                            </div>
-
-                            <div className="md:col-span-1 text-center">
-                              <span
-                                className={`px-2 py-1 rounded-lg font-bold text-xs inline-block ${getGradeColor(
-                                  course.grade
-                                )}`}
-                              >
-                                {course.grade || "—"}
-                              </span>
-                            </div>
-
-                            <div className="md:col-span-1 text-center">
-                              <p className="font-bold text-accent">
-                                {course.grade_point?.toFixed(2) || "0.00"}
-                              </p>
-                            </div>
-
-                            <div className="md:col-span-2 text-center">
-                              <p className="text-xs font-bold text-emerald-600 bg-emerald-50 inline-block px-3 py-1 rounded-full">
-                                NP
-                              </p>
-                            </div>
-
-                            <div className="md:col-span-2 text-right">
-                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                <Award className="h-4 w-4 text-primary" />
-                                <span className="text-xs font-semibold text-primary">
-                                  Passed
-                                </span>
+                              <div>
+                                <p className="text-muted-foreground">Rmk</p>
+                                <p className="font-semibold text-emerald-600">
+                                  NP
+                                </p>
                               </div>
                             </div>
                           </div>
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    {/* Semester Summary Footer */}
-                    <div className="bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5 border-t border-border/50 px-4 md:px-6 py-4">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
-                            Total CUs
-                          </p>
-                          <p className="text-xl font-black text-primary mt-1">
-                            {term.totalCredits}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
-                            Semester GPA
-                          </p>
-                          <p className="text-xl font-black text-secondary mt-1">
-                            {term.gpa.toFixed(2)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
-                            Grade Status
-                          </p>
-                          <p className="text-xl font-black text-accent mt-1">
-                            NP
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-muted-foreground text-xs font-bold uppercase tracking-wider">
-                            Courses Completed
-                          </p>
-                          <p className="text-xl font-black text-emerald-600 mt-1">
-                            {term.entries.length}
-                          </p>
-                        </div>
+                        ))}
                       </div>
+                    </Card>
+                  </div>
+
+                  {/* Semester Summary */}
+                  <div className="flex flex-wrap gap-4 text-sm bg-muted/30 rounded-lg p-4">
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        Semester Remark
+                      </p>
+                      <p className="font-semibold text-emerald-600">
+                        {term.remark || "NP"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        GPA
+                      </p>
+                      <p className="font-bold text-lg text-primary">
+                        {term.gpa.toFixed(2)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                        CGPA
+                      </p>
+                      <p className="font-bold text-lg text-secondary">
+                        {cgpa.toFixed(2)}
+                      </p>
                     </div>
                   </div>
                 </motion.div>
-              );
-            })}
-          </motion.div>
-        )}
-
-        {/* Overall Performance Summary */}
-        {!resultsLoading && termResults.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="rounded-2xl bg-gradient-to-br from-primary/10 via-secondary/5 to-accent/5 border border-primary/30 p-6 md:p-8"
-          >
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-primary" />
-                <h3 className="text-lg font-bold">Academic Summary</h3>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                    Overall CGPA
-                  </p>
-                  <p className="text-3xl font-black text-primary">
-                    {cgpa.toFixed(2)}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                    Total Semesters
-                  </p>
-                  <p className="text-3xl font-black text-secondary">
-                    {termResults.length}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                    Total Credits
-                  </p>
-                  <p className="text-3xl font-black text-accent">
-                    {termResults.reduce((sum, t) => sum + t.totalCredits, 0)}
-                  </p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                    Total Courses
-                  </p>
-                  <p className="text-3xl font-black text-emerald-600">
-                    {termResults.reduce((sum, t) => sum + t.entries.length, 0)}
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
+          )}
+        </motion.div>
+      </main>
+
+      {/* QR Code Modal */}
+      <AnimatePresence>
+        {showQRModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowQRModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-foreground">
+                  Share Results
+                </h2>
+                <button
+                  onClick={() => setShowQRModal(false)}
+                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4 border border-border">
+                <div ref={qrRef}>
+                  <QRCodeSVG
+                    value={`https://nexus-university.vercel.app/results?student=${user?.id}`}
+                    size={256}
+                    level="H"
+                    includeMargin={true}
+                    fgColor="#000000"
+                    bgColor="#ffffff"
+                  />
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground text-center mb-6">
+                Scan this QR code to view academic results for{" "}
+                <strong>{profile?.full_name || "this student"}</strong>
+              </p>
+
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowQRModal(false)}
+                >
+                  Close
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => {
+                    const link = document.createElement("a");
+                    const canvas = qrRef.current?.querySelector("canvas");
+                    if (canvas) {
+                      link.href = canvas.toDataURL("image/png");
+                      link.download = `results-qr-${user?.id}.png`;
+                      link.click();
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4" />
+                  Download QR
+                </Button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
-      </main>
+      </AnimatePresence>
 
       <StudentBottomNav />
     </div>

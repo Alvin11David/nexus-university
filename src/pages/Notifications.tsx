@@ -453,9 +453,17 @@ export default function Notifications() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        className="gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        className={`gap-1 ${
+                                          notification.type === "announcement"
+                                            ? "opacity-100"
+                                            : "opacity-0 group-hover:opacity-100"
+                                        } transition-opacity`}
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          // Mark as read before navigating
+                                          if (!notification.is_read) {
+                                            markAsRead(notification.id);
+                                          }
                                           navigate(notification.link!);
                                         }}
                                       >

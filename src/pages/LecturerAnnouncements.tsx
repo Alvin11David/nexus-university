@@ -13,6 +13,8 @@ import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Announcement {
   id: string;
@@ -35,9 +37,32 @@ const rise = {
   }),
 };
 
+interface StudentEngagement {
+  views: Array<{ student_id: string; student_name: string; viewed_at: string }>;
+  likes: Array<{
+    student_id: string;
+    student_name: string;
+    created_at: string;
+  }>;
+  comments: Array<{
+    student_id: string;
+    student_name: string;
+    content: string;
+    created_at: string;
+  }>;
+}
+
 export default function LecturerAnnouncements() {
+  const { user, profile } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [engagementDetails, setEngagementDetails] =
+    useState<StudentEngagement | null>(null);
+  const [loadingEngagement, setLoadingEngagement] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
     content: "",
@@ -45,60 +70,156 @@ export default function LecturerAnnouncements() {
     priority: "normal" as const,
   });
 
-  const mockAnnouncements: Announcement[] = [
-    {
-      id: "1",
-      title: "Midterm Exam Rescheduled",
-      content:
-        "The midterm exam has been moved from January 15 to January 18. Please update your schedules accordingly.",
-      date: "2h ago",
-      audience: "All Students",
-      views: 157,
-      likes: 42,
-      comments: 8,
-      priority: "high",
-    },
-    {
-      id: "2",
-      title: "Guest Lecture Tomorrow",
-      content:
-        "Dr. Sarah Chen will be giving a guest lecture on Machine Learning applications tomorrow at 2 PM in Room B2-201.",
-      date: "4h ago",
-      audience: "Advanced Track",
-      views: 89,
-      likes: 35,
-      comments: 12,
-      priority: "normal",
-    },
-    {
-      id: "3",
-      title: "Assignment 2 Deadline Extended",
-      content:
-        "Due to the holiday, Assignment 2 deadline has been extended to January 12.",
-      date: "1d ago",
-      audience: "All Students",
-      views: 203,
-      likes: 78,
-      comments: 15,
-      priority: "high",
-    },
-    {
-      id: "4",
-      title: "Office Hours This Week",
-      content:
-        "My office hours remain unchanged: Tuesday 3-5 PM and Thursday 4-6 PM. Zoom link available on course portal.",
-      date: "3d ago",
-      audience: "All Students",
-      views: 312,
-      likes: 45,
-      comments: 5,
-      priority: "normal",
-    },
-  ];
-
   useEffect(() => {
-    setAnnouncements(mockAnnouncements);
-  }, []);
+    if (user) {
+      fetchAnnouncements();
+
+      // Create a debounced refetch function
+      let debounceTimer: NodeJS.Timeout;
+      const debouncedFetch = () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          console.log("Real-time update detected, refetching announcements...");
+          fetchAnnouncements();
+        }, 500);
+      };
+
+      // Listen for announcement interactions from other tabs/windows
+      const handleAnnouncementInteraction = (e: Event) => {
+        console.log("Announcement interaction event received:", e);
+        debouncedFetch();
+      };
+      window.addEventListener(
+        "announcement-interaction",
+        handleAnnouncementInteraction
+      );
+
+      // Subscribe to real-time updates for interactions
+      const likesSubscription = supabase
+        .channel("public:announcement_likes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "announcement_likes",
+          },
+          (payload) => {
+            console.log("Like event received:", payload);
+            debouncedFetch();
+          }
+        )
+        .subscribe();
+
+      const commentsSubscription = supabase
+        .channel("public:announcement_comments")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "announcement_comments",
+          },
+          (payload) => {
+            console.log("Comment event received:", payload);
+            debouncedFetch();
+          }
+        )
+        .subscribe();
+
+      const viewsSubscription = supabase
+        .channel("public:announcement_views")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "announcement_views",
+          },
+          (payload) => {
+            console.log("View event received:", payload);
+            debouncedFetch();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        clearTimeout(debounceTimer);
+        window.removeEventListener(
+          "announcement-interaction",
+          handleAnnouncementInteraction
+        );
+        likesSubscription.unsubscribe();
+        commentsSubscription.unsubscribe();
+        viewsSubscription.unsubscribe();
+      };
+    }
+  }, [user]);
+
+  const fetchAnnouncements = async () => {
+    try {
+      setIsLoading(true);
+      // Get lecturer's courses
+      const { data: lecturerCourses } = await supabase
+        .from("lecturer_courses")
+        .select("course_id")
+        .eq("lecturer_id", user?.id);
+
+      if (lecturerCourses && lecturerCourses.length > 0) {
+        const courseIds = lecturerCourses.map((lc) => lc.course_id);
+
+        // Fetch announcements for these courses
+        const { data, error } = await supabase
+          .from("announcements")
+          .select("*")
+          .in("course_id", courseIds)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        // Transform the data and fetch interaction counts
+        const transformedAnnouncements = await Promise.all(
+          (data || []).map(async (ann) => {
+            // Get view count
+            const { count: viewCount } = await supabase
+              .from("announcement_views")
+              .select("*", { count: "exact", head: true })
+              .eq("announcement_id", ann.id);
+
+            // Get like count
+            const { count: likeCount } = await supabase
+              .from("announcement_likes")
+              .select("*", { count: "exact", head: true })
+              .eq("announcement_id", ann.id);
+
+            // Get comment count
+            const { count: commentCount } = await supabase
+              .from("announcement_comments")
+              .select("*", { count: "exact", head: true })
+              .eq("announcement_id", ann.id);
+
+            return {
+              id: ann.id,
+              title: ann.title,
+              content: ann.content,
+              date: new Date(ann.created_at).toLocaleDateString(),
+              audience: "All Students",
+              views: viewCount || 0,
+              likes: likeCount || 0,
+              comments: commentCount || 0,
+              priority: "normal" as const,
+            };
+          })
+        );
+
+        setAnnouncements(transformedAnnouncements);
+      }
+    } catch (error) {
+      console.error("Error fetching announcements:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const stats = {
     totalAnnouncements: announcements.length,
@@ -120,27 +241,217 @@ export default function LecturerAnnouncements() {
     }
   };
 
-  const handleCreateAnnouncement = () => {
+  const handleCreateAnnouncement = async () => {
     if (formData.title && formData.content) {
-      const newAnnouncement: Announcement = {
-        id: (announcements.length + 1).toString(),
-        title: formData.title,
-        content: formData.content,
-        audience: formData.audience,
-        priority: formData.priority,
-        date: "now",
-        views: 0,
-        likes: 0,
-        comments: 0,
+      try {
+        setIsPublishing(true);
+
+        if (!user) {
+          throw new Error("User not authenticated");
+        }
+
+        // Get all lecturer's courses
+        const { data: lecturerCourses } = await supabase
+          .from("lecturer_courses")
+          .select("course_id")
+          .eq("lecturer_id", user.id);
+
+        if (!lecturerCourses || lecturerCourses.length === 0) {
+          throw new Error("No courses found");
+        }
+
+        const courseIds = lecturerCourses.map((lc) => lc.course_id);
+
+        // Save announcement to database - create ONE announcement, linked to the first course
+        // Students will see it based on their enrollment in any of the lecturer's courses
+        const announcementData = {
+          course_id: courseIds[0], // Link to first course for filtering
+          author_id: user.id,
+          title: formData.title,
+          content: formData.content,
+          is_global: false,
+          is_pinned: false,
+        };
+
+        const { data: insertedAnnouncement, error: insertError } =
+          await supabase
+            .from("announcements")
+            .insert(announcementData)
+            .select()
+            .single();
+
+        if (insertError) {
+          console.error("Error inserting announcement:", insertError);
+          throw insertError;
+        }
+
+        console.log(
+          "Announcement inserted successfully:",
+          insertedAnnouncement
+        );
+
+        // Get all students enrolled in any of the lecturer's courses
+        const { data: enrollments } = await supabase
+          .from("enrollments")
+          .select("student_id")
+          .in("course_id", courseIds);
+
+        console.log(
+          "Students enrolled in courses:",
+          enrollments?.length || 0,
+          "enrollments:",
+          enrollments
+        );
+
+        if (enrollments && enrollments.length > 0) {
+          // Get unique student IDs
+          const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
+
+          const announcementId = insertedAnnouncement.id;
+
+          // Send notifications to all students
+          const notifications = studentIds.map((student_id) => ({
+            user_id: student_id,
+            title: `New Announcement: ${formData.title}`,
+            message:
+              formData.content.substring(0, 100) +
+              (formData.content.length > 100 ? "..." : ""),
+            type: "announcement",
+            link: `/announcements?id=${announcementId}`,
+          }));
+
+          await supabase.from("notifications").insert(notifications);
+
+          // Emit event to update notification counts
+          window.dispatchEvent(new Event("notifications-updated"));
+        }
+
+        // Refresh announcements
+        await fetchAnnouncements();
+
+        setFormData({
+          title: "",
+          content: "",
+          audience: "All Students",
+          priority: "normal",
+        });
+        setShowCreateModal(false);
+        alert("Announcement published successfully!");
+      } catch (error) {
+        console.error("Error creating announcement:", error);
+        alert("Failed to publish announcement. Please try again.");
+      } finally {
+        setIsPublishing(false);
+      }
+    }
+  };
+
+  const fetchEngagementDetails = async (announcementId: string) => {
+    try {
+      setLoadingEngagement(true);
+
+      // Fetch views with student profiles
+      const { data: viewsData, error: viewsError } = await supabase
+        .from("announcement_views")
+        .select("student_id, viewed_at")
+        .eq("announcement_id", announcementId);
+
+      // Fetch likes with student profiles
+      const { data: likesData, error: likesError } = await supabase
+        .from("announcement_likes")
+        .select("student_id, created_at")
+        .eq("announcement_id", announcementId);
+
+      // Fetch comments with student profiles
+      const { data: commentsData, error: commentsError } = await supabase
+        .from("announcement_comments")
+        .select("student_id, content, created_at")
+        .eq("announcement_id", announcementId)
+        .order("created_at", { ascending: false });
+
+      if (viewsError || likesError || commentsError) {
+        console.error("Error fetching engagement:", {
+          viewsError,
+          likesError,
+          commentsError,
+        });
+        return;
+      }
+
+      // Get unique student IDs
+      const studentIds = new Set([
+        ...(viewsData?.map((v) => v.student_id) || []),
+        ...(likesData?.map((l) => l.student_id) || []),
+        ...(commentsData?.map((c) => c.student_id) || []),
+      ]);
+
+      // Fetch student profiles
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .in("id", Array.from(studentIds));
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        return;
+      }
+
+      // Create a map for quick lookup
+      const profileMap = new Map(
+        profiles?.map((p) => [p.id, p.full_name]) || []
+      );
+
+      // Combine data with student names
+      const engagement: StudentEngagement = {
+        views: (viewsData || []).map((v) => ({
+          student_id: v.student_id,
+          student_name: profileMap.get(v.student_id) || "Unknown Student",
+          viewed_at: v.viewed_at,
+        })),
+        likes: (likesData || []).map((l) => ({
+          student_id: l.student_id,
+          student_name: profileMap.get(l.student_id) || "Unknown Student",
+          created_at: l.created_at,
+        })),
+        comments: (commentsData || []).map((c) => ({
+          student_id: c.student_id,
+          student_name: profileMap.get(c.student_id) || "Unknown Student",
+          content: c.content,
+          created_at: c.created_at,
+        })),
       };
-      setAnnouncements([newAnnouncement, ...announcements]);
-      setFormData({
-        title: "",
-        content: "",
-        audience: "All Students",
-        priority: "normal",
-      });
-      setShowCreateModal(false);
+
+      setEngagementDetails(engagement);
+    } catch (error) {
+      console.error("Error fetching engagement details:", error);
+    } finally {
+      setLoadingEngagement(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = async (announcementId: string) => {
+    if (!window.confirm("Are you sure you want to delete this announcement?")) {
+      return;
+    }
+
+    try {
+      setDeletingId(announcementId);
+      const { error } = await supabase
+        .from("announcements")
+        .delete()
+        .eq("id", announcementId);
+
+      if (error) throw error;
+
+      // Remove from local state
+      setAnnouncements(announcements.filter((a) => a.id !== announcementId));
+
+      alert("Announcement deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting announcement:", error);
+      alert("Failed to delete announcement. Please try again.");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -277,13 +588,26 @@ export default function LecturerAnnouncements() {
                         <Badge variant="outline">{announcement.audience}</Badge>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setViewingId(announcement.id);
+                            fetchEngagementDetails(announcement.id);
+                          }}
+                          title="View announcement details"
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="text-red-600"
+                          onClick={() =>
+                            handleDeleteAnnouncement(announcement.id)
+                          }
+                          disabled={deletingId === announcement.id}
+                          title="Delete announcement"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -403,16 +727,203 @@ export default function LecturerAnnouncements() {
                   variant="outline"
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1"
+                  disabled={isPublishing}
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleCreateAnnouncement}
+                  disabled={
+                    isPublishing || !formData.title || !formData.content
+                  }
                   className="flex-1 bg-gradient-to-r from-primary to-secondary"
                 >
-                  Publish
+                  {isPublishing ? "Publishing..." : "Publish"}
                 </Button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* View Announcement Modal */}
+        {viewingId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-card border border-border/60 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto space-y-4"
+            >
+              {(() => {
+                const announcement = announcements.find(
+                  (a) => a.id === viewingId
+                );
+                return announcement ? (
+                  <>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-bold">
+                        {announcement.title}
+                      </h2>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{announcement.date}</span>
+                        <Badge
+                          className={getPriorityColor(announcement.priority)}
+                        >
+                          {announcement.priority}
+                        </Badge>
+                        <Badge variant="outline">{announcement.audience}</Badge>
+                      </div>
+                    </div>
+
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                      <p className="text-foreground whitespace-pre-wrap">
+                        {announcement.content}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 pt-4 border-t border-border/60">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-emerald-600">
+                          {announcement.views}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Views</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-red-600">
+                          {announcement.likes}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Likes</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-blue-600">
+                          {announcement.comments}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Comments
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Engagement Details */}
+                    {loadingEngagement ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                      </div>
+                    ) : engagementDetails ? (
+                      <div className="space-y-4 pt-4 border-t border-border/60">
+                        {/* Views */}
+                        {engagementDetails.views.length > 0 && (
+                          <div>
+                            <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                              <Eye className="h-4 w-4 text-emerald-600" />
+                              Students who viewed (
+                              {engagementDetails.views.length})
+                            </h3>
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                              {engagementDetails.views.map((view, idx) => (
+                                <div
+                                  key={idx}
+                                  className="text-xs flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg"
+                                >
+                                  <span className="font-medium">
+                                    {view.student_name}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {new Date(view.viewed_at).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Likes */}
+                        {engagementDetails.likes.length > 0 && (
+                          <div>
+                            <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                              <Heart className="h-4 w-4 text-red-600" />
+                              Students who liked (
+                              {engagementDetails.likes.length})
+                            </h3>
+                            <div className="space-y-1 max-h-40 overflow-y-auto">
+                              {engagementDetails.likes.map((like, idx) => (
+                                <div
+                                  key={idx}
+                                  className="text-xs flex items-center justify-between px-3 py-2 bg-muted/50 rounded-lg"
+                                >
+                                  <span className="font-medium">
+                                    {like.student_name}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {new Date(like.created_at).toLocaleString()}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Comments */}
+                        {engagementDetails.comments.length > 0 && (
+                          <div>
+                            <h3 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                              <MessageSquare className="h-4 w-4 text-blue-600" />
+                              Comments ({engagementDetails.comments.length})
+                            </h3>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {engagementDetails.comments.map(
+                                (comment, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="px-3 py-2 bg-muted/50 rounded-lg space-y-1"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-medium">
+                                        {comment.student_name}
+                                      </span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {new Date(
+                                          comment.created_at
+                                        ).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-foreground">
+                                      {comment.content}
+                                    </p>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {engagementDetails.views.length === 0 &&
+                          engagementDetails.likes.length === 0 &&
+                          engagementDetails.comments.length === 0 && (
+                            <div className="text-center py-4 text-sm text-muted-foreground">
+                              No student engagement yet
+                            </div>
+                          )}
+                      </div>
+                    ) : null}
+
+                    <div className="flex gap-2 pt-4">
+                      <Button
+                        onClick={() => {
+                          setViewingId(null);
+                          setEngagementDetails(null);
+                        }}
+                        className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                      >
+                        Close
+                      </Button>
+                    </div>
+                  </>
+                ) : null;
+              })()}
             </motion.div>
           </motion.div>
         )}

@@ -65,6 +65,9 @@ interface Message {
   is_deleted_by_sender: boolean;
   is_deleted_by_recipient: boolean;
   created_at: string;
+  attachment_url?: string | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
   from_profile?: {
     id: string;
     full_name: string;
@@ -113,8 +116,36 @@ export default function Webmail() {
   const [composeToId, setComposeToId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const [sending, setSending] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const titleRef = useRef<HTMLHeadingElement>(null);
+
+  const downloadAttachment = async (
+    attachmentUrl: string,
+    attachmentName: string
+  ) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from("message-attachments")
+        .download(attachmentUrl);
+
+      if (error) throw error;
+
+      // Create a download link
+      const url = URL.createObjectURL(data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = attachmentName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Error downloading attachment:", error);
+      alert("Failed to download attachment");
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -187,13 +218,7 @@ export default function Webmail() {
       setLoading(true);
       let query = supabase
         .from("messages")
-        .select(
-          `
-          *,
-          from_profile:profiles!from_user_id(id, full_name, email, avatar_url),
-          to_profile:profiles!to_user_id(id, full_name, email, avatar_url)
-        `
-        )
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (selectedView === "inbox") {
@@ -217,7 +242,42 @@ export default function Webmail() {
       const { data, error } = await query;
 
       if (error) throw error;
-      setMessages(data || []);
+
+      if (!data || data.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      // Get unique user IDs from messages
+      const userIds = new Set<string>();
+      data.forEach((msg) => {
+        userIds.add(msg.from_user_id);
+        userIds.add(msg.to_user_id);
+      });
+
+      // Fetch profiles for all users
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, avatar_url")
+        .in("id", Array.from(userIds));
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        setMessages(data);
+        return;
+      }
+
+      // Create a map for quick lookup
+      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+
+      // Attach profiles to messages
+      const messagesWithProfiles = data.map((msg) => ({
+        ...msg,
+        from_profile: profileMap.get(msg.from_user_id) || null,
+        to_profile: profileMap.get(msg.to_user_id) || null,
+      }));
+
+      setMessages(messagesWithProfiles);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -231,17 +291,51 @@ export default function Webmail() {
     try {
       const { data, error } = await supabase
         .from("message_drafts")
-        .select(
-          `
-          *,
-          to_profile:profiles!to_user_id(id, full_name, email)
-        `
-        )
+        .select("*")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false });
 
       if (error) throw error;
-      setDrafts(data || []);
+
+      if (!data || data.length === 0) {
+        setDrafts([]);
+        return;
+      }
+
+      // Get unique recipient IDs
+      const recipientIds = data
+        .filter((d) => d.to_user_id)
+        .map((d) => d.to_user_id as string);
+
+      if (recipientIds.length === 0) {
+        setDrafts(data);
+        return;
+      }
+
+      // Fetch profiles for recipients
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", recipientIds);
+
+      if (profilesError) {
+        console.error("Error fetching profiles:", profilesError);
+        setDrafts(data);
+        return;
+      }
+
+      // Create a map for quick lookup
+      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+
+      // Attach profiles to drafts
+      const draftsWithProfiles = data.map((draft) => ({
+        ...draft,
+        to_profile: draft.to_user_id
+          ? profileMap.get(draft.to_user_id) || null
+          : null,
+      }));
+
+      setDrafts(draftsWithProfiles);
     } catch (error) {
       console.error("Error fetching drafts:", error);
     }
@@ -270,6 +364,32 @@ export default function Webmail() {
 
     try {
       setSending(true);
+
+      let attachmentUrl = null;
+      let attachmentName = null;
+      let attachmentSize = null;
+
+      // Upload attachment if present
+      if (attachmentFile) {
+        setUploadingAttachment(true);
+        const fileExt = attachmentFile.name.split(".").pop();
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("message-attachments")
+          .upload(fileName, attachmentFile);
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          throw new Error("Failed to upload attachment");
+        }
+
+        attachmentUrl = fileName;
+        attachmentName = attachmentFile.name;
+        attachmentSize = attachmentFile.size;
+        setUploadingAttachment(false);
+      }
+
       const { error } = await supabase.from("messages").insert({
         from_user_id: user.id,
         to_user_id: composeToId,
@@ -281,25 +401,38 @@ export default function Webmail() {
         is_archived: false,
         is_deleted_by_sender: false,
         is_deleted_by_recipient: false,
+        attachment_url: attachmentUrl,
+        attachment_name: attachmentName,
+        attachment_size: attachmentSize,
       });
 
       if (error) throw error;
 
       // Notify the recipient lecturer
       const senderName = profile?.full_name || "Student";
-      await supabase.from("notifications").insert({
-        user_id: composeToId,
-        title: `New message from ${senderName}`,
-        message: composeSubject || "You have a new message",
-        type: "info",
-        link: "/webmail",
-      });
+      const { error: notifError } = await supabase
+        .from("notifications")
+        .insert({
+          user_id: composeToId,
+          title: `New message from ${senderName}`,
+          message: composeSubject || "You have a new message",
+          type: "info",
+          link: "/webmail",
+        });
+
+      if (notifError) {
+        console.error("Error creating notification:", notifError);
+      } else {
+        // Emit event to update notification counts
+        window.dispatchEvent(new Event("notifications-updated"));
+      }
 
       // Reset compose form
       setComposeTo("");
       setComposeSubject("");
       setComposeBody("");
       setComposeToId(null);
+      setAttachmentFile(null);
       setIsComposeOpen(false);
 
       // Refresh messages
@@ -801,6 +934,33 @@ export default function Webmail() {
                             </p>
                           </div>
 
+                          {/* Attachment */}
+                          {selectedMessage.attachment_url && (
+                            <div className="mt-4 pt-4 border-t">
+                              <p className="text-sm font-medium mb-2">
+                                Attachment:
+                              </p>
+                              <Button
+                                variant="outline"
+                                onClick={() =>
+                                  downloadAttachment(
+                                    selectedMessage.attachment_url!,
+                                    selectedMessage.attachment_name ||
+                                      "attachment"
+                                  )
+                                }
+                                className="gap-2"
+                              >
+                                <Paperclip className="h-4 w-4" />
+                                {selectedMessage.attachment_name}{" "}
+                                {selectedMessage.attachment_size &&
+                                  `(${(
+                                    selectedMessage.attachment_size / 1024
+                                  ).toFixed(1)} KB)`}
+                              </Button>
+                            </div>
+                          )}
+
                           <div className="flex gap-2 pt-4 border-t">
                             <Button variant="outline" className="gap-2">
                               <Reply className="h-4 w-4" />
@@ -1027,6 +1187,61 @@ export default function Webmail() {
                 placeholder="Type your message here..."
                 className="min-h-[300px] resize-none"
               />
+            </div>
+
+            {/* Attachment Section */}
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Attachment (Optional)
+              </label>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    document.getElementById("attachment-upload")?.click()
+                  }
+                  disabled={uploadingAttachment}
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  {attachmentFile ? "Change File" : "Attach File"}
+                </Button>
+                <input
+                  id="attachment-upload"
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 10485760) {
+                        alert("File size must be less than 10MB");
+                        return;
+                      }
+                      setAttachmentFile(file);
+                    }
+                  }}
+                />
+                {attachmentFile && (
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-sm text-muted-foreground truncate">
+                      {attachmentFile.name} (
+                      {(attachmentFile.size / 1024).toFixed(1)} KB)
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setAttachmentFile(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t">

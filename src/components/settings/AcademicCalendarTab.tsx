@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -261,6 +262,7 @@ const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export function AcademicCalendarTab() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const today = new Date();
   const [selectedMonth, setSelectedMonth] = useState(today.getMonth());
   const [selectedYear, setSelectedYear] = useState(today.getFullYear());
@@ -1093,21 +1095,30 @@ export function AcademicCalendarTab() {
                     Click on dates to view events
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   {/* Weekday Headers */}
-                  <div className="grid grid-cols-7 gap-2 mb-4">
+                  <div
+                    className={`grid gap-1 md:gap-2 mb-3 md:mb-4 ${
+                      isMobile ? "grid-cols-7" : "grid-cols-7"
+                    }`}
+                  >
                     {weekDays.map((day) => (
                       <div
                         key={day}
-                        className="text-center font-semibold text-sm text-muted-foreground py-2"
+                        className="text-center font-semibold text-[11px] md:text-sm text-muted-foreground py-1 md:py-2"
                       >
-                        {day}
+                        <span className="hidden md:inline">{day}</span>
+                        <span className="md:hidden">{day.slice(0, 2)}</span>
                       </div>
                     ))}
                   </div>
 
                   {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-2">
+                  <div
+                    className={`grid gap-1 md:gap-2 ${
+                      isMobile ? "grid-cols-7" : "grid-cols-7"
+                    }`}
+                  >
                     {calendarDays.map((day, idx) => {
                       const dayEvents = day ? getEventsForDate(day) : [];
                       const dayAssignments = day
@@ -1149,7 +1160,7 @@ export function AcademicCalendarTab() {
                               }
                             }
                           }}
-                          className={`aspect-square rounded-xl p-2 text-sm font-medium transition-all relative group ${
+                          className={`aspect-square rounded-lg md:rounded-xl p-1 md:p-2 text-[10px] md:text-sm font-medium transition-all relative group ${
                             !day
                               ? "cursor-default"
                               : isToday
@@ -1161,26 +1172,30 @@ export function AcademicCalendarTab() {
                               : "hover:bg-muted/50 text-muted-foreground border border-transparent"
                           }`}
                         >
-                          <div className="flex flex-col h-full">
-                            <span className="text-base font-bold">{day}</span>
+                          <div className="flex flex-col h-full gap-0.5">
+                            <span className="text-xs md:text-base font-bold">
+                              {day}
+                            </span>
                             {allItems.length > 0 && (
-                              <div className="flex gap-0.5 mt-auto justify-center flex-wrap">
-                                {allItems.slice(0, 3).map((item, i) => (
-                                  <div
-                                    key={i}
-                                    className={`h-1.5 w-1.5 rounded-full ${getEventTypeDot(
-                                      "type" in item ? item.type : "event"
-                                    )} shadow-sm`}
-                                  />
-                                ))}
-                                {allItems.length > 3 && (
-                                  <div className="text-xs opacity-70 w-full">
-                                    +{allItems.length - 3}
+                              <div className="flex gap-0.5 justify-center flex-wrap">
+                                {allItems
+                                  .slice(0, isMobile ? 2 : 3)
+                                  .map((item, i) => (
+                                    <div
+                                      key={i}
+                                      className={`h-1 w-1 md:h-1.5 md:w-1.5 rounded-full ${getEventTypeDot(
+                                        "type" in item ? item.type : "event"
+                                      )} shadow-sm`}
+                                    />
+                                  ))}
+                                {allItems.length > (isMobile ? 2 : 3) && (
+                                  <div className="text-[8px] md:text-xs opacity-70">
+                                    +{allItems.length - (isMobile ? 2 : 3)}
                                   </div>
                                 )}
                               </div>
                             )}
-                            {allItems.length > 0 && (
+                            {allItems.length > 0 && !isMobile && (
                               <div className="mt-1 text-[10px] leading-tight text-center text-foreground/80 max-h-8 overflow-hidden">
                                 {dayAssignments.length > 0
                                   ? dayAssignments[0].title
@@ -1188,7 +1203,7 @@ export function AcademicCalendarTab() {
                               </div>
                             )}
                             {hasImportant && (
-                              <Star className="h-3 w-3 absolute top-1 right-1 text-amber-500 fill-amber-500" />
+                              <Star className="h-2 w-2 md:h-3 md:w-3 absolute top-0.5 right-0.5 md:top-1 md:right-1 text-amber-500 fill-amber-500" />
                             )}
                           </div>
                         </motion.button>
@@ -1197,7 +1212,11 @@ export function AcademicCalendarTab() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex flex-wrap gap-3 justify-center mt-6 py-4 border-t border-border/50">
+                  <div
+                    className={`flex flex-wrap gap-2 md:gap-3 justify-center mt-4 md:mt-6 py-3 md:py-4 border-t border-border/50 ${
+                      isMobile ? "text-[11px]" : "text-sm"
+                    }`}
+                  >
                     {[
                       { type: "academic", label: "Academic" },
                       { type: "exam", label: "Exams" },
@@ -1206,13 +1225,16 @@ export function AcademicCalendarTab() {
                       { type: "assignment", label: "Assignments" },
                       { type: "event", label: "Events" },
                     ].map((item) => (
-                      <div key={item.type} className="flex items-center gap-2">
+                      <div
+                        key={item.type}
+                        className="flex items-center gap-1.5"
+                      >
                         <div
-                          className={`h-3 w-3 rounded-full ${getEventTypeDot(
+                          className={`h-2 w-2 md:h-3 md:w-3 rounded-full ${getEventTypeDot(
                             item.type
                           )}`}
                         />
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-muted-foreground">
                           {item.label}
                         </span>
                       </div>

@@ -31,7 +31,9 @@ import LecturerAnalytics from "./pages/LecturerAnalytics";
 import LecturerEnrollments from "./pages/LecturerEnrollments";
 import LecturerSettings from "./pages/LecturerSettings";
 import LecturerQuiz from "./pages/LecturerQuiz";
+import CreateQuiz from "./pages/CreateQuiz";
 import StudentAssignments from "./pages/StudentAssignments";
+import Announcements from "./pages/Announcements";
 import Programs from "./pages/Programs";
 import NotFound from "./pages/NotFound";
 
@@ -174,9 +176,9 @@ function AppRoutes() {
       <Route
         path="/notifications"
         element={
-          <StudentRoute>
+          <ProtectedRoute>
             <Notifications />
-          </StudentRoute>
+          </ProtectedRoute>
         }
       />
       <Route
@@ -200,6 +202,14 @@ function AppRoutes() {
         element={
           <StudentRoute>
             <Settings />
+          </StudentRoute>
+        }
+      />
+      <Route
+        path="/announcements"
+        element={
+          <StudentRoute>
+            <Announcements />
           </StudentRoute>
         }
       />
@@ -344,6 +354,14 @@ function AppRoutes() {
         element={
           <LecturerRoute>
             <LecturerQuiz />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/quiz/create"
+        element={
+          <LecturerRoute>
+            <CreateQuiz />
           </LecturerRoute>
         }
       />

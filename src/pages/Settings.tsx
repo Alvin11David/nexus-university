@@ -6,6 +6,8 @@ import {
   Calendar,
   Clock,
   ArrowRight,
+  Menu,
+  X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { StudentHeader } from "@/components/layout/StudentHeader";
@@ -13,6 +15,14 @@ import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
 
 // Settings Tab Components
@@ -43,6 +53,15 @@ const settingsTabs = [
 export default function Settings() {
   const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState("prn");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const isMobile = useIsMobile();
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    if (isMobile) {
+      setSheetOpen(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
@@ -81,34 +100,34 @@ export default function Settings() {
           >
             <Link to="/timetable">
               <Card className="overflow-hidden border-2 border-secondary/20 hover:border-secondary/40 transition-all hover:shadow-lg cursor-pointer group">
-                <div className="relative bg-gradient-to-br from-secondary via-purple-600 to-pink-600 p-6 text-white">
+                <div className="relative bg-gradient-to-br from-secondary via-purple-600 to-pink-600 p-4 md:p-6 text-white">
                   <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl" />
-                  <div className="relative flex items-center justify-between">
-                    <div className="flex-1">
+                  <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
-                        <Calendar className="h-6 w-6" />
-                        <h2 className="text-2xl font-bold">
+                        <Calendar className="h-5 md:h-6 w-5 md:w-6 flex-shrink-0" />
+                        <h2 className="text-xl md:text-2xl font-bold">
                           Teaching Timetable
                         </h2>
                       </div>
-                      <p className="text-white/90 mb-4">
+                      <p className="text-white/90 mb-3 md:mb-4 text-sm md:text-base">
                         View your weekly class schedule with all your enrolled
                         courses
                       </p>
-                      <div className="flex items-center gap-4 text-sm">
+                      <div className="flex flex-wrap items-center gap-3 text-xs md:text-sm">
                         <div className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
+                          <Clock className="h-4 w-4 flex-shrink-0" />
                           <span>Weekly Schedule</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
+                          <Calendar className="h-4 w-4 flex-shrink-0" />
                           <span>6 Courses</span>
                         </div>
                       </div>
                     </div>
                     <Button
                       variant="secondary"
-                      className="bg-white text-secondary hover:bg-white/90 gap-2 group-hover:translate-x-1 transition-transform"
+                      className="bg-white text-secondary hover:bg-white/90 gap-2 group-hover:translate-x-1 transition-transform w-full md:w-auto flex-shrink-0"
                     >
                       View Timetable
                       <ArrowRight className="h-4 w-4" />
@@ -122,10 +141,11 @@ export default function Settings() {
           {/* Tabs */}
           <Tabs
             value={activeTab}
-            onValueChange={setActiveTab}
+            onValueChange={handleTabChange}
             className="space-y-6"
           >
-            <div className="overflow-x-auto -mx-4 px-4 pb-2">
+            {/* Desktop Tab Navigation */}
+            <div className="hidden md:block overflow-x-auto -mx-4 px-4 pb-2">
               <TabsList className="inline-flex h-auto p-1 gap-1 bg-muted/50 backdrop-blur-sm">
                 {settingsTabs.map((tab) => (
                   <TabsTrigger
@@ -138,6 +158,52 @@ export default function Settings() {
                   </TabsTrigger>
                 ))}
               </TabsList>
+            </div>
+
+            {/* Mobile Tab Navigation - Sheet/Drawer */}
+            <div className="md:hidden mb-6">
+              <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full flex items-center justify-between gap-2"
+                  >
+                    <Menu className="h-4 w-4" />
+                    <span className="flex-1 text-left">
+                      {settingsTabs.find((t) => t.id === activeTab)?.shortLabel}
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent
+                  side="left"
+                  className="w-full sm:w-96 overflow-y-auto"
+                >
+                  <SheetHeader className="mb-6">
+                    <SheetTitle>Select a Tab</SheetTitle>
+                  </SheetHeader>
+                  <div className="space-y-2">
+                    {settingsTabs.map((tab) => (
+                      <motion.button
+                        key={tab.id}
+                        onClick={() => handleTabChange(tab.id)}
+                        whileHover={{ x: 4 }}
+                        whileTap={{ scale: 0.98 }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all text-left font-medium ${
+                          activeTab === tab.id
+                            ? "bg-secondary text-secondary-foreground shadow-md"
+                            : "hover:bg-muted/50 text-foreground"
+                        }`}
+                      >
+                        <span>{tab.label}</span>
+                        {activeTab === tab.id && (
+                          <ChevronRight className="ml-auto h-4 w-4" />
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
 
             <TabsContent value="prn" className="mt-6">

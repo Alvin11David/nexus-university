@@ -1,15 +1,29 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ClipboardList, Star, CheckCircle2, Clock, ChevronRight,
-  MessageSquare, ThumbsUp, AlertCircle, Send, BarChart
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Progress } from '@/components/ui/progress';
-import { useToast } from '@/hooks/use-toast';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ClipboardList,
+  Star,
+  CheckCircle2,
+  Clock,
+  ChevronRight,
+  MessageSquare,
+  ThumbsUp,
+  AlertCircle,
+  Send,
+  BarChart,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
 
 interface Survey {
   id: string;
@@ -18,7 +32,7 @@ interface Survey {
   courseCode: string;
   instructor: string;
   deadline: string;
-  status: 'pending' | 'completed' | 'expired';
+  status: "pending" | "completed" | "expired";
   questions: number;
 }
 
@@ -35,13 +49,15 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => (
         key={star}
         onClick={() => !disabled && onRate(star)}
         disabled={disabled}
-        className={`p-1 transition-transform hover:scale-110 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`p-1 transition-transform hover:scale-110 ${
+          disabled ? "cursor-not-allowed" : "cursor-pointer"
+        }`}
       >
         <Star
           className={`h-8 w-8 ${
-            star <= rating 
-              ? 'fill-amber-400 text-amber-400' 
-              : 'text-muted-foreground/30'
+            star <= rating
+              ? "fill-amber-400 text-amber-400"
+              : "text-muted-foreground/30"
           }`}
         />
       </button>
@@ -49,69 +65,46 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => (
   </div>
 );
 
-const surveys: Survey[] = [
-  {
-    id: '1',
-    title: 'Course Evaluation',
-    course: 'Data Structures & Algorithms',
-    courseCode: 'CSC 2101',
-    instructor: 'Dr. Sarah Namuli',
-    deadline: '2025-01-30',
-    status: 'pending',
-    questions: 15,
-  },
-  {
-    id: '2',
-    title: 'Course Evaluation',
-    course: 'Database Systems',
-    courseCode: 'CSC 2102',
-    instructor: 'Prof. James Okello',
-    deadline: '2025-01-30',
-    status: 'pending',
-    questions: 15,
-  },
-  {
-    id: '3',
-    title: 'Course Evaluation',
-    course: 'Software Engineering',
-    courseCode: 'CSC 2103',
-    instructor: 'Dr. Michael Kato',
-    deadline: '2025-01-25',
-    status: 'completed',
-    questions: 15,
-  },
-  {
-    id: '4',
-    title: 'Semester Feedback',
-    course: 'General Feedback',
-    courseCode: 'GEN',
-    instructor: 'N/A',
-    deadline: '2024-12-15',
-    status: 'expired',
-    questions: 10,
-  },
-];
+const surveys: Survey[] = [];
 
 export function EvaluationSurveysTab() {
   const { toast } = useToast();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState("");
   const [currentQuestion, setCurrentQuestion] = useState(0);
 
-  const pendingSurveys = surveys.filter(s => s.status === 'pending');
-  const completedSurveys = surveys.filter(s => s.status === 'completed');
-  const completionRate = surveys.length > 0 
-    ? (completedSurveys.length / surveys.filter(s => s.status !== 'expired').length) * 100 
-    : 0;
+  const pendingSurveys = surveys.filter((s) => s.status === "pending");
+  const completedSurveys = surveys.filter((s) => s.status === "completed");
+  const completionRate =
+    surveys.length > 0
+      ? (completedSurveys.length /
+          surveys.filter((s) => s.status !== "expired").length) *
+        100
+      : 0;
 
   const surveyQuestions = [
-    { id: 'clarity', text: 'How clear were the course objectives and expectations?' },
-    { id: 'knowledge', text: "How would you rate the instructor's knowledge of the subject?" },
-    { id: 'materials', text: 'How helpful were the course materials and resources?' },
-    { id: 'engagement', text: 'How engaging were the lectures and discussions?' },
-    { id: 'feedback', text: 'How timely and helpful was the feedback on assignments?' },
-    { id: 'overall', text: 'Overall, how satisfied are you with this course?' },
+    {
+      id: "clarity",
+      text: "How clear were the course objectives and expectations?",
+    },
+    {
+      id: "knowledge",
+      text: "How would you rate the instructor's knowledge of the subject?",
+    },
+    {
+      id: "materials",
+      text: "How helpful were the course materials and resources?",
+    },
+    {
+      id: "engagement",
+      text: "How engaging were the lectures and discussions?",
+    },
+    {
+      id: "feedback",
+      text: "How timely and helpful was the feedback on assignments?",
+    },
+    { id: "overall", text: "Overall, how satisfied are you with this course?" },
   ];
 
   const handleSubmit = () => {
@@ -119,7 +112,7 @@ export function EvaluationSurveysTab() {
       toast({
         title: "Incomplete Survey",
         description: "Please rate all questions before submitting",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -130,16 +123,20 @@ export function EvaluationSurveysTab() {
     });
     setSelectedSurvey(null);
     setRatings({});
-    setFeedback('');
+    setFeedback("");
     setCurrentQuestion(0);
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-      case 'completed': return 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20';
-      case 'expired': return 'bg-muted text-muted-foreground';
-      default: return 'bg-muted text-muted-foreground';
+      case "pending":
+        return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+      case "completed":
+        return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+      case "expired":
+        return "bg-muted text-muted-foreground";
+      default:
+        return "bg-muted text-muted-foreground";
     }
   };
 
@@ -148,9 +145,27 @@ export function EvaluationSurveysTab() {
       {/* Survey Stats */}
       <div className="grid sm:grid-cols-3 gap-4">
         {[
-          { label: 'Pending Surveys', value: pendingSurveys.length, icon: Clock, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-          { label: 'Completed', value: completedSurveys.length, icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-          { label: 'Completion Rate', value: `${completionRate.toFixed(0)}%`, icon: BarChart, color: 'text-primary', bg: 'bg-primary/10' },
+          {
+            label: "Pending Surveys",
+            value: pendingSurveys.length,
+            icon: Clock,
+            color: "text-amber-500",
+            bg: "bg-amber-500/10",
+          },
+          {
+            label: "Completed",
+            value: completedSurveys.length,
+            icon: CheckCircle2,
+            color: "text-emerald-500",
+            bg: "bg-emerald-500/10",
+          },
+          {
+            label: "Completion Rate",
+            value: `${completionRate.toFixed(0)}%`,
+            icon: BarChart,
+            color: "text-primary",
+            bg: "bg-primary/10",
+          },
         ].map((stat, i) => (
           <motion.div
             key={stat.label}
@@ -160,7 +175,9 @@ export function EvaluationSurveysTab() {
           >
             <Card>
               <CardContent className="pt-6">
-                <div className={`h-10 w-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
+                <div
+                  className={`h-10 w-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}
+                >
                   <stat.icon className={`h-5 w-5 ${stat.color}`} />
                 </div>
                 <p className="text-2xl font-bold">{stat.value}</p>
@@ -179,7 +196,9 @@ export function EvaluationSurveysTab() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => e.target === e.currentTarget && setSelectedSurvey(null)}
+            onClick={(e) =>
+              e.target === e.currentTarget && setSelectedSurvey(null)
+            }
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -191,17 +210,32 @@ export function EvaluationSurveysTab() {
                 <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Badge variant="outline" className="mb-2">{selectedSurvey.courseCode}</Badge>
+                      <Badge variant="outline" className="mb-2">
+                        {selectedSurvey.courseCode}
+                      </Badge>
                       <CardTitle>{selectedSurvey.course}</CardTitle>
-                      <CardDescription>Instructor: {selectedSurvey.instructor}</CardDescription>
+                      <CardDescription>
+                        Instructor: {selectedSurvey.instructor}
+                      </CardDescription>
                     </div>
-                    <Button variant="ghost" size="icon" onClick={() => setSelectedSurvey(null)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedSurvey(null)}
+                    >
                       ×
                     </Button>
                   </div>
-                  <Progress value={(Object.keys(ratings).length / surveyQuestions.length) * 100} className="h-2 mt-4" />
+                  <Progress
+                    value={
+                      (Object.keys(ratings).length / surveyQuestions.length) *
+                      100
+                    }
+                    className="h-2 mt-4"
+                  />
                   <p className="text-xs text-muted-foreground mt-1">
-                    {Object.keys(ratings).length} of {surveyQuestions.length} questions answered
+                    {Object.keys(ratings).length} of {surveyQuestions.length}{" "}
+                    questions answered
                   </p>
                 </CardHeader>
                 <CardContent className="pt-6 space-y-6">
@@ -211,23 +245,33 @@ export function EvaluationSurveysTab() {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.1 }}
-                      className={`p-4 rounded-xl border ${ratings[question.id] ? 'border-emerald-500/30 bg-emerald-500/5' : 'bg-muted/50'}`}
+                      className={`p-4 rounded-xl border ${
+                        ratings[question.id]
+                          ? "border-emerald-500/30 bg-emerald-500/5"
+                          : "bg-muted/50"
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-4 mb-3">
-                        <p className="font-medium">{i + 1}. {question.text}</p>
+                        <p className="font-medium">
+                          {i + 1}. {question.text}
+                        </p>
                         {ratings[question.id] && (
                           <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0" />
                         )}
                       </div>
                       <StarRating
                         rating={ratings[question.id] || 0}
-                        onRate={(rating) => setRatings({ ...ratings, [question.id]: rating })}
+                        onRate={(rating) =>
+                          setRatings({ ...ratings, [question.id]: rating })
+                        }
                       />
                     </motion.div>
                   ))}
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Additional Comments (Optional)</label>
+                    <label className="text-sm font-medium">
+                      Additional Comments (Optional)
+                    </label>
                     <Textarea
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}
@@ -237,7 +281,11 @@ export function EvaluationSurveysTab() {
                   </div>
 
                   <div className="flex gap-3 pt-4">
-                    <Button variant="outline" className="flex-1" onClick={() => setSelectedSurvey(null)}>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setSelectedSurvey(null)}
+                    >
                       Save for Later
                     </Button>
                     <Button className="flex-1 gap-2" onClick={handleSubmit}>
@@ -259,14 +307,18 @@ export function EvaluationSurveysTab() {
             <ClipboardList className="h-5 w-5 text-primary" />
             Pending Evaluations
           </CardTitle>
-          <CardDescription>Complete these surveys before the deadline</CardDescription>
+          <CardDescription>
+            Complete these surveys before the deadline
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {pendingSurveys.length === 0 ? (
             <div className="text-center py-12">
               <ThumbsUp className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
               <h3 className="font-semibold text-lg mb-2">All caught up!</h3>
-              <p className="text-muted-foreground">You've completed all available surveys</p>
+              <p className="text-muted-foreground">
+                You've completed all available surveys
+              </p>
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 gap-4">
@@ -277,23 +329,32 @@ export function EvaluationSurveysTab() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.1 }}
                 >
-                  <Card 
+                  <Card
                     className="cursor-pointer hover:shadow-lg transition-all hover:border-primary/50 group"
                     onClick={() => setSelectedSurvey(survey)}
                   >
                     <CardContent className="pt-6">
                       <div className="flex items-start justify-between mb-3">
-                        <Badge variant="outline" className="font-mono">{survey.courseCode}</Badge>
+                        <Badge variant="outline" className="font-mono">
+                          {survey.courseCode}
+                        </Badge>
                         <Badge className={getStatusColor(survey.status)}>
                           <Clock className="h-3 w-3 mr-1" />
                           Due: {new Date(survey.deadline).toLocaleDateString()}
                         </Badge>
                       </div>
                       <h4 className="font-semibold mb-1">{survey.course}</h4>
-                      <p className="text-sm text-muted-foreground mb-4">{survey.instructor}</p>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {survey.instructor}
+                      </p>
                       <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">{survey.questions} questions</span>
-                        <Button size="sm" className="gap-1 group-hover:gap-2 transition-all">
+                        <span className="text-xs text-muted-foreground">
+                          {survey.questions} questions
+                        </span>
+                        <Button
+                          size="sm"
+                          className="gap-1 group-hover:gap-2 transition-all"
+                        >
                           Start
                           <ChevronRight className="h-4 w-4" />
                         </Button>
@@ -338,10 +399,14 @@ export function EvaluationSurveysTab() {
                     </div>
                     <div>
                       <p className="font-medium">{survey.course}</p>
-                      <p className="text-sm text-muted-foreground">{survey.courseCode} • {survey.instructor}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {survey.courseCode} • {survey.instructor}
+                      </p>
                     </div>
                   </div>
-                  <Badge className="bg-emerald-500/10 text-emerald-600">Submitted</Badge>
+                  <Badge className="bg-emerald-500/10 text-emerald-600">
+                    Submitted
+                  </Badge>
                 </motion.div>
               ))}
             </div>
@@ -359,8 +424,9 @@ export function EvaluationSurveysTab() {
             <div>
               <h4 className="font-semibold mb-2">Why Your Feedback Matters</h4>
               <p className="text-sm text-muted-foreground mb-3">
-                Your honest feedback helps improve the quality of education. Evaluations are anonymous and 
-                instructors only see aggregate results after grades are submitted.
+                Your honest feedback helps improve the quality of education.
+                Evaluations are anonymous and instructors only see aggregate
+                results after grades are submitted.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">Anonymous</Badge>

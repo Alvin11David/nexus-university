@@ -33,6 +33,7 @@ interface Quiz {
   id: string;
   title: string;
   description: string;
+  courseId: string;
   courseTitle: string;
   courseCode?: string;
   totalQuestions: number;
@@ -81,19 +82,45 @@ export default function LecturerQuiz() {
     averageCompletion: 0,
   });
 
-  useEffect(() => {
-    loadQuizzes();
-  }, [user]);
-
-  useEffect(() => {
-    filterQuizzes();
-  }, [quizzes, filterStatus, searchQuery]);
-
   const loadQuizzes = async () => {
     try {
       setLoading(true);
-      // TODO: Replace with actual Supabase query
-      const quizzesData: Quiz[] = [];
+      if (!user?.id) return;
+
+      // @ts-ignore - Supabase type instantiation issue
+      const { data, error } = await supabase
+        .from("quizzes")
+        .select("*")
+        .eq("lecturer_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const quizzesData: Quiz[] = (data || []).map((row: any) => {
+        const quizData: Quiz = {
+          id: row.id,
+          title: row.title,
+          description: row.description,
+          courseId: row.course_id,
+          courseTitle: row.course_title,
+          courseCode: row.course_code,
+          totalQuestions: row.total_questions,
+          totalPoints: row.total_points,
+          timeLimit: row.time_limit,
+          passingScore: row.passing_score,
+          dueDate: row.due_date,
+          status: row.status,
+          totalAttempts: row.total_attempts || 0,
+          averageScore: row.average_score || 0,
+          completionRate: row.completion_rate || 0,
+          highestScore: row.highest_score || 0,
+          lowestScore: row.lowest_score || 0,
+          attemptsAllowed: row.attempts_allowed || 1,
+          shuffleQuestions: row.shuffle_questions || false,
+          showAnswers: row.show_answers || false,
+        };
+        return quizData;
+      });
 
       setQuizzes(quizzesData);
 
@@ -113,11 +140,11 @@ export default function LecturerQuiz() {
             : 0,
       };
       setStats(stats);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error loading quizzes:", error);
       toast({
         title: "Error",
-        description: "Failed to load quizzes",
+        description: error?.message || "Failed to load quizzes",
         variant: "destructive",
       });
     } finally {
@@ -145,15 +172,35 @@ export default function LecturerQuiz() {
     setFilteredQuizzes(filtered);
   };
 
+  useEffect(() => {
+    if (user?.id) {
+      loadQuizzes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  useEffect(() => {
+    filterQuizzes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizzes, filterStatus, searchQuery]);
+
   const handleDeleteQuiz = async (quizId: string) => {
     if (confirm("Are you sure you want to delete this quiz?")) {
       try {
+        const { error } = await supabase
+          .from("quizzes")
+          .delete()
+          .eq("id", quizId);
+
+        if (error) throw error;
+
         toast({
           title: "Success",
           description: "Quiz deleted successfully",
         });
         setQuizzes(quizzes.filter((q) => q.id !== quizId));
       } catch (error) {
+        console.error("Error deleting quiz:", error);
         toast({
           title: "Error",
           description: "Failed to delete quiz",

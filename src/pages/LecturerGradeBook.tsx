@@ -9,6 +9,7 @@ import {
   TrendingUp,
   Award,
   AlertCircle,
+  Save,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -16,9 +17,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface StudentGrade {
   id: string;
+  student_id: string;
   name: string;
   email: string;
   assignment1: number;
@@ -30,6 +34,7 @@ interface StudentGrade {
   grade: string;
   gp: number;
   status: "excellent" | "good" | "average" | "warning" | "failing";
+  grade_id?: string;
 }
 
 const rise = {
@@ -68,102 +73,579 @@ const getStatusColor = (status: string) => {
 };
 
 export default function LecturerGradeBook() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<StudentGrade[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState("CS101");
+  const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [sortBy, setSortBy] = useState<"name" | "total" | "grade">("name");
   const [editingCell, setEditingCell] = useState<string | null>(null);
-
-  const mockStudents: StudentGrade[] = [
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john@uni.edu",
-      assignment1: 85,
-      assignment2: 90,
-      midterm: 88,
-      participation: 92,
-      finalExam: 87,
-      total: 88.4,
-      grade: "A",
-      gp: 4.0,
-      status: "excellent",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane@uni.edu",
-      assignment1: 78,
-      assignment2: 82,
-      midterm: 79,
-      participation: 85,
-      finalExam: 81,
-      total: 81,
-      grade: "B+",
-      gp: 3.3,
-      status: "good",
-    },
-    {
-      id: "3",
-      name: "Mike Johnson",
-      email: "mike@uni.edu",
-      assignment1: 72,
-      assignment2: 75,
-      midterm: 71,
-      participation: 78,
-      finalExam: 73,
-      total: 73.8,
-      grade: "B",
-      gp: 3.0,
-      status: "average",
-    },
-    {
-      id: "4",
-      name: "Sarah Williams",
-      email: "sarah@uni.edu",
-      assignment1: 68,
-      assignment2: 65,
-      midterm: 62,
-      participation: 70,
-      finalExam: 64,
-      total: 65.8,
-      grade: "C",
-      gp: 2.0,
-      status: "warning",
-    },
-    {
-      id: "5",
-      name: "Alex Brown",
-      email: "alex@uni.edu",
-      assignment1: 92,
-      assignment2: 95,
-      midterm: 94,
-      participation: 96,
-      finalExam: 93,
-      total: 94,
-      grade: "A",
-      gp: 4.0,
-      status: "excellent",
-    },
-    {
-      id: "6",
-      name: "Emma Davis",
-      email: "emma@uni.edu",
-      assignment1: 55,
-      assignment2: 58,
-      midterm: 52,
-      participation: 60,
-      finalExam: 56,
-      total: 56.2,
-      grade: "D",
-      gp: 1.0,
-      status: "failing",
-    },
-  ];
+  const [importing, setImporting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [changedGrades, setChangedGrades] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    setStudents(mockStudents);
-  }, []);
+    if (user) {
+      console.log("Fetching courses for user:", user.id);
+      fetchLecturerCourses();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (selectedCourse) {
+      fetchStudentsAndGrades();
+    }
+  }, [selectedCourse]);
+
+  const fetchLecturerCourses = async () => {
+    try {
+      if (!user?.id) {
+        console.error("User ID not available");
+        return;
+      }
+
+      console.log("Fetching courses for lecturer:", user.id);
+
+      // First, try to fetch just the lecturer_courses records
+      const { data: lecturerCourses, error: lcError } = await supabase
+        .from("lecturer_courses")
+        .select("course_id")
+        .eq("lecturer_id", user.id);
+
+      if (lcError) {
+        console.error("Error fetching lecturer_courses:", lcError);
+        throw lcError;
+      }
+
+      console.log("Lecturer courses:", lecturerCourses);
+
+      if (!lecturerCourses || lecturerCourses.length === 0) {
+        console.warn("No courses found for this lecturer");
+        setCourses([]);
+        alert("No courses assigned. Please contact administrator.");
+        return;
+      }
+
+      // Now fetch the course details for each course_id
+      const courseIds = lecturerCourses.map((lc: any) => lc.course_id);
+
+      const { data: coursesData, error: coursesError } = await supabase
+        .from("courses")
+        .select("id, code, title")
+        .in("id", courseIds);
+
+      if (coursesError) {
+        console.error("Error fetching courses:", coursesError);
+        throw coursesError;
+      }
+
+      const coursesList = (coursesData as any) || [];
+      console.log("Courses data:", coursesList);
+      setCourses(coursesList);
+
+      if (coursesList && coursesList.length > 0 && !selectedCourse) {
+        console.log("Auto-selecting first course:", coursesList[0].id);
+        setSelectedCourse(coursesList[0].id);
+      }
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+      alert("Failed to load courses. Check console for details.");
+    }
+  };
+
+  const fetchStudentsAndGrades = async () => {
+    if (!selectedCourse || !user) return;
+
+    try {
+      setLoading(true);
+
+      // Fetch enrolled students (just the enrollment records)
+      const { data: enrollments, error: enrollError } = await supabase
+        .from("enrollments")
+        .select("student_id")
+        .eq("course_id", selectedCourse)
+        .eq("status", "approved");
+
+      if (enrollError) throw enrollError;
+
+      if (!enrollments || enrollments.length === 0) {
+        setStudents([]);
+        return;
+      }
+
+      const studentIds = enrollments.map((e: any) => e.student_id);
+
+      // Fetch student profiles
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", studentIds);
+
+      if (profilesError) {
+        console.warn("Could not fetch profiles:", profilesError);
+        // Continue without profiles - we'll use student IDs instead
+      }
+
+      const profilesMap =
+        (profilesData as any)?.reduce((acc: any, p: any) => {
+          acc[p.id] = p;
+          return acc;
+        }, {}) || {};
+
+      // Fetch existing grades
+      let grades: any[] = [];
+      try {
+        // @ts-ignore - student_grades table will be added in migration
+        const response = await (supabase as any)
+          .from("student_grades")
+          .select("*")
+          .eq("course_id", selectedCourse)
+          .in("student_id", studentIds);
+
+        if (!response.error) {
+          grades = response.data || [];
+        } else {
+          console.warn("Could not fetch grades:", response.error);
+        }
+      } catch (e) {
+        console.warn("Grades table not yet available");
+      }
+
+      // Merge enrollments with profiles and grades
+      const studentsWithGrades: StudentGrade[] = enrollments.map(
+        (enrollment: any) => {
+          const profile = profilesMap[enrollment.student_id];
+          const existingGrade: any = grades?.find(
+            (g: any) => g.student_id === enrollment.student_id
+          );
+
+          const assignment1 = existingGrade?.assignment1 || 0;
+          const assignment2 = existingGrade?.assignment2 || 0;
+          const midterm = existingGrade?.midterm || 0;
+          const participation = existingGrade?.participation || 0;
+          const finalExam = existingGrade?.final_exam || 0;
+
+          // Calculate total (weighted average)
+          const total = existingGrade?.total || 0;
+          const { grade, gp } = calculateGrade(total);
+
+          let status: StudentGrade["status"] = "average";
+          if (total >= 90) status = "excellent";
+          else if (total >= 80) status = "good";
+          else if (total >= 60) status = "average";
+          else if (total >= 50) status = "warning";
+          else status = "failing";
+
+          return {
+            id: enrollment.student_id,
+            student_id: enrollment.student_id,
+            name: profile?.full_name || "Unknown",
+            email: profile?.email || "",
+            assignment1,
+            assignment2,
+            midterm,
+            participation,
+            finalExam,
+            total,
+            grade: existingGrade?.grade || grade,
+            gp: existingGrade?.gp || gp,
+            status,
+            grade_id: existingGrade?.id,
+          };
+        }
+      );
+
+      setStudents(studentsWithGrades);
+    } catch (error) {
+      console.error("Error fetching students and grades:", error);
+      alert("Failed to load students and grades");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateStudentGrade = (
+    studentId: string,
+    field: keyof StudentGrade,
+    value: number
+  ) => {
+    setStudents((prev) =>
+      prev.map((student) => {
+        if (student.id !== studentId) return student;
+
+        const updated = { ...student, [field]: value };
+
+        // Recalculate total (weighted: A1=15%, A2=15%, Mid=25%, Part=10%, Final=35%)
+        const total =
+          updated.assignment1 * 0.15 +
+          updated.assignment2 * 0.15 +
+          updated.midterm * 0.25 +
+          updated.participation * 0.1 +
+          updated.finalExam * 0.35;
+
+        const { grade, gp } = calculateGrade(total);
+
+        let status: StudentGrade["status"] = "average";
+        if (total >= 90) status = "excellent";
+        else if (total >= 80) status = "good";
+        else if (total >= 60) status = "average";
+        else if (total >= 50) status = "warning";
+        else status = "failing";
+
+        return { ...updated, total, grade, gp, status };
+      })
+    );
+
+    // Mark this student's grade as changed
+    setChangedGrades((prev) => new Set([...prev, studentId]));
+
+    // Auto-save after 2 seconds of no changes
+    setTimeout(() => {
+      saveSingleStudentGrade(studentId);
+    }, 2000);
+  };
+
+  const saveSingleStudentGrade = async (studentId: string) => {
+    const student = students.find((s) => s.id === studentId);
+    if (!student || !selectedCourse || !user) return;
+
+    try {
+      const gradeData = {
+        student_id: student.student_id,
+        course_id: selectedCourse,
+        lecturer_id: user.id,
+        assignment1: student.assignment1,
+        assignment2: student.assignment2,
+        midterm: student.midterm,
+        participation: student.participation,
+        final_exam: student.finalExam,
+        total: student.total,
+        grade: student.grade,
+        gp: student.gp,
+        semester: "Spring",
+        academic_year: "2025-2026",
+      };
+
+      try {
+        // @ts-ignore - student_grades table will be added in migration
+        const response = await (supabase as any)
+          .from("student_grades")
+          .upsert([gradeData], {
+            onConflict: "student_id,course_id,semester,academic_year",
+          });
+
+        if (response.error) throw response.error;
+
+        // Send notification to student
+        await sendGradeUpdateNotification(student);
+
+        // Mark as no longer changed
+        setChangedGrades((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(studentId);
+          return newSet;
+        });
+
+        console.log(`Grade saved for student ${student.name}`);
+      } catch (e) {
+        console.warn("Could not save grade to database", e);
+      }
+    } catch (error) {
+      console.error("Error saving grade:", error);
+    }
+  };
+
+  const sendGradeUpdateNotification = async (student: StudentGrade) => {
+    if (!selectedCourse || !user) return;
+
+    try {
+      const courseData = courses.find((c) => c.id === selectedCourse);
+      const courseName = courseData?.title || courseData?.code || "Course";
+
+      // Create notification in database
+      const { error } = await supabase.from("notifications").insert([
+        {
+          user_id: student.student_id,
+          type: "grade_update",
+          title: "Grade Updated",
+          message: `Your grades for ${courseName} have been updated. Total: ${student.total.toFixed(
+            1
+          )}%, Grade: ${student.grade}`,
+          related_id: selectedCourse,
+          is_read: false,
+        },
+      ]);
+
+      if (error) {
+        console.warn("Could not send notification:", error);
+      } else {
+        console.log(`Notification sent to ${student.name}`);
+      }
+    } catch (error) {
+      console.error("Error sending notification:", error);
+    }
+  };
+
+  const saveAllGrades = async () => {
+    if (!selectedCourse || !user) return;
+
+    try {
+      setSaving(true);
+
+      const upsertData = students.map((student) => ({
+        student_id: student.student_id,
+        course_id: selectedCourse,
+        lecturer_id: user.id,
+        assignment1: student.assignment1,
+        assignment2: student.assignment2,
+        midterm: student.midterm,
+        participation: student.participation,
+        final_exam: student.finalExam,
+        total: student.total,
+        grade: student.grade,
+        gp: student.gp,
+        semester: "Spring",
+        academic_year: "2025-2026",
+      }));
+
+      try {
+        // @ts-ignore - student_grades table will be added in migration
+        const response = await (supabase as any)
+          .from("student_grades")
+          .upsert(upsertData, {
+            onConflict: "student_id,course_id,semester,academic_year",
+          });
+
+        if (response.error) throw response.error;
+
+        // Send notifications to all changed students
+        for (const student of students) {
+          if (changedGrades.has(student.id)) {
+            await sendGradeUpdateNotification(student);
+          }
+        }
+
+        // Clear changed grades
+        setChangedGrades(new Set());
+
+        alert("Grades saved successfully!");
+        fetchStudentsAndGrades();
+      } catch (e) {
+        console.warn(
+          "Could not save to database - student_grades table not yet available"
+        );
+        alert("Local changes saved. Database table will be available soon.");
+      }
+    } catch (error) {
+      console.error("Error saving grades:", error);
+      alert("Failed to save grades. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleExportGrades = () => {
+    if (students.length === 0) {
+      alert("No data to export");
+      return;
+    }
+
+    // Create CSV content
+    const headers = [
+      "Name",
+      "Email",
+      "Assignment 1",
+      "Assignment 2",
+      "Midterm",
+      "Participation",
+      "Final Exam",
+      "Total",
+      "Grade",
+      "GP",
+    ];
+
+    const rows = students.map((student) => [
+      student.name,
+      student.email,
+      student.assignment1.toFixed(2),
+      student.assignment2.toFixed(2),
+      student.midterm.toFixed(2),
+      student.participation.toFixed(2),
+      student.finalExam.toFixed(2),
+      student.total.toFixed(2),
+      student.grade,
+      student.gp.toFixed(2),
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) => row.join(",")),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `grades_${selectedCourse}_${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  const handleImportGrades = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
+      alert("Please select a CSV file");
+      return;
+    }
+
+    setImporting(true);
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        const lines = text.split("\n").filter((line) => line.trim());
+
+        if (lines.length < 2) {
+          alert("CSV file is empty or invalid");
+          setImporting(false);
+          return;
+        }
+
+        // Skip header line
+        const dataLines = lines.slice(1);
+        const importedStudents: StudentGrade[] = [];
+
+        dataLines.forEach((line, index) => {
+          // Handle quoted values
+          const values = line
+            .match(/"[^"]*"|[^,]+/g)
+            ?.map((v) => v.replace(/^"|"$/g, ""));
+
+          if (!values || values.length < 10) {
+            console.warn(`Skipping invalid line ${index + 2}`);
+            return;
+          }
+
+          const [name, email, a1, a2, mid, part, final, total, grade, gp] =
+            values;
+
+          const assignment1 = parseFloat(a1);
+          const assignment2 = parseFloat(a2);
+          const midterm = parseFloat(mid);
+          const participation = parseFloat(part);
+          const finalExam = parseFloat(final);
+          const totalScore = parseFloat(total);
+          const gradePoint = parseFloat(gp);
+
+          if (
+            isNaN(assignment1) ||
+            isNaN(assignment2) ||
+            isNaN(midterm) ||
+            isNaN(participation) ||
+            isNaN(finalExam) ||
+            isNaN(totalScore) ||
+            isNaN(gradePoint)
+          ) {
+            console.warn(`Skipping line ${index + 2} due to invalid numbers`);
+            return;
+          }
+
+          let status: StudentGrade["status"] = "average";
+          if (totalScore >= 90) status = "excellent";
+          else if (totalScore >= 80) status = "good";
+          else if (totalScore >= 60) status = "average";
+          else if (totalScore >= 50) status = "warning";
+          else status = "failing";
+
+          importedStudents.push({
+            id: `imported-${Date.now()}-${index}`,
+            student_id: `imported-${Date.now()}-${index}`,
+            name: name.trim(),
+            email: email.trim(),
+            assignment1,
+            assignment2,
+            midterm,
+            participation,
+            finalExam,
+            total: totalScore,
+            grade: grade.trim(),
+            gp: gradePoint,
+            status,
+          });
+        });
+
+        if (importedStudents.length === 0) {
+          alert("No valid student records found in CSV file");
+          setImporting(false);
+          return;
+        }
+
+        // Match imported students with existing enrolled students by email
+        const matchedStudents = importedStudents
+          .map((imported) => {
+            const existing = students.find(
+              (s) => s.email.toLowerCase() === imported.email.toLowerCase()
+            );
+            if (existing) {
+              return {
+                ...existing,
+                assignment1: imported.assignment1,
+                assignment2: imported.assignment2,
+                midterm: imported.midterm,
+                participation: imported.participation,
+                finalExam: imported.finalExam,
+                total: imported.total,
+                grade: imported.grade,
+                gp: imported.gp,
+                status: imported.status,
+              };
+            }
+            return null;
+          })
+          .filter(Boolean) as StudentGrade[];
+
+        if (matchedStudents.length === 0) {
+          alert(
+            "No matching students found. Make sure the email addresses in CSV match enrolled students."
+          );
+          setImporting(false);
+          return;
+        }
+
+        // Update the students state with the imported data
+        setStudents((prev) =>
+          prev.map((student) => {
+            const imported = matchedStudents.find((m) => m.id === student.id);
+            return imported || student;
+          })
+        );
+
+        alert(
+          `Successfully imported grades for ${matchedStudents.length} student(s). Click "Save All" to save to database.`
+        );
+      } catch (error) {
+        console.error("Error importing CSV:", error);
+        alert("Failed to import CSV file. Please check the file format.");
+      } finally {
+        setImporting(false);
+        // Reset file input
+        event.target.value = "";
+      }
+    };
+
+    reader.onerror = () => {
+      alert("Failed to read file");
+      setImporting(false);
+    };
+
+    reader.readAsText(file);
+  };
 
   const filteredStudents = students
     .filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -174,11 +656,16 @@ export default function LecturerGradeBook() {
     });
 
   const stats = {
-    classAverage: (
-      students.reduce((acc, s) => acc + s.total, 0) / students.length
-    ).toFixed(1),
-    highestScore: Math.max(...students.map((s) => s.total)),
-    lowestScore: Math.min(...students.map((s) => s.total)),
+    classAverage:
+      students.length > 0
+        ? (
+            students.reduce((acc, s) => acc + s.total, 0) / students.length
+          ).toFixed(1)
+        : "0.0",
+    highestScore:
+      students.length > 0 ? Math.max(...students.map((s) => s.total)) : 0,
+    lowestScore:
+      students.length > 0 ? Math.min(...students.map((s) => s.total)) : 0,
     excellentCount: students.filter((s) => s.status === "excellent").length,
     failingCount: students.filter((s) => s.status === "failing").length,
   };
@@ -187,48 +674,106 @@ export default function LecturerGradeBook() {
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
       <LecturerHeader />
 
-      <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+      <main className="px-3 py-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
+          className="space-y-3 sm:space-y-4"
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-lg">
-                <BookOpen className="h-6 w-6 text-primary" />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-2 sm:p-3 bg-primary/10 rounded-lg shrink-0">
+                <BookOpen className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <div>
-                <h1 className="text-3xl font-bold">Grade Book</h1>
-                <p className="text-sm text-muted-foreground">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-3xl font-bold truncate">
+                  Grade Book
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground line-clamp-1">
                   Track and manage all student grades
                 </p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" className="gap-2">
-                <Download className="h-4 w-4" /> Export
-              </Button>
-              <Button className="bg-gradient-to-r from-primary to-secondary gap-2">
-                <Upload className="h-4 w-4" /> Import
-              </Button>
+
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                className="px-3 sm:px-4 py-2 rounded-lg border border-border/60 bg-muted/50 text-foreground focus:outline-none text-xs sm:text-sm flex-1 sm:flex-none min-w-0"
+              >
+                <option value="">Select Course</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code} - {course.title}
+                  </option>
+                ))}
+              </select>
+
+              <div className="flex gap-1 sm:gap-2 flex-wrap">
+                <Button
+                  onClick={saveAllGrades}
+                  disabled={saving || students.length === 0}
+                  className="bg-gradient-to-r from-emerald-600 to-emerald-500 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2 flex-1 sm:flex-none"
+                >
+                  <Save className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">
+                    {saving ? "Saving..." : "Save All"}
+                  </span>
+                  <span className="sm:hidden">{saving ? "..." : "Save"}</span>
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2 flex-1 sm:flex-none"
+                  onClick={handleExportGrades}
+                  disabled={students.length === 0}
+                >
+                  <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">Export</span>
+                </Button>
+
+                <Button
+                  className="bg-gradient-to-r from-primary to-secondary gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2 flex-1 sm:flex-none"
+                  onClick={() =>
+                    document.getElementById("grade-import")?.click()
+                  }
+                  disabled={importing}
+                >
+                  <Upload className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden sm:inline">
+                    {importing ? "Importing..." : "Import"}
+                  </span>
+                </Button>
+
+                <input
+                  id="grade-import"
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={handleImportGrades}
+                />
+              </div>
             </div>
           </div>
 
           {/* Stats Grid */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-5">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
             >
               <Card className="bg-primary/10 border-primary/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Class Average</p>
-                  <p className="text-2xl font-bold text-primary">
-                    {stats.classAverage}%
-                  </p>
+                <CardContent className="pt-3 sm:pt-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Class Average
+                    </p>
+                    <p className="text-lg sm:text-2xl font-bold">
+                      {stats.classAverage}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -239,11 +784,13 @@ export default function LecturerGradeBook() {
               transition={{ delay: 0.1 }}
             >
               <Card className="bg-emerald-500/10 border-emerald-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Highest Score</p>
-                  <p className="text-2xl font-bold text-emerald-700">
-                    {stats.highestScore}%
-                  </p>
+                <CardContent className="pt-3 sm:pt-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Highest</p>
+                    <p className="text-lg sm:text-2xl font-bold text-emerald-600">
+                      {stats.highestScore}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -254,11 +801,13 @@ export default function LecturerGradeBook() {
               transition={{ delay: 0.15 }}
             >
               <Card className="bg-red-500/10 border-red-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Lowest Score</p>
-                  <p className="text-2xl font-bold text-red-700">
-                    {stats.lowestScore}%
-                  </p>
+                <CardContent className="pt-3 sm:pt-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Lowest</p>
+                    <p className="text-lg sm:text-2xl font-bold text-red-600">
+                      {stats.lowestScore}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -267,13 +816,16 @@ export default function LecturerGradeBook() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
+              className="hidden sm:block"
             >
-              <Card className="bg-emerald-500/10 border-emerald-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Excellent (A)</p>
-                  <p className="text-2xl font-bold text-emerald-700">
-                    {stats.excellentCount}
-                  </p>
+              <Card className="bg-blue-500/10 border-blue-300/30">
+                <CardContent className="pt-3 sm:pt-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Excellent</p>
+                    <p className="text-lg sm:text-2xl font-bold text-blue-600">
+                      {stats.excellentCount}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -282,200 +834,228 @@ export default function LecturerGradeBook() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.25 }}
+              className="hidden sm:block"
             >
-              <Card className="bg-red-500/10 border-red-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Failing (F)</p>
-                  <p className="text-2xl font-bold text-red-700">
-                    {stats.failingCount}
-                  </p>
+              <Card className="bg-orange-500/10 border-orange-300/30">
+                <CardContent className="pt-3 sm:pt-4">
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Failing</p>
+                    <p className="text-lg sm:text-2xl font-bold text-orange-600">
+                      {stats.failingCount}
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
           </div>
-        </motion.div>
 
-        {/* Controls */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="space-y-4"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <label className="text-sm font-medium block mb-2">
-                Search Student
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+          {/* Search and Sort Controls */}
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search student name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 text-xs sm:text-sm"
+              />
             </div>
-            <div className="flex gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="px-4 py-2 rounded-lg border border-border/60 bg-muted/50 text-foreground focus:outline-none"
-              >
-                <option value="name">Sort by Name</option>
-                <option value="total">Sort by Score</option>
-                <option value="grade">Sort by Grade</option>
-              </select>
-            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="px-3 sm:px-4 py-2 rounded-lg border border-border/60 bg-muted/50 text-foreground focus:outline-none text-xs sm:text-sm"
+            >
+              <option value="name">Sort by Name</option>
+              <option value="total">Sort by Score</option>
+              <option value="grade">Sort by Grade</option>
+            </select>
           </div>
         </motion.div>
 
         {/* Grade Table */}
         <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
-          <CardHeader>
-            <CardTitle>{filteredStudents.length} Students</CardTitle>
+          <CardHeader className="pb-3 sm:pb-4">
+            <CardTitle className="text-lg sm:text-xl">
+              {filteredStudents.length} Students
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-4 sm:mx-0">
+              <table className="w-full text-xs sm:text-sm min-w-max">
                 <thead>
                   <tr className="border-b border-border/60">
-                    <th className="px-4 py-3 text-left font-semibold">
+                    <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-semibold">
                       Student
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold">A1</th>
-                    <th className="px-3 py-3 text-center font-semibold">A2</th>
-                    <th className="px-3 py-3 text-center font-semibold">Mid</th>
-                    <th className="px-3 py-3 text-center font-semibold">
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
+                      A1
+                    </th>
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
+                      A2
+                    </th>
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
+                      Mid
+                    </th>
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
                       Part
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold">
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
                       Final
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold">
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
                       Total
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold">
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
                       Grade
                     </th>
-                    <th className="px-3 py-3 text-center font-semibold">GP</th>
-                    <th className="px-3 py-3 text-center font-semibold">
+                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
+                      GP
+                    </th>
+                    <th className="hidden sm:table-cell px-3 py-3 text-center font-semibold whitespace-nowrap">
                       Status
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStudents.map((student, i) => (
-                    <motion.tr
-                      key={student.id}
-                      variants={rise}
-                      initial="hidden"
-                      animate="visible"
-                      custom={i}
-                      className="border-b border-border/60 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-semibold text-foreground">
-                        {student.name}
+                  {loading ? (
+                    <tr>
+                      <td
+                        colSpan={10}
+                        className="px-4 py-6 sm:py-8 text-center text-muted-foreground"
+                      >
+                        Loading students and grades...
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {student.assignment1}
+                    </tr>
+                  ) : filteredStudents.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={10}
+                        className="px-4 py-6 sm:py-8 text-center text-muted-foreground"
+                      >
+                        {selectedCourse
+                          ? "No enrolled students found"
+                          : "Please select a course"}
                       </td>
-                      <td className="px-3 py-3 text-center">
-                        {student.assignment2}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {student.midterm}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {student.participation}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {student.finalExam}
-                      </td>
-                      <td className="px-3 py-3 text-center font-bold text-primary">
-                        {student.total.toFixed(1)}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <Badge className="bg-primary/20 text-primary">
-                          {student.grade}
-                        </Badge>
-                      </td>
-                      <td className="px-3 py-3 text-center font-semibold">
-                        {student.gp.toFixed(2)}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <Badge className={getStatusColor(student.status)}>
-                          {student.status}
-                        </Badge>
-                      </td>
-                    </motion.tr>
-                  ))}
+                    </tr>
+                  ) : (
+                    filteredStudents.map((student, i) => (
+                      <motion.tr
+                        key={student.id}
+                        variants={rise}
+                        initial="hidden"
+                        animate="visible"
+                        custom={i}
+                        className="border-b border-border/60 hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 font-semibold text-foreground text-xs sm:text-sm">
+                          <div className="flex flex-col">
+                            <span className="truncate">{student.name}</span>
+                            <span className="text-xs text-muted-foreground hidden sm:inline truncate">
+                              {student.email}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={student.assignment1}
+                            onChange={(e) =>
+                              updateStudentGrade(
+                                student.id,
+                                "assignment1",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={student.assignment2}
+                            onChange={(e) =>
+                              updateStudentGrade(
+                                student.id,
+                                "assignment2",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={student.midterm}
+                            onChange={(e) =>
+                              updateStudentGrade(
+                                student.id,
+                                "midterm",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={student.participation}
+                            onChange={(e) =>
+                              updateStudentGrade(
+                                student.id,
+                                "participation",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={student.finalExam}
+                            onChange={(e) =>
+                              updateStudentGrade(
+                                student.id,
+                                "finalExam",
+                                parseFloat(e.target.value) || 0
+                              )
+                            }
+                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          />
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center font-bold text-primary text-xs sm:text-sm">
+                          {student.total.toFixed(1)}
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
+                          <Badge className="bg-primary/20 text-primary text-xs">
+                            {student.grade}
+                          </Badge>
+                        </td>
+                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold text-xs sm:text-sm">
+                          {student.gp.toFixed(2)}
+                        </td>
+                        <td className="hidden sm:table-cell px-3 py-3 text-center">
+                          <Badge className={getStatusColor(student.status)}>
+                            {student.status}
+                          </Badge>
+                        </td>
+                      </motion.tr>
+                    ))
+                  )}
                 </tbody>
               </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Grade Distribution */}
-        <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-primary" />
-              Grade Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                {
-                  grade: "A",
-                  count: students.filter((s) => s.gp >= 3.7).length,
-                  color: "bg-emerald-500",
-                },
-                {
-                  grade: "B+",
-                  count: students.filter((s) => s.gp >= 3.0 && s.gp < 3.7)
-                    .length,
-                  color: "bg-blue-500",
-                },
-                {
-                  grade: "B",
-                  count: students.filter((s) => s.gp >= 2.0 && s.gp < 3.0)
-                    .length,
-                  color: "bg-amber-500",
-                },
-                {
-                  grade: "C",
-                  count: students.filter((s) => s.gp >= 1.0 && s.gp < 2.0)
-                    .length,
-                  color: "bg-orange-500",
-                },
-                {
-                  grade: "F",
-                  count: students.filter((s) => s.gp < 1.0).length,
-                  color: "bg-red-500",
-                },
-              ].map((item) => (
-                <div key={item.grade} className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="font-semibold">{item.grade}</span>
-                    <span className="text-muted-foreground">
-                      {item.count} students
-                    </span>
-                  </div>
-                  <div className="h-3 bg-muted/60 rounded-full overflow-hidden">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${(item.count / students.length) * 100}%`,
-                      }}
-                      transition={{ delay: 0.5, duration: 1 }}
-                      className={`h-full ${item.color}`}
-                    />
-                  </div>
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>
