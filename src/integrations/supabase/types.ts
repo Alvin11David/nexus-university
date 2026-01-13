@@ -77,6 +77,7 @@ export type Database = {
         };
         Relationships: [
           {
+<<<<<<< HEAD
             foreignKeyName: "announcements_course_id_fkey";
             columns: ["course_id"];
             isOneToOne: false;
@@ -137,6 +138,106 @@ export type Database = {
           rubric_id?: string | null;
           updated_at?: string | null;
         };
+=======
+            foreignKeyName: "announcements_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assignment_submissions: {
+        Row: {
+          assignment_id: string
+          created_at: string | null
+          feedback: string | null
+          file_url: string | null
+          id: string
+          score: number | null
+          student_id: string
+          submission_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string | null
+          feedback?: string | null
+          file_url?: string | null
+          id?: string
+          score?: number | null
+          student_id: string
+          submission_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string | null
+          feedback?: string | null
+          file_url?: string | null
+          id?: string
+          score?: number | null
+          student_id?: string
+          submission_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignment_submissions_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "assignments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assignments: {
+        Row: {
+          allow_late_submission: boolean | null
+          course_id: string
+          created_at: string
+          description: string | null
+          due_date: string
+          id: string
+          instructions: string | null
+          lecturer_id: string | null
+          max_score: number | null
+          status: string | null
+          title: string
+          updated_at: string | null
+          weight: number | null
+        }
+        Insert: {
+          allow_late_submission?: boolean | null
+          course_id: string
+          created_at?: string
+          description?: string | null
+          due_date: string
+          id?: string
+          instructions?: string | null
+          lecturer_id?: string | null
+          max_score?: number | null
+          status?: string | null
+          title: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+        Update: {
+          allow_late_submission?: boolean | null
+          course_id?: string
+          created_at?: string
+          description?: string | null
+          due_date?: string
+          id?: string
+          instructions?: string | null
+          lecturer_id?: string | null
+          max_score?: number | null
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+          weight?: number | null
+        }
+>>>>>>> 35f9a4b74903e340db16b3698717b63125482286
         Relationships: [
           {
             foreignKeyName: "assignments_course_id_fkey";
