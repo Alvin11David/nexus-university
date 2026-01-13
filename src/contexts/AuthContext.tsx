@@ -18,6 +18,7 @@ interface Profile {
   department: string | null;
   college: string | null;
   phone: string | null;
+  phone_number?: string | null;
   bio: string | null;
   role?: "student" | "lecturer";
 }
@@ -123,6 +124,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(data);
       console.log("Profile loaded:", { id: data.id, role: data.role }); // Debug log
 
+      // Subscribe to real-time profile updates using the new API
+      const channel = supabase
+        .channel(`profile-${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "profiles",
+            filter: `id=eq.${userId}`,
+          },
+          (payload) => {
+            console.log("Profile real-time update:", payload);
+            if (payload.new) {
+              setProfile(payload.new as Profile);
+            }
+          }
+        )
+        .subscribe();
+
       // If student_number is missing, try to get it from student_records
       if (!data.student_number) {
         const { data: studentRecord } = await supabase
@@ -149,6 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
         }
       }
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   };
 
@@ -286,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     fullName: string,
     registrationNumber?: string,
     studentNumber?: string,
-    role: "student" | "lecturer" = "student",
+    role: "student" | "lecturer" | "registrar" = "student",
     department?: string
   ) => {
     const redirectUrl = `${window.location.origin}/`;

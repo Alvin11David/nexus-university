@@ -32,6 +32,7 @@ type AuthStep =
   | "signin"
   | "signup-details"
   | "lecturer-personal-details"
+  | "registrar-personal-details"
   | "signup-otp"
   | "signup-password";
 
@@ -47,6 +48,7 @@ export default function Auth() {
   const [generatedOtp, setGeneratedOtp] = useState("");
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
+  const [isRegistrarSignup, setIsRegistrarSignup] = useState(false); // Auto-detect based on email
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [formData, setFormData] = useState({
@@ -135,6 +137,44 @@ export default function Auth() {
     }
   };
 
+  const handleRegistrarDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // Generate OTP for registrar using their actual email
+      const { otp, error: otpError } = await generateOTP(
+        formData.actualEmail,
+        null
+      );
+      if (otpError) throw otpError;
+
+      setGeneratedOtp(otp);
+      setStudentRecord({
+        id: null,
+        full_name: `${formData.firstName} ${formData.lastName}`,
+        email: formData.actualEmail,
+        department: formData.department,
+      });
+
+      toast({
+        title: "OTP Sent (Demo Mode)",
+        description: `Your verification code is: ${otp}`,
+        duration: 10000,
+      });
+
+      setStep("signup-otp");
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -178,8 +218,12 @@ export default function Auth() {
 
     try {
       // Auto-detect if email is lecturer format
-      const emailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
-      const isLecturer = emailPattern.test(formData.email);
+      const lecturerEmailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
+      const isLecturer = lecturerEmailPattern.test(formData.email);
+
+      // Auto-detect if email is registrar format
+      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const isRegistrar = registrarEmailPattern.test(formData.email);
 
       if (isLecturer) {
         // Set lecturer flag and move to personal details step
@@ -188,6 +232,8 @@ export default function Auth() {
         setLoading(false);
         return;
       }
+
+      // Registrar detection disabled - they use normal signup
 
       // For students: validate against student records
       const { data, error } = await validateStudent(
@@ -234,10 +280,11 @@ export default function Auth() {
     const enteredOtp = otpValues.join("");
 
     try {
-      // Use actualEmail for lecturers, regular email for students
-      const emailToVerify = isLecturerSignup
-        ? formData.actualEmail
-        : formData.email;
+      // Use actualEmail for lecturers/registrars, regular email for students
+      const emailToVerify =
+        isLecturerSignup || isRegistrarSignup
+          ? formData.actualEmail
+          : formData.email;
       const { valid, error } = await verifyOTP(emailToVerify, enteredOtp);
       if (error) throw error;
 
@@ -264,19 +311,37 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      // Use actualEmail for lecturers, regular email for students
-      const emailToUse = isLecturerSignup
-        ? formData.actualEmail
-        : formData.email;
+      // Use actualEmail for lecturers/registrars, regular email for students
+      const emailToUse =
+        isLecturerSignup || isRegistrarSignup
+          ? formData.actualEmail
+          : formData.email;
+
+      // Check if email is registrar format
+      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const isRegistrarEmail = registrarEmailPattern.test(emailToUse);
 
       const { error } = await signUp(
         emailToUse,
         formData.password,
-        studentRecord?.full_name || (isLecturerSignup ? "Lecturer" : "Student"),
-        isLecturerSignup ? undefined : formData.registrationNumber,
-        isLecturerSignup ? undefined : formData.studentNumber,
-        isLecturerSignup ? "lecturer" : "student",
-        isLecturerSignup ? formData.department : undefined
+        studentRecord?.full_name ||
+          (isLecturerSignup
+            ? "Lecturer"
+            : isRegistrarEmail
+            ? "Registrar"
+            : "Student"),
+        isLecturerSignup || isRegistrarEmail
+          ? undefined
+          : formData.registrationNumber,
+        isLecturerSignup || isRegistrarEmail
+          ? undefined
+          : formData.studentNumber,
+        isLecturerSignup
+          ? "lecturer"
+          : isRegistrarEmail
+          ? "registrar"
+          : "student",
+        isLecturerSignup || isRegistrarSignup ? formData.department : undefined
       );
       if (error) {
         // If user already exists, provide helpful guidance
@@ -321,8 +386,14 @@ export default function Auth() {
         title: "Account Created!",
         description: "Welcome to UniPortal.",
       });
-      // Redirect to lecturer dashboard if lecturer, student dashboard if student
-      navigate(isLecturerSignup ? "/lecturer" : "/dashboard");
+      // Redirect to appropriate dashboard based on role
+      if (isLecturerSignup) {
+        navigate("/lecturer");
+      } else if (isRegistrarSignup) {
+        navigate("/registrar");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (error: any) {
       toast({
         title: "Error",
@@ -339,6 +410,8 @@ export default function Auth() {
     setOtpValues(["", "", "", ""]);
     setGeneratedOtp("");
     setStudentRecord(null);
+    setIsLecturerSignup(false);
+    setIsRegistrarSignup(false);
     setFormData({
       identifier: "",
       email: "",
@@ -357,6 +430,8 @@ export default function Auth() {
     setOtpValues(["", "", "", ""]);
     setGeneratedOtp("");
     setStudentRecord(null);
+    setIsLecturerSignup(false);
+    setIsRegistrarSignup(false);
     setFormData({
       identifier: "",
       email: "",
@@ -379,18 +454,24 @@ export default function Auth() {
   const renderStepIndicator = () => {
     if (step === "signin") return null;
 
-    const steps = isLecturerSignup
-      ? [
-          { key: "signup-details", label: "Email" },
-          { key: "lecturer-personal-details", label: "Details" },
-          { key: "signup-otp", label: "Verify" },
-          { key: "signup-password", label: "Password" },
-        ]
-      : [
-          { key: "signup-details", label: "Details" },
-          { key: "signup-otp", label: "Verify" },
-          { key: "signup-password", label: "Password" },
-        ];
+    const steps =
+      isLecturerSignup || isRegistrarSignup
+        ? [
+            { key: "signup-details", label: "Email" },
+            {
+              key: isLecturerSignup
+                ? "lecturer-personal-details"
+                : "registrar-personal-details",
+              label: "Details",
+            },
+            { key: "signup-otp", label: "Verify" },
+            { key: "signup-password", label: "Password" },
+          ]
+        : [
+            { key: "signup-details", label: "Details" },
+            { key: "signup-otp", label: "Verify" },
+            { key: "signup-password", label: "Password" },
+          ];
 
     const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -504,59 +585,60 @@ export default function Auth() {
       case "signup-details":
         return (
           <form onSubmit={handleValidateStudent} className="space-y-5">
-            {!formData.email.endsWith("@lecturer.com") && (
-              <>
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="registrationNumber"
-                    className="text-sm font-medium"
-                  >
-                    Registration Number
-                  </Label>
-                  <div className="relative">
-                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      id="registrationNumber"
-                      placeholder="21/U/12345/PS"
-                      value={formData.registrationNumber}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          registrationNumber: e.target.value,
-                        })
-                      }
-                      className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
-                      required
-                    />
+            {!formData.email.endsWith("@lecturer.com") &&
+              !formData.email.endsWith("@registrar.com") && (
+                <>
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="registrationNumber"
+                      className="text-sm font-medium"
+                    >
+                      Registration Number
+                    </Label>
+                    <div className="relative">
+                      <Hash className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                      <Input
+                        id="registrationNumber"
+                        placeholder="21/U/12345/PS"
+                        value={formData.registrationNumber}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            registrationNumber: e.target.value,
+                          })
+                        }
+                        className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-2">
-                  <Label
-                    htmlFor="studentNumber"
-                    className="text-sm font-medium"
-                  >
-                    Student Number
-                  </Label>
-                  <div className="relative">
-                    <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <Input
-                      id="studentNumber"
-                      placeholder="2100712345"
-                      value={formData.studentNumber}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          studentNumber: e.target.value,
-                        })
-                      }
-                      className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
-                      required
-                    />
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="studentNumber"
+                      className="text-sm font-medium"
+                    >
+                      Student Number
+                    </Label>
+                    <div className="relative">
+                      <IdCard className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                      <Input
+                        id="studentNumber"
+                        placeholder="2100712345"
+                        value={formData.studentNumber}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            studentNumber: e.target.value,
+                          })
+                        }
+                        className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
@@ -582,13 +664,21 @@ export default function Auth() {
                   next
                 </p>
               )}
+              {formData.email.endsWith("@registrar.com") && (
+                <p className="text-xs text-muted-foreground mt-1 ml-1">
+                  Registrar email detected - you'll be asked for personal
+                  details next
+                </p>
+              )}
             </div>
 
             <div className="flex items-start gap-3 p-4 rounded-xl bg-primary/5 border border-primary/20">
               <ShieldCheck className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-sm text-foreground/80">
                 {formData.email.endsWith("@lecturer.com")
-                  ? "Lecturer registration: Enter email in format surname.othernames@lecturer.com"
+                  ? "Lecturer registration: Enter email in format firstname.lastname@lecturer.com"
+                  : formData.email.endsWith("@registrar.com")
+                  ? "Registrar registration: Enter email in format firstname.lastname@registrar.com"
                   : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
               </p>
             </div>
@@ -717,6 +807,113 @@ export default function Auth() {
           </form>
         );
 
+      case "registrar-personal-details":
+        return (
+          <form onSubmit={handleRegistrarDetails} className="space-y-5">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold mb-2">Personal Details</h3>
+              <p className="text-muted-foreground text-sm">
+                Please provide your information
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="firstName" className="text-sm font-medium">
+                First Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="firstName"
+                  placeholder="John"
+                  value={formData.firstName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, firstName: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lastName" className="text-sm font-medium">
+                Last Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="lastName"
+                  placeholder="Doe"
+                  value={formData.lastName}
+                  onChange={(e) =>
+                    setFormData({ ...formData, lastName: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="department" className="text-sm font-medium">
+                College / Department
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="department"
+                  placeholder="College of Engineering"
+                  value={formData.department}
+                  onChange={(e) =>
+                    setFormData({ ...formData, department: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="actualEmail" className="text-sm font-medium">
+                Your Email Address
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Input
+                  id="actualEmail"
+                  type="email"
+                  placeholder="your.email@institution.edu"
+                  value={formData.actualEmail}
+                  onChange={(e) =>
+                    setFormData({ ...formData, actualEmail: e.target.value })
+                  }
+                  className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
+                  required
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 ml-1">
+                We'll send the verification code to this email
+              </p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <>
+                  Continue to Verification
+                  <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </Button>
+          </form>
+        );
+
       case "signup-otp":
         return (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
@@ -730,7 +927,9 @@ export default function Auth() {
               <p className="text-muted-foreground text-sm">
                 We've sent a 4-digit code to{" "}
                 <span className="font-medium text-foreground">
-                  {isLecturerSignup ? formData.actualEmail : formData.email}
+                  {isLecturerSignup || isRegistrarSignup
+                    ? formData.actualEmail
+                    : formData.email}
                 </span>
               </p>
             </div>
@@ -1001,9 +1200,18 @@ export default function Auth() {
           {/* Back button for multi-step */}
           {step !== "signin" && step !== "signup-details" && (
             <button
-              onClick={() =>
-                setStep(step === "signup-otp" ? "signup-details" : "signup-otp")
-              }
+              onClick={() => {
+                if (step === "signup-otp") {
+                  setStep("signup-details");
+                } else if (step === "signup-password") {
+                  setStep("signup-otp");
+                } else if (
+                  step === "lecturer-personal-details" ||
+                  step === "registrar-personal-details"
+                ) {
+                  setStep("signup-details");
+                }
+              }}
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />

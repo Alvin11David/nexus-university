@@ -205,11 +205,39 @@ export default function Registration() {
         status: "pending" as const,
       }));
 
-      const { error: enrollError } = await supabase
+      const { data: enrolledRows, error: enrollError } = await supabase
         .from("enrollments")
-        .insert(enrollments);
+        .insert(enrollments)
+        .select("id, course_id");
 
       if (enrollError) throw enrollError;
+
+      // Notify lecturers (course instructors) to review requests
+      const notifications = selectedCourses
+        .map((courseId) => {
+          const course = courses.find((c) => c.id === courseId);
+          if (!course?.instructor_id) return null;
+
+          const studentLabel =
+            profile?.full_name || profile?.student_number || user.email;
+
+          return {
+            user_id: course.instructor_id,
+            type: "enrollment_request",
+            title: "Enrollment Request",
+            message: `${studentLabel} requested to enroll in ${course.title} (${course.code}).`,
+            related_id: courseId,
+            is_read: false,
+          };
+        })
+        .filter(Boolean) as any[];
+
+      if (notifications.length > 0) {
+        const { error: notifError } = await supabase
+          .from("notifications")
+          .insert(notifications);
+        if (notifError) console.warn("Notification insert error", notifError);
+      }
 
       toast({
         title: "Registration Submitted! 🎉",

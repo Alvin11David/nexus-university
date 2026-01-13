@@ -80,6 +80,25 @@ export function BioDataTab() {
 
       if (error) throw error;
 
+      // Refetch profile to update global state
+      const { data: updatedProfile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (updatedProfile) {
+        setFormData({
+          full_name: updatedProfile.full_name || "",
+          email: updatedProfile.email || "",
+          phone: updatedProfile.phone || "",
+          bio: updatedProfile.bio || "",
+          student_number: updatedProfile.student_number || "",
+          department: updatedProfile.department || "",
+          college: updatedProfile.college || "",
+        });
+      }
+
       // Profile updated
       setIsEditing(false);
       toast({
@@ -270,7 +289,14 @@ export function BioDataTab() {
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: "Member Since", value: "Active" },
-                  { label: "Last Updated", value: profile?.updated_at ? formatDistanceToNow(new Date(profile.updated_at), { addSuffix: true }) : "Recently" },
+                  {
+                    label: "Last Updated",
+                    value: profile?.updated_at
+                      ? formatDistanceToNow(new Date(profile.updated_at), {
+                          addSuffix: true,
+                        })
+                      : "Recently",
+                  },
                   { label: "Profile Status", value: "Complete" },
                   { label: "Account Type", value: "Student" },
                 ].map((stat, i) => (

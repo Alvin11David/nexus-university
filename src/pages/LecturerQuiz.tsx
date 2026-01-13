@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/components/ui/use-toast";
+import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
 interface Quiz {
   id: string;
@@ -94,6 +95,16 @@ export default function LecturerQuiz() {
         .eq("lecturer_id", user.id)
         .order("created_at", { ascending: false });
 
+      console.log("LecturerQuiz: Loading quizzes for user:", user.id);
+      console.log("LecturerQuiz: Query result:", { data, error });
+
+      if (data && data.length > 0) {
+        console.log(
+          "LecturerQuiz: Full quiz data:",
+          JSON.stringify(data, null, 2)
+        );
+      }
+
       if (error) throw error;
 
       const quizzesData: Quiz[] = (data || []).map((row: any) => {
@@ -121,6 +132,23 @@ export default function LecturerQuiz() {
         };
         return quizData;
       });
+
+      // Check for expired quizzes and auto-close them
+      const expiredQuizIds = await autoCloseExpiredQuizzes(supabase, user.id);
+
+      // Update local quiz data for expired quizzes
+      if (expiredQuizIds.length > 0) {
+        quizzesData.forEach((quiz) => {
+          if (expiredQuizIds.includes(quiz.id)) {
+            quiz.status = "closed";
+          }
+        });
+
+        toast({
+          title: "Auto-closed Quizzes",
+          description: `${expiredQuizIds.length} quiz(es) have been automatically closed as they reached their end date.`,
+        });
+      }
 
       setQuizzes(quizzesData);
 
@@ -212,11 +240,78 @@ export default function LecturerQuiz() {
 
   const handleDuplicateQuiz = async (quiz: Quiz) => {
     try {
+      // Create duplicate quiz
+      const { data: newQuiz, error: quizError } = await supabase
+        .from("quizzes")
+        .insert({
+          title: `${quiz.title} (Copy)`,
+          description: quiz.description,
+          course_id: quiz.courseId,
+          lecturer_id: user?.id,
+          total_questions: quiz.totalQuestions,
+          total_points: quiz.totalPoints,
+          time_limit: quiz.timeLimit,
+          passing_score: quiz.passingScore,
+          start_date: quiz.startDate,
+          end_date: quiz.endDate,
+          status: "draft",
+          attempts_allowed: quiz.attemptsAllowed,
+          shuffle_questions: quiz.shuffleQuestions,
+          show_answers: quiz.showAnswers,
+        })
+        .select()
+        .single();
+
+      if (quizError) throw quizError;
+
+      // Load and duplicate questions if they exist
+      try {
+        const { data: questionsData, error: questionsLoadError } =
+          await supabase
+            .from("quiz_questions")
+            .select("*")
+            .eq("quiz_id", quiz.id);
+
+        if (!questionsLoadError && questionsData && questionsData.length > 0) {
+          const questionInserts = questionsData.map((q) => ({
+            quiz_id: newQuiz.id,
+            question: q.question,
+            type: q.type,
+            options: q.options,
+            correct_answer: q.correct_answer,
+            points: q.points,
+            explanation: q.explanation,
+          }));
+
+          const { error: questionsError } = await supabase
+            .from("quiz_questions")
+            .insert(questionInserts);
+
+          if (questionsError) {
+            // If database insertion fails, try to store questions in localStorage for the new quiz
+            console.log(
+              "Database question duplication failed, storing locally:",
+              questionsError.message
+            );
+            const storageKey = `quiz_questions_${newQuiz.id}`;
+            localStorage.setItem(storageKey, JSON.stringify(questionsData));
+          }
+        }
+      } catch (questionsError) {
+        // If any database operations fail, just continue without duplicating questions
+        console.log(
+          "Question duplication failed, continuing without questions:",
+          questionsError
+        );
+      }
+
       toast({
         title: "Success",
-        description: `Quiz "${quiz.title}" duplicated`,
+        description: `Quiz "${quiz.title}" duplicated successfully`,
       });
+      loadQuizzes(); // Refresh the list
     } catch (error) {
+      console.error("Error duplicating quiz:", error);
       toast({
         title: "Error",
         description: "Failed to duplicate quiz",
@@ -549,6 +644,9 @@ export default function LecturerQuiz() {
                           size="sm"
                           variant="outline"
                           className="flex items-center gap-1"
+                          onClick={() =>
+                            navigate(`/lecturer/quiz/${quiz.id}/results`)
+                          }
                         >
                           <BarChart3 className="h-4 w-4" />
                           Results
@@ -566,6 +664,9 @@ export default function LecturerQuiz() {
                           size="sm"
                           variant="outline"
                           className="flex items-center gap-1"
+                          onClick={() =>
+                            navigate(`/lecturer/quiz/${quiz.id}/edit`)
+                          }
                         >
                           <Edit2 className="h-4 w-4" />
                           Edit

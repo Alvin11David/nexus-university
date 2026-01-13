@@ -34,8 +34,17 @@ import { supabase } from "@/integrations/supabase/client";
 export function LecturerHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
+
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
 
   useEffect(() => {
     if (user) {
@@ -97,6 +106,7 @@ export function LecturerHeader() {
     { label: "Roster", href: "/lecturer/roster", icon: Users },
     { label: "Rubrics", href: "/lecturer/rubrics", icon: CheckCircle },
     { label: "Analytics", href: "/lecturer/analytics", icon: Target },
+    { label: "ID Card", href: "/lecturer/id-card", icon: User },
   ];
 
   return (
@@ -157,11 +167,15 @@ export function LecturerHeader() {
                   >
                     <Avatar className="h-10 w-10">
                       <AvatarImage
-                        src={user.user_metadata?.avatar_url}
-                        alt={user.email || ""}
+                        src={
+                          profile?.avatar_url || user.user_metadata?.avatar_url
+                        }
+                        alt={profile?.full_name || user.email || ""}
                       />
                       <AvatarFallback className="bg-primary text-primary-foreground">
-                        {user.email?.charAt(0).toUpperCase()}
+                        {profile?.full_name
+                          ? getInitials(profile.full_name)
+                          : user.email?.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                   </Button>
@@ -170,7 +184,9 @@ export function LecturerHeader() {
                   <div className="flex items-center gap-2 p-2">
                     <Avatar className="h-8 w-8">
                       <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                        {user.email?.charAt(0).toUpperCase()}
+                        {profile?.full_name
+                          ? getInitials(profile.full_name)
+                          : user.email?.charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col space-y-0.5">

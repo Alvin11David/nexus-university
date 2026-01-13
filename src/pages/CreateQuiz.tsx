@@ -11,6 +11,7 @@ import {
   Clock,
   Award,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -32,10 +33,26 @@ export default function CreateQuiz() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [courses] = useState<CourseOption[]>([
-    { id: "1", title: "Data Structures 101", code: "CS201" },
-    { id: "2", title: "Algorithms", code: "CS202" },
-    { id: "3", title: "Programming Fundamentals", code: "CS101" },
-    { id: "4", title: "Digital Logic", code: "CS150" },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      title: "Data Structures 101",
+      code: "CS201",
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440001",
+      title: "Algorithms",
+      code: "CS202",
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440002",
+      title: "Programming Fundamentals",
+      code: "CS101",
+    },
+    {
+      id: "550e8400-e29b-41d4-a716-446655440003",
+      title: "Digital Logic",
+      code: "CS150",
+    },
   ]);
 
   const [formData, setFormData] = useState({
@@ -46,8 +63,9 @@ export default function CreateQuiz() {
     totalPoints: 20,
     timeLimit: 30,
     passingScore: 12,
-    dueDate: "",
-    status: "draft" as "draft" | "active" | "closed",
+    startDate: "",
+    endDate: "",
+    status: "active" as "draft" | "active" | "closed",
     attemptsAllowed: 1,
     shuffleQuestions: false,
     showAnswers: false,
@@ -79,8 +97,18 @@ export default function CreateQuiz() {
     if (formData.passingScore > formData.totalPoints) {
       newErrors.passingScore = "Passing score cannot exceed total points";
     }
-    if (!formData.dueDate) {
-      newErrors.dueDate = "Due date is required";
+    if (!formData.startDate) {
+      newErrors.startDate = "Start date is required";
+    }
+    if (!formData.endDate) {
+      newErrors.endDate = "End date is required";
+    }
+    if (
+      formData.startDate &&
+      formData.endDate &&
+      new Date(formData.startDate) >= new Date(formData.endDate)
+    ) {
+      newErrors.endDate = "End date must be after start date";
     }
     if (formData.attemptsAllowed < 1) {
       newErrors.attemptsAllowed = "Must allow at least 1 attempt";
@@ -130,8 +158,23 @@ export default function CreateQuiz() {
 
     try {
       setLoading(true);
+      console.log("Creating quiz with formData:", formData);
+      console.log("Current user:", user);
+
+      // Show debug info to user
+      toast({
+        title: "Debug Info",
+        description: `User ID: ${user?.id}, Course ID: ${formData.courseId}`,
+      });
 
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
+      console.log("Selected course:", selectedCourse);
+
+      toast({
+        title: "Debug Info 2",
+        description: `Selected course: ${selectedCourse?.title}`,
+      });
+      console.log("Selected course:", selectedCourse);
 
       const { data, error } = await supabase
         .from("quizzes")
@@ -146,7 +189,8 @@ export default function CreateQuiz() {
             total_points: formData.totalPoints,
             time_limit: formData.timeLimit,
             passing_score: formData.passingScore,
-            due_date: formData.dueDate,
+            start_date: formData.startDate,
+            end_date: formData.endDate,
             status: formData.status,
             attempts_allowed: formData.attemptsAllowed,
             shuffle_questions: formData.shuffleQuestions,
@@ -156,6 +200,17 @@ export default function CreateQuiz() {
           },
         ])
         .select();
+
+      console.log("Supabase insert result:", { data, error });
+
+      // Show insert result to user
+      toast({
+        title: "Insert Result",
+        description: error
+          ? `Error: ${error.message}`
+          : `Success: ${data?.length} quiz created`,
+        variant: error ? "destructive" : "default",
+      });
 
       if (error) throw error;
 
@@ -292,24 +347,46 @@ export default function CreateQuiz() {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Due Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.dueDate}
-                    onChange={(e) =>
-                      handleInputChange("dueDate", e.target.value)
-                    }
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  {errors.dueDate && (
-                    <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.dueDate}
-                    </p>
-                  )}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Start Date & Time *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.startDate}
+                      onChange={(e) =>
+                        handleInputChange("startDate", e.target.value)
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    {errors.startDate && (
+                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.startDate}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      End Date & Time *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={formData.endDate}
+                      onChange={(e) =>
+                        handleInputChange("endDate", e.target.value)
+                      }
+                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    />
+                    {errors.endDate && (
+                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.endDate}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -507,6 +584,75 @@ export default function CreateQuiz() {
                     </p>
                   </div>
                 </label>
+              </CardContent>
+            </Card>
+
+            {/* AI Question Generation */}
+            <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <CardTitle>AI Question Generation</CardTitle>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Generate questions automatically using AI based on your course
+                  content
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Difficulty Level
+                    </label>
+                    <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
+                      <option value="easy">Easy</option>
+                      <option value="medium">Medium</option>
+                      <option value="hard">Hard</option>
+                      <option value="mixed">Mixed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Question Types
+                    </label>
+                    <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
+                      <option value="mixed">Mixed Types</option>
+                      <option value="multiple_choice">
+                        Multiple Choice Only
+                      </option>
+                      <option value="true_false">True/False Only</option>
+                      <option value="short_answer">Short Answer Only</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Topic Focus (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Data Structures, Algorithms, Programming Fundamentals"
+                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  className="w-full bg-gradient-to-r from-primary to-secondary text-primary-foreground"
+                  onClick={() => {
+                    // TODO: Implement AI question generation
+                    toast({
+                      title: "AI Generation",
+                      description:
+                        "AI question generation will be available soon!",
+                    });
+                  }}
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Generate Questions with AI
+                </Button>
               </CardContent>
             </Card>
 

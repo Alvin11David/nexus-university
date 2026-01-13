@@ -540,6 +540,48 @@ export default function Webmail() {
     }
   };
 
+  const handleReply = () => {
+    if (!selectedMessage) return;
+
+    const replyTo = selectedMessage.from_user_id === user?.id
+      ? selectedMessage.to_profile
+      : selectedMessage.from_profile;
+
+    if (replyTo) {
+      setComposeTo(replyTo.full_name);
+      setComposeToId(replyTo.id);
+      setComposeSubject(
+        selectedMessage.subject.startsWith("Re:")
+          ? selectedMessage.subject
+          : `Re: ${selectedMessage.subject}`
+      );
+      setComposeBody(
+        `\n\n---\nOn ${new Date(selectedMessage.created_at).toLocaleString()}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
+          .split("\n")
+          .join("\n> ")}`
+      );
+      setIsComposeOpen(true);
+    }
+  };
+
+  const handleForward = () => {
+    if (!selectedMessage) return;
+
+    setComposeTo("");
+    setComposeToId(null);
+    setComposeSubject(
+      selectedMessage.subject.startsWith("Fwd:")
+        ? selectedMessage.subject
+        : `Fwd: ${selectedMessage.subject}`
+    );
+    setComposeBody(
+      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${new Date(
+        selectedMessage.created_at
+      ).toLocaleString()}\n\n${selectedMessage.body}`
+    );
+    setIsComposeOpen(true);
+  };
+
   const handleArchive = async (messageId: string, currentValue: boolean) => {
     try {
       const { error } = await supabase
@@ -962,11 +1004,19 @@ export default function Webmail() {
                           )}
 
                           <div className="flex gap-2 pt-4 border-t">
-                            <Button variant="outline" className="gap-2">
+                            <Button 
+                              variant="outline" 
+                              className="gap-2"
+                              onClick={handleReply}
+                            >
                               <Reply className="h-4 w-4" />
                               Reply
                             </Button>
-                            <Button variant="outline" className="gap-2">
+                            <Button 
+                              variant="outline" 
+                              className="gap-2"
+                              onClick={handleForward}
+                            >
                               <Forward className="h-4 w-4" />
                               Forward
                             </Button>
@@ -1074,6 +1124,17 @@ export default function Webmail() {
                                                   : ""
                                               }`}
                                             />
+                                          </Button>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 hover:text-destructive"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleDelete(message.id);
+                                            }}
+                                          >
+                                            <Trash2 className="h-4 w-4" />
                                           </Button>
                                         </div>
                                       </div>

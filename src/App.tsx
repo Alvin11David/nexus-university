@@ -32,10 +32,25 @@ import LecturerEnrollments from "./pages/LecturerEnrollments";
 import LecturerSettings from "./pages/LecturerSettings";
 import LecturerQuiz from "./pages/LecturerQuiz";
 import CreateQuiz from "./pages/CreateQuiz";
+import EditQuiz from "./pages/EditQuiz";
+import QuizView from "./pages/QuizView";
+import QuizResults from "./pages/QuizResults";
 import StudentAssignments from "./pages/StudentAssignments";
+import StudentQuiz from "./pages/StudentQuiz";
 import Announcements from "./pages/Announcements";
 import Programs from "./pages/Programs";
 import NotFound from "./pages/NotFound";
+import IdCard from "./pages/IdCard";
+import AcademicCalendar from "./pages/AcademicCalendar";
+import LecturerIdCard from "./pages/LecturerIdCard";
+import RegistrarDashboard from "./pages/RegistrarDashboard";
+import RegistrarStudents from "./pages/RegistrarStudents";
+import RegistrarStudentDetail from "./pages/RegistrarStudentDetail";
+import RegistrarTranscripts from "./pages/RegistrarTranscripts";
+import RegistrarTranscriptDetail from "./pages/RegistrarTranscriptDetail";
+import RegistrarEnrollments from "./pages/RegistrarEnrollments";
+import RegistrarPrograms from "./pages/RegistrarPrograms";
+import RegistrarCalendar from "./pages/RegistrarCalendar";
 
 const queryClient = new QueryClient();
 
@@ -95,9 +110,42 @@ function LecturerRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Redirect students to student dashboard
+  // Redirect non-lecturers to appropriate dashboard
   if (profile?.role !== "lecturer") {
-    return <Navigate to="/dashboard" replace />;
+    return (
+      <Navigate
+        to={profile?.role === "registrar" ? "/registrar" : "/dashboard"}
+        replace
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function RegistrarRoute({ children }: { children: React.ReactNode }) {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="h-8 w-8 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  // Redirect non-registrars to appropriate dashboard
+  if (profile?.role !== "registrar") {
+    return (
+      <Navigate
+        to={profile?.role === "lecturer" ? "/lecturer" : "/dashboard"}
+        replace
+      />
+    );
   }
 
   return <>{children}</>;
@@ -166,14 +214,6 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/schedule"
-        element={
-          <StudentRoute>
-            <Dashboard />
-          </StudentRoute>
-        }
-      />
-      <Route
         path="/notifications"
         element={
           <ProtectedRoute>
@@ -186,6 +226,14 @@ function AppRoutes() {
         element={
           <StudentRoute>
             <Webmail />
+          </StudentRoute>
+        }
+      />
+      <Route
+        path="/academic-calendar"
+        element={
+          <StudentRoute>
+            <AcademicCalendar />
           </StudentRoute>
         }
       />
@@ -230,11 +278,27 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/quiz"
+        element={
+          <StudentRoute>
+            <StudentQuiz />
+          </StudentRoute>
+        }
+      />
+      <Route
         path="/programs"
         element={
           <ProtectedRoute>
             <Programs />
           </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/id-card"
+        element={
+          <StudentRoute>
+            <IdCard />
+          </StudentRoute>
         }
       />
       <Route
@@ -363,6 +427,110 @@ function AppRoutes() {
           <LecturerRoute>
             <CreateQuiz />
           </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/quiz/:id"
+        element={
+          <LecturerRoute>
+            <QuizView />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/quiz/:id/edit"
+        element={
+          <LecturerRoute>
+            <EditQuiz />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/quiz/:id/results"
+        element={
+          <LecturerRoute>
+            <QuizResults />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/id-card"
+        element={
+          <LecturerRoute>
+            <LecturerIdCard />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/registrar"
+        element={
+          <RegistrarRoute>
+            <RegistrarDashboard />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/students"
+        element={
+          <RegistrarRoute>
+            <RegistrarStudents />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/students/:id"
+        element={
+          <RegistrarRoute>
+            <RegistrarStudentDetail />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/students/:id/edit"
+        element={
+          <RegistrarRoute>
+            <RegistrarStudentDetail />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/enrollments"
+        element={
+          <RegistrarRoute>
+            <RegistrarEnrollments />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/programs"
+        element={
+          <RegistrarRoute>
+            <RegistrarPrograms />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/calendar"
+        element={
+          <RegistrarRoute>
+            <RegistrarCalendar />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/transcripts"
+        element={
+          <RegistrarRoute>
+            <RegistrarTranscripts />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/transcripts/:id"
+        element={
+          <RegistrarRoute>
+            <RegistrarTranscriptDetail />
+          </RegistrarRoute>
         }
       />
       <Route path="*" element={<NotFound />} />

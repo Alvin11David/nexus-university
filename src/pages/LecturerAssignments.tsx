@@ -196,15 +196,15 @@ export default function LecturerAssignments() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
-        return "bg-emerald-500/20 text-emerald-700 border-emerald-300/30";
+        return "bg-emerald-100 text-emerald-700 border-emerald-300";
       case "closed":
-        return "bg-amber-500/20 text-amber-700 border-amber-300/30";
+        return "bg-amber-100 text-amber-700 border-amber-300";
       case "graded":
-        return "bg-blue-500/20 text-blue-700 border-blue-300/30";
+        return "bg-amber-100 text-amber-700 border-amber-300";
       case "draft":
-        return "bg-gray-500/20 text-gray-700 border-gray-300/30";
+        return "bg-gray-100 text-gray-700 border-gray-300";
       default:
-        return "bg-muted/60";
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -494,23 +494,31 @@ export default function LecturerAssignments() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-orange-900/20 to-background pb-28">
+    <div className="min-h-screen bg-gradient-to-b from-white via-orange-50/30 to-white pb-28">
       <LecturerHeader />
 
-      <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
+      <main className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
         {/* No Courses Message */}
         {courses.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-amber-500/10 border border-amber-300/30 rounded-xl p-6 text-center"
+            className="bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl p-8 text-center shadow-sm hover:shadow-md transition-shadow"
           >
-            <p className="text-foreground mb-3">
-              You haven't selected any courses yet. Please select the courses
-              you teach to create assignments.
+            <div className="flex justify-center mb-4">
+              <div className="p-3 bg-orange-100 rounded-full">
+                <AlertCircle className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+            <p className="text-gray-700 mb-4 text-lg font-medium">
+              You haven't selected any courses yet.
+            </p>
+            <p className="text-gray-600 mb-6">
+              Please select the courses you teach to create and manage
+              assignments.
             </p>
             <Button
-              className="bg-gradient-to-r from-primary to-secondary"
+              className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-md hover:shadow-lg transition-all"
               onClick={() => navigate("/lecturer/courses")}
             >
               Select Courses
@@ -522,41 +530,52 @@ export default function LecturerAssignments() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-4"
+          className="space-y-6"
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-gradient-to-br from-orange-500 to-black rounded-lg">
-                <FileText className="h-6 w-6 text-white" />
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-gradient-to-br from-orange-600 to-amber-600 rounded-xl shadow-lg">
+                <FileText className="h-7 w-7 text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold">Assignments</h1>
-                <p className="text-sm text-muted-foreground">
-                  Create and manage course assignments
+                <h1 className="text-4xl font-bold text-gray-900">
+                  Assignments
+                </h1>
+                <p className="text-base text-gray-600 mt-1">
+                  Create and manage course assignments effortlessly
                 </p>
               </div>
             </div>
             <Button
-              className="bg-gradient-to-r from-orange-500 to-black text-white hover:shadow-lg gap-2"
+              className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-lg hover:shadow-xl gap-2 px-6 py-3 h-auto text-base transition-all"
               onClick={() => setShowCreateModal(true)}
             >
-              <Plus className="h-4 w-4" /> New Assignment
+              <Plus className="h-5 w-5" /> New Assignment
             </Button>
           </div>
 
           {/* Stats */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 }}
             >
-              <Card className="bg-emerald-500/10 border-emerald-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Active</p>
-                  <p className="text-2xl font-bold text-emerald-700">
-                    {stats.activeCount}
-                  </p>
+              <Card className="bg-white border-2 border-emerald-200 shadow-md hover:shadow-lg hover:border-emerald-300 transition-all">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Active Assignments
+                      </p>
+                      <p className="text-3xl font-bold text-emerald-600 mt-2">
+                        {stats.activeCount}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-orange-100 rounded-full">
+                      <Clock className="h-6 w-6 text-orange-600" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -566,12 +585,21 @@ export default function LecturerAssignments() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
             >
-              <Card className="bg-amber-500/10 border-amber-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Closed</p>
-                  <p className="text-2xl font-bold text-amber-700">
-                    {stats.closedCount}
-                  </p>
+              <Card className="bg-white border-2 border-amber-200 shadow-md hover:shadow-lg hover:border-amber-300 transition-all">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Closed
+                      </p>
+                      <p className="text-3xl font-bold text-amber-600 mt-2">
+                        {stats.closedCount}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-amber-100 rounded-full">
+                      <AlertCircle className="h-6 w-6 text-amber-600" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -581,12 +609,21 @@ export default function LecturerAssignments() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
             >
-              <Card className="bg-blue-500/10 border-blue-300/30">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">Graded</p>
-                  <p className="text-2xl font-bold text-blue-700">
-                    {stats.gradedCount}
-                  </p>
+              <Card className="bg-white border-2 border-orange-200 shadow-md hover:shadow-lg hover:border-orange-300 transition-all">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Graded
+                      </p>
+                      <p className="text-3xl font-bold text-amber-600 mt-2">
+                        {stats.gradedCount}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-amber-100 rounded-full">
+                      <CheckCircle className="h-6 w-6 text-amber-600" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -596,14 +633,21 @@ export default function LecturerAssignments() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="bg-gradient-to-br from-orange-500/15 to-black/15 border-orange-500/40">
-                <CardContent className="pt-4">
-                  <p className="text-sm text-muted-foreground">
-                    Avg Submission Rate
-                  </p>
-                  <p className="text-2xl font-bold text-orange-600">
-                    {stats.averageSubmissionRate}%
-                  </p>
+              <Card className="bg-gradient-to-br from-orange-50 to-amber-50 border-2 border-amber-200 shadow-md hover:shadow-lg hover:border-amber-300 transition-all">
+                <CardContent className="pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">
+                        Avg Submit Rate
+                      </p>
+                      <p className="text-3xl font-bold text-amber-600 mt-2">
+                        {stats.averageSubmissionRate}%
+                      </p>
+                    </div>
+                    <div className="p-3 bg-amber-100 rounded-full">
+                      <Users className="h-6 w-6 text-amber-600" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </motion.div>
@@ -615,16 +659,16 @@ export default function LecturerAssignments() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.25 }}
-          className="flex gap-2 flex-wrap"
+          className="flex gap-3 flex-wrap"
         >
           {(["all", "active", "closed", "graded"] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setSelectedFilter(filter)}
-              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${
                 selectedFilter === filter
-                  ? "bg-gradient-to-r from-orange-500 to-black text-white"
-                  : "bg-muted/60 text-foreground hover:bg-muted"
+                  ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
               }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -633,139 +677,183 @@ export default function LecturerAssignments() {
         </motion.div>
 
         {/* Assignments List */}
-        <div className="space-y-3">
-          {filteredAssignments.map((assignment, i) => (
+        <div className="space-y-4">
+          {filteredAssignments.length === 0 ? (
             <motion.div
-              key={assignment.id}
-              variants={rise}
-              initial="hidden"
-              animate="visible"
-              custom={i}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-16"
             >
-              <Card className="border-orange-500/40 bg-gradient-to-br from-orange-900/10 to-black/10 backdrop-blur-lg hover:shadow-lg hover:border-orange-500/60 transition-all">
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <FileText className="h-5 w-5 text-orange-500" />
-                          <h3 className="text-lg font-semibold text-foreground">
-                            {assignment.title}
-                          </h3>
+              <div className="flex justify-center mb-4">
+                <div className="p-4 bg-gray-100 rounded-full">
+                  <FileText className="h-8 w-8 text-gray-400" />
+                </div>
+              </div>
+              <p className="text-gray-600 text-lg font-medium">
+                No assignments yet
+              </p>
+              <p className="text-gray-500 mt-2">
+                Create your first assignment to get started
+              </p>
+            </motion.div>
+          ) : (
+            filteredAssignments.map((assignment, i) => (
+              <motion.div
+                key={assignment.id}
+                variants={rise}
+                initial="hidden"
+                animate="visible"
+                custom={i}
+              >
+                <Card className="border-2 border-gray-200 bg-white shadow-sm hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden">
+                  <CardContent className="pt-0">
+                    <div className="space-y-5">
+                      {/* Top Section */}
+                      <div className="pt-6 px-6">
+                        <div className="flex items-start justify-between gap-4 mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="p-2 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg">
+                                <FileText className="h-5 w-5 text-amber-600" />
+                              </div>
+                              <h3 className="text-xl font-bold text-gray-900">
+                                {assignment.title}
+                              </h3>
+                            </div>
+                            <p className="text-gray-700 text-base mb-4 leading-relaxed">
+                              {assignment.description}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 flex-shrink-0">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                              onClick={() => setViewing(assignment)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                              onClick={() => handleOpenEdit(assignment)}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
+                              onClick={() =>
+                                handleDeleteAssignment(assignment.id)
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-3">
-                          {assignment.description}
-                        </p>
-                        <div className="flex gap-2 flex-wrap">
+
+                        {/* Badges */}
+                        <div className="flex gap-2 flex-wrap mb-5">
                           <Badge
                             variant="outline"
-                            className={getStatusColor(assignment.status)}
+                            className={`font-semibold border-2 ${getStatusColor(
+                              assignment.status
+                            )}`}
                           >
                             {assignment.status.charAt(0).toUpperCase() +
                               assignment.status.slice(1)}
                           </Badge>
                           {assignment.courseTitle && (
-                            <Badge variant="secondary" className="gap-1">
+                            <Badge
+                              variant="secondary"
+                              className="gap-1 bg-orange-100 text-orange-700 border-orange-300 border-2"
+                            >
                               <FileText className="h-3 w-3" />
                               {assignment.courseTitle}
                             </Badge>
                           )}
-                          <Badge variant="outline" className="gap-1">
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-gray-300 text-gray-700 border-2"
+                          >
                             <Calendar className="h-3 w-3" />
                             {new Date(assignment.dueDate).toLocaleDateString()}
                           </Badge>
-                          <Badge variant="outline" className="gap-1">
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-gray-300 text-gray-700 border-2"
+                          >
                             <Users className="h-3 w-3" />
                             {assignment.submissions}/{assignment.totalStudents}{" "}
                             submitted
                           </Badge>
-                          <Badge variant="secondary">
-                            {assignment.totalPoints} points
+                          <Badge className="gap-1 bg-gradient-to-r from-orange-600 to-amber-600 text-white border-0">
+                            {assignment.totalPoints} pts
                           </Badge>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={() => setViewing(assignment)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={() => handleOpenEdit(assignment)}
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1"
-                          onClick={() => handleDeleteAssignment(assignment.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
-                      </div>
-                    </div>
 
-                    {/* Progress Bar */}
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Submission Progress
-                        </span>
-                        <span className="font-semibold">
-                          {assignment.totalStudents > 0
-                            ? (
-                                (assignment.submissions /
-                                  assignment.totalStudents) *
-                                100
-                              ).toFixed(0)
-                            : "0"}
-                          %
-                        </span>
-                      </div>
-                      <div className="h-2 bg-muted/60 rounded-full overflow-hidden">
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{
-                            width: `${
-                              assignment.totalStudents > 0
-                                ? (assignment.submissions /
+                      {/* Progress Bar */}
+                      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-semibold text-gray-700">
+                            Submission Progress
+                          </span>
+                          <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
+                            {assignment.totalStudents > 0
+                              ? (
+                                  (assignment.submissions /
                                     assignment.totalStudents) *
                                   100
-                                : 0
-                            }%`,
-                          }}
-                          transition={{ delay: 0.5, duration: 1 }}
-                          className="h-full bg-gradient-to-r from-orange-500 to-black"
-                        />
+                                ).toFixed(0)
+                              : "0"}
+                            %
+                          </span>
+                        </div>
+                        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{
+                              width: `${
+                                assignment.totalStudents > 0
+                                  ? (assignment.submissions /
+                                      assignment.totalStudents) *
+                                    100
+                                  : 0
+                              }%`,
+                            }}
+                            transition={{ delay: 0.5, duration: 1 }}
+                            className="h-full bg-gradient-to-r from-orange-500 to-amber-600"
+                          />
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Average Score if graded */}
-                    {assignment.averageScore && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
-                        <CheckCircle className="h-4 w-4 text-emerald-600" />
-                        <span className="text-sm">
-                          <span className="text-muted-foreground">
-                            Average Score:{" "}
-                          </span>
-                          <span className="font-semibold text-foreground">
-                            {assignment.averageScore}%
-                          </span>
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
+                      {/* Average Score if graded */}
+                      {assignment.averageScore && (
+                        <div className="px-6 pb-6">
+                          <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border-2 border-emerald-200">
+                            <div className="p-2 bg-emerald-100 rounded-full">
+                              <CheckCircle className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <span className="text-base">
+                              <span className="text-gray-600">
+                                Average Score:{" "}
+                              </span>
+                              <span className="font-bold text-emerald-600">
+                                {assignment.averageScore}%
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))
+          )}
         </div>
 
         {/* Create Assignment Modal */}
@@ -773,21 +861,33 @@ export default function LecturerAssignments() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="bg-card border border-border/60 rounded-2xl p-6 max-w-md w-full space-y-4"
+              className="bg-white border border-gray-200 rounded-2xl p-8 max-w-md w-full space-y-6 shadow-2xl"
             >
-              <h2 className="text-2xl font-bold">Create Assignment</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-3xl font-bold text-gray-900">
+                  Create Assignment
+                </h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Course</label>
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Course <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={selectedCourse}
                   onChange={(e) => setSelectedCourse(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                 >
                   <option value="">Select a course...</option>
                   {courses.map((course) => (
@@ -799,15 +899,16 @@ export default function LecturerAssignments() {
                   ))}
                 </select>
                 {courses.length === 0 && (
-                  <div className="mt-2 space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                      No courses found. Please select the courses you teach.
+                  <div className="mt-3 space-y-3">
+                    <p className="text-sm text-gray-600">
+                      No courses found. Please select the courses you teach
+                      first.
                     </p>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => navigate("/lecturer/courses")}
-                      className="w-full"
+                      className="w-full border-gray-300"
                     >
                       Select Courses
                     </Button>
@@ -816,20 +917,22 @@ export default function LecturerAssignments() {
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Title</label>
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Title <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={formData.title}
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  placeholder="Assignment title"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
+                  placeholder="e.g., Midterm Exam"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
                   Description
                 </label>
                 <textarea
@@ -837,16 +940,16 @@ export default function LecturerAssignments() {
                   onChange={(e) =>
                     setFormData({ ...formData, description: e.target.value })
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
-                  placeholder="Assignment description"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all resize-none"
+                  placeholder="Describe the assignment..."
                   rows={3}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Due Date
+                  <label className="text-sm font-semibold block mb-2 text-gray-900">
+                    Due Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -854,12 +957,12 @@ export default function LecturerAssignments() {
                     onChange={(e) =>
                       setFormData({ ...formData, dueDate: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Total Points
+                  <label className="text-sm font-semibold block mb-2 text-gray-900">
+                    Points <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -870,14 +973,14 @@ export default function LecturerAssignments() {
                         totalPoints: parseInt(e.target.value),
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">
-                  Instruction Document (Optional)
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Instructions (Optional)
                 </label>
                 <div className="relative">
                   <input
@@ -889,14 +992,14 @@ export default function LecturerAssignments() {
                         instructionDocument: e.target.files?.[0] || null,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-100 file:text-orange-600"
                     disabled={uploadingDocument}
                   />
                 </div>
                 {formData.instructionDocument && (
-                  <div className="mt-2 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground truncate">
-                      {formData.instructionDocument.name}
+                  <div className="mt-2 p-3 bg-green-50 rounded-lg flex items-center justify-between border border-green-200">
+                    <span className="text-xs text-gray-600 truncate">
+                      ✓ {formData.instructionDocument.name}
                     </span>
                     <button
                       onClick={() =>
@@ -905,22 +1008,19 @@ export default function LecturerAssignments() {
                           instructionDocument: null,
                         })
                       }
-                      className="text-destructive hover:text-destructive/80"
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  Supported formats: .doc, .docx, .pdf, .txt
-                </p>
               </div>
 
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setShowCreateModal(false)}
-                  className="flex-1"
+                  className="flex-1 border-2 border-gray-300 text-gray-700"
                   disabled={loading || uploadingDocument}
                 >
                   Cancel
@@ -928,7 +1028,7 @@ export default function LecturerAssignments() {
                 <Button
                   onClick={handleCreateAssignment}
                   disabled={loading || uploadingDocument}
-                  className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-lg hover:shadow-xl"
                 >
                   {uploadingDocument
                     ? "Uploading..."
@@ -946,44 +1046,88 @@ export default function LecturerAssignments() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="bg-card border border-border/60 rounded-2xl p-6 max-w-md w-full space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white border border-gray-200 rounded-2xl p-8 max-w-md w-full space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl"
             >
-              <h2 className="text-2xl font-bold">{viewing.title}</h2>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                {viewing.description}
-              </p>
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Due: </span>
-                  {new Date(viewing.dueDate).toLocaleString()}
+              <div className="flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {viewing.title}
+                </h2>
+                <button
+                  onClick={() => setViewing(null)}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <p className="text-gray-700 text-base whitespace-pre-wrap leading-relaxed">
+                  {viewing.description || "No description provided"}
                 </p>
-                <p>
-                  <span className="text-muted-foreground">Points: </span>
-                  {viewing.totalPoints}
-                </p>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-600">
+                    Due Date:
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {new Date(viewing.dueDate).toLocaleDateString("en-US", {
+                      weekday: "short",
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-600">
+                    Points:
+                  </span>
+                  <span className="text-sm font-semibold text-amber-600">
+                    {viewing.totalPoints} pts
+                  </span>
+                </div>
                 {viewing.courseTitle && (
-                  <p>
-                    <span className="text-muted-foreground">Course: </span>
-                    {viewing.courseTitle}
-                  </p>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-600">
+                      Course:
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {viewing.courseTitle}
+                    </span>
+                  </div>
                 )}
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-600">
+                    Status:
+                  </span>
+                  <Badge
+                    className={`font-semibold ${getStatusColor(
+                      viewing.status
+                    )}`}
+                  >
+                    {viewing.status.charAt(0).toUpperCase() +
+                      viewing.status.slice(1)}
+                  </Badge>
+                </div>
               </div>
 
               {viewing.instructionDocumentUrl && (
-                <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Instruction Document
+                <div className="p-4 rounded-lg bg-orange-50 border-2 border-orange-200">
+                  <p className="text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">
+                    📎 Instruction Document
                   </p>
                   <a
                     href={viewing.instructionDocumentUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-orange-600 hover:text-orange-700 transition-colors px-3 py-2 bg-orange-100 rounded-lg"
                   >
                     <Download className="h-4 w-4" />
                     {viewing.instructionDocumentName || "Download Instructions"}
@@ -991,16 +1135,16 @@ export default function LecturerAssignments() {
                 </div>
               )}
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 border-2 border-gray-300 text-gray-700"
                   onClick={() => setViewing(null)}
                 >
                   Close
                 </Button>
                 <Button
-                  className="flex-1"
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-lg"
                   onClick={() => {
                     handleOpenEdit(viewing);
                     setViewing(null);
@@ -1018,17 +1162,29 @@ export default function LecturerAssignments() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="bg-card border border-border/60 rounded-2xl p-6 max-w-md w-full space-y-4"
+              className="bg-white border border-gray-200 rounded-2xl p-8 max-w-md w-full space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl"
             >
-              <h2 className="text-2xl font-bold">Edit Assignment</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-3xl font-bold text-gray-900">
+                  Edit Assignment
+                </h2>
+                <button
+                  onClick={() => setEditing(null)}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Course</label>
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Course <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={editFormData.courseId}
                   onChange={(e) =>
@@ -1037,7 +1193,7 @@ export default function LecturerAssignments() {
                       courseId: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                 >
                   <option value="">Select a course...</option>
                   {courses.map((course) => (
@@ -1051,20 +1207,22 @@ export default function LecturerAssignments() {
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">Title</label>
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Title <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   value={editFormData.title}
                   onChange={(e) =>
                     setEditFormData({ ...editFormData, title: e.target.value })
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                   placeholder="Assignment title"
                 />
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
                   Description
                 </label>
                 <textarea
@@ -1075,16 +1233,16 @@ export default function LecturerAssignments() {
                       description: e.target.value,
                     })
                   }
-                  className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
-                  placeholder="Assignment description"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all resize-none"
+                  placeholder="Describe the assignment..."
                   rows={3}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Due Date
+                  <label className="text-sm font-semibold block mb-2 text-gray-900">
+                    Due Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -1095,12 +1253,12 @@ export default function LecturerAssignments() {
                         dueDate: e.target.value,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium block mb-1">
-                    Total Points
+                  <label className="text-sm font-semibold block mb-2 text-gray-900">
+                    Points <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -1111,25 +1269,25 @@ export default function LecturerAssignments() {
                         totalPoints: parseInt(e.target.value || "0"),
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-sm font-medium block mb-1">
-                  Instruction Document (Optional)
+                <label className="text-sm font-semibold block mb-2 text-gray-900">
+                  Instructions (Optional)
                 </label>
                 {editing?.instructionDocumentUrl && (
-                  <div className="mb-2 p-2 bg-muted/50 rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">
+                  <div className="mb-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                    <p className="text-xs text-gray-600 mb-2 font-medium">
                       Current document:
                     </p>
                     <a
                       href={editing.instructionDocumentUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-xs text-primary hover:text-primary/80"
+                      className="inline-flex items-center gap-2 text-xs font-semibold text-orange-600 hover:text-orange-700"
                     >
                       <Download className="h-3 w-3" />
                       {editing.instructionDocumentName || "Download Current"}
@@ -1146,14 +1304,14 @@ export default function LecturerAssignments() {
                         instructionDocument: e.target.files?.[0] || null,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50 text-sm"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-300 bg-white focus:outline-none focus:border-orange-600 focus:ring-2 focus:ring-orange-200 transition-all text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-orange-100 file:text-orange-600"
                     disabled={uploadingDocument}
                   />
                 </div>
                 {editFormData.instructionDocument && (
-                  <div className="mt-2 p-2 bg-muted/50 rounded-lg flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground truncate">
-                      {editFormData.instructionDocument.name}
+                  <div className="mt-2 p-3 bg-green-50 rounded-lg flex items-center justify-between border border-green-200">
+                    <span className="text-xs text-gray-600 truncate">
+                      ✓ {editFormData.instructionDocument.name}
                     </span>
                     <button
                       onClick={() =>
@@ -1162,22 +1320,19 @@ export default function LecturerAssignments() {
                           instructionDocument: null,
                         })
                       }
-                      className="text-destructive hover:text-destructive/80"
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground mt-1">
-                  Upload to replace current document (optional)
-                </p>
               </div>
 
-              <div className="flex gap-2 pt-4">
+              <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => setEditing(null)}
-                  className="flex-1"
+                  className="flex-1 border-2 border-gray-300 text-gray-700"
                   disabled={loading || uploadingDocument}
                 >
                   Cancel
@@ -1185,13 +1340,13 @@ export default function LecturerAssignments() {
                 <Button
                   onClick={handleUpdateAssignment}
                   disabled={loading || uploadingDocument}
-                  className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                  className="flex-1 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white shadow-lg hover:shadow-xl"
                 >
                   {uploadingDocument
                     ? "Uploading..."
                     : loading
                     ? "Saving..."
-                    : "Save"}
+                    : "Save Changes"}
                 </Button>
               </div>
             </motion.div>

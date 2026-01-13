@@ -336,6 +336,32 @@ export default function LecturerMessages() {
     }
   };
 
+  const handleDelete = async (messageId: string) => {
+    if (!user) return;
+
+    try {
+      const message = messages.find((m) => m.id === messageId);
+      if (!message) return;
+
+      const isSent = message.from_user_id === user.id;
+      const updateField = isSent
+        ? "is_deleted_by_sender"
+        : "is_deleted_by_recipient";
+
+      const { error } = await supabase
+        .from("messages")
+        .update({ [updateField]: true })
+        .eq("id", messageId);
+
+      if (error) throw error;
+
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      setSelectedMessage(null);
+    } catch (error) {
+      console.error("Error deleting message:", error);
+    }
+  };
+
   const markAsRead = async (messageId: string) => {
     try {
       const { error } = await supabase
@@ -579,6 +605,16 @@ export default function LecturerMessages() {
                                   : "text-muted-foreground"
                               }`}
                             />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(message.id);
+                            }}
+                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors text-muted-foreground"
+                            title="Delete message"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </div>

@@ -62,6 +62,7 @@ export default function LecturerSettings() {
   const [officeLocation, setOfficeLocation] = useState("");
   const [officeHours, setOfficeHours] = useState("");
   const [officePhone, setOfficePhone] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
   const [bio, setBio] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -84,6 +85,7 @@ export default function LecturerSettings() {
       setOfficeLocation((profile as any).office_location || "");
       setOfficeHours((profile as any).office_hours || "");
       setOfficePhone((profile as any).office_phone || "");
+      setPhoneNumber((profile as any).phone_number || "");
       setBio(profile.bio || "");
 
       // Load appearance preferences
@@ -132,6 +134,7 @@ export default function LecturerSettings() {
           office_location: officeLocation,
           office_hours: officeHours,
           office_phone: officePhone,
+          phone_number: phoneNumber,
           bio: bio,
           color_theme: colorTheme,
           dashboard_layout: dashboardLayout,
@@ -496,6 +499,25 @@ export default function LecturerSettings() {
                         initial="hidden"
                         animate="visible"
                         custom={7}
+                        className="space-y-2"
+                      >
+                        <label className="text-sm font-semibold text-foreground">
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          placeholder="+256 700 000 000"
+                          className="w-full px-4 py-2.5 rounded-lg border border-orange-500/20 bg-muted/30 text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
+                        />
+                      </motion.div>
+
+                      <motion.div
+                        variants={itemVariants}
+                        initial="hidden"
+                        animate="visible"
+                        custom={8}
                         className="space-y-2"
                       >
                         <label className="text-sm font-semibold text-foreground">

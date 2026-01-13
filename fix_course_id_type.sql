@@ -1,0 +1,1 @@
+ALTER TABLE quizzes ALTER COLUMN course_id TYPE VARCHAR(255);

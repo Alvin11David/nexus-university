@@ -157,6 +157,53 @@ export default function Enrollment() {
             </Button>
           </div>
 
+          {/* Enrollment Registration Snapshot */}
+          <Card className="mb-8">
+            <CardHeader className="pb-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <CardTitle className="text-lg sm:text-xl font-semibold">
+                  ENROLLMENT REGISTRATION
+                </CardTitle>
+                <Badge variant="outline" className="text-xs font-mono">
+                  SEMESTER II, 2025/2026
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">
+                    Program
+                  </p>
+                  <p className="text-sm sm:text-base font-medium">
+                    Bachelor of Science in Computer Science (BCSC)
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">
+                    Year of Study*
+                  </p>
+                  <p className="text-sm sm:text-base font-semibold">Year 2</p>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">
+                    Enrolling As?*
+                  </p>
+                  <p className="text-sm sm:text-base">----</p>
+                </div>
+                <div className="p-3 rounded-lg border bg-muted/30">
+                  <p className="text-[11px] uppercase text-muted-foreground font-semibold tracking-wide">
+                    Have Retakes?*
+                  </p>
+                  <p className="text-sm sm:text-base">No</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[

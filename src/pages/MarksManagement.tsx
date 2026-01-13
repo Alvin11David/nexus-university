@@ -53,6 +53,15 @@ const calculateGrade = (total: number) => {
   return { grade: "F", gp: 0 };
 };
 
+const calculateSemesterRemark = (gp: number, grade: string): string => {
+  if (gp >= 3.5) return "Excellent";
+  if (gp >= 3.0) return "Very Good";
+  if (gp >= 2.5) return "Good";
+  if (gp >= 2.0) return "Satisfactory";
+  if (gp >= 1.0) return "Pass";
+  return "Fail";
+};
+
 export default function MarksManagement() {
   const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);

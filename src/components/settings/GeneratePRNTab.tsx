@@ -1351,46 +1351,48 @@ export function GeneratePRNTab() {
 
       {/* Receipt Modal Dialog */}
       <Dialog open={showReceiptModal} onOpenChange={setShowReceiptModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-            <div>
-              <DialogTitle>Payment Receipt</DialogTitle>
-              <DialogDescription>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full p-4 sm:p-6 rounded-xl sm:rounded-lg">
+          <DialogHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-2 sm:space-y-0 pb-4 gap-3">
+            <div className="flex-1">
+              <DialogTitle className="text-lg sm:text-xl">
+                Payment Receipt
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Keep this receipt for your records
               </DialogDescription>
             </div>
             <button
               onClick={() => setShowReceiptModal(false)}
-              className="text-muted-foreground hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground flex-shrink-0"
             >
               <X className="h-5 w-5" />
             </button>
           </DialogHeader>
 
           {generatedPRN && (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Receipt Content */}
               <div
                 ref={receiptRef}
-                className="p-8 space-y-6 bg-white text-black rounded-2xl border-2 border-emerald-500"
+                className="p-4 sm:p-8 space-y-4 sm:space-y-6 bg-white text-black rounded-xl sm:rounded-2xl border-2 border-emerald-500"
               >
                 {/* Header */}
-                <div className="text-center border-b-2 border-dashed border-gray-300 pb-4">
-                  <h2 className="text-2xl font-bold text-emerald-700 mb-2">
+                <div className="text-center border-b-2 border-dashed border-gray-300 pb-3 sm:pb-4">
+                  <h2 className="text-xl sm:text-2xl font-bold text-emerald-700 mb-1 sm:mb-2">
                     PAYMENT RECEIPT
                   </h2>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Nexus University Portal
                   </p>
                 </div>
 
                 {/* Student Information */}
-                <div className="space-y-2 text-sm">
+                <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
                   <div className="flex justify-between border-b border-gray-300 pb-2">
                     <span className="font-semibold text-gray-700">
                       Student Name:
                     </span>
-                    <span className="text-gray-900">
+                    <span className="text-gray-900 text-right">
                       {profile?.full_name || "N/A"}
                     </span>
                   </div>
@@ -1404,21 +1406,21 @@ export function GeneratePRNTab() {
                   </div>
                   <div className="flex justify-between border-b border-gray-300 pb-2">
                     <span className="font-semibold text-gray-700">Email:</span>
-                    <span className="text-gray-900">
+                    <span className="text-gray-900 text-right break-all">
                       {profile?.email || "N/A"}
                     </span>
                   </div>
                 </div>
 
                 {/* Payment Details */}
-                <div className="bg-emerald-50 p-4 rounded-xl space-y-3">
-                  <h3 className="font-bold text-emerald-900">
+                <div className="bg-emerald-50 p-3 sm:p-4 rounded-lg sm:rounded-xl space-y-2 sm:space-y-3">
+                  <h3 className="font-bold text-emerald-900 text-sm sm:text-base">
                     Payment Details
                   </h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <div className="flex justify-between gap-2">
                       <span className="text-gray-700">PRN Code:</span>
-                      <span className="font-mono font-bold text-emerald-700 text-lg">
+                      <span className="font-mono font-bold text-emerald-700 text-base sm:text-lg break-all">
                         {generatedPRN.code}
                       </span>
                     </div>
@@ -1428,16 +1430,16 @@ export function GeneratePRNTab() {
                         UGX {generatedPRN.amount.toLocaleString()}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span className="text-gray-700">Purpose:</span>
-                      <span className="text-gray-900">
+                      <span className="text-gray-900 text-right">
                         {generatedPRN.purpose}
                       </span>
                     </div>
                     {generatedPRN.fee_id && (
-                      <div className="flex justify-between">
+                      <div className="flex justify-between gap-2">
                         <span className="text-gray-700">Linked Fee:</span>
-                        <span className="text-gray-900">
+                        <span className="text-gray-900 text-right">
                           {fees.find((f) => f.id === generatedPRN.fee_id)
                             ?.description || "General"}
                         </span>
@@ -1447,14 +1449,14 @@ export function GeneratePRNTab() {
                 </div>
 
                 {/* Timestamp Information */}
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                <div className="space-y-1 sm:space-y-2 text-xs sm:text-sm">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-700">Generated:</span>
-                    <span className="text-gray-900">
+                    <span className="text-gray-900 text-right">
                       {generatedPRN.generatedAt.toLocaleString()}
                     </span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-700">Expires:</span>
                     <span className="font-semibold text-amber-700">
                       {generatedPRN.expiresAt.toLocaleString()}
@@ -1463,11 +1465,11 @@ export function GeneratePRNTab() {
                 </div>
 
                 {/* QR Code for Receipt */}
-                <div className="flex justify-center py-4 border-t-2 border-b-2 border-dashed border-gray-300">
-                  <div className="bg-white p-3 rounded-lg border border-gray-300">
+                <div className="flex justify-center py-3 sm:py-4 border-t-2 border-b-2 border-dashed border-gray-300 overflow-x-auto">
+                  <div className="bg-white p-2 sm:p-3 rounded-lg border border-gray-300 flex-shrink-0">
                     <QRCodeSVG
                       value={generatedPRN.code}
-                      size={150}
+                      size={window.innerWidth < 480 ? 100 : 120}
                       level="H"
                       includeMargin={true}
                       fgColor="#000000"
@@ -1477,11 +1479,11 @@ export function GeneratePRNTab() {
                 </div>
 
                 {/* Instructions */}
-                <div className="bg-blue-50 p-4 rounded-xl">
-                  <h4 className="font-bold text-blue-900 mb-2">
+                <div className="bg-blue-50 p-3 sm:p-4 rounded-lg sm:rounded-xl">
+                  <h4 className="font-bold text-blue-900 mb-2 text-sm sm:text-base">
                     Instructions:
                   </h4>
-                  <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                  <ul className="text-xs sm:text-sm text-blue-800 space-y-1 list-disc list-inside">
                     <li>This PRN is valid for 48 hours from generation</li>
                     <li>Present this code at any authorized payment point</li>
                     <li>Keep this receipt for your records</li>
@@ -1493,7 +1495,7 @@ export function GeneratePRNTab() {
                 </div>
 
                 {/* Footer */}
-                <div className="text-center border-t-2 border-dashed border-gray-300 pt-4">
+                <div className="text-center border-t-2 border-dashed border-gray-300 pt-3 sm:pt-4">
                   <p className="text-xs text-gray-600">
                     Receipt ID: {generatedPRN.id || generatedPRN.code}
                   </p>
@@ -1504,28 +1506,30 @@ export function GeneratePRNTab() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 justify-between">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-between">
                 <Button
                   onClick={downloadReceiptImage}
                   variant="outline"
-                  className="gap-2 flex-1"
+                  className="gap-2 w-full sm:flex-1 text-xs sm:text-sm h-10 sm:h-auto"
                 >
-                  <Download className="h-4 w-4" />
-                  Download as Image
+                  <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Download as Image</span>
+                  <span className="inline xs:hidden">Image</span>
                 </Button>
                 <Button
                   onClick={downloadPRN}
                   variant="outline"
-                  className="gap-2 flex-1"
+                  className="gap-2 w-full sm:flex-1 text-xs sm:text-sm h-10 sm:h-auto"
                 >
-                  <Download className="h-4 w-4" />
-                  Download as Text
+                  <Download className="h-3 w-3 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">Download as Text</span>
+                  <span className="inline xs:hidden">Text</span>
                 </Button>
                 <Button
                   onClick={sharePRN}
-                  className="gap-2 bg-emerald-600 hover:bg-emerald-700"
+                  className="gap-2 w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-xs sm:text-sm h-10 sm:h-auto"
                 >
-                  <Share2 className="h-4 w-4" />
+                  <Share2 className="h-3 w-3 sm:h-4 sm:w-4" />
                   Share
                 </Button>
               </div>

@@ -23,6 +23,8 @@ interface ExamResultRow {
   marks: number;
   grade: string | null;
   grade_point: number | null;
+  semester_remark?: string;
+  remarks?: string | null;
   courses?: ResultCourse;
 }
 
@@ -47,6 +49,16 @@ const getGradeColor = (grade: string | null | undefined) => {
   return "text-red-700";
 };
 
+const calculateSemesterRemark = (gp: number, grade: string | null): string => {
+  if (!grade) return "—";
+  if (gp >= 3.5) return "Excellent";
+  if (gp >= 3.0) return "Very Good";
+  if (gp >= 2.5) return "Good";
+  if (gp >= 2.0) return "Satisfactory";
+  if (gp >= 1.0) return "Pass";
+  return "Fail";
+};
+
 export default function Results() {
   const { user, profile } = useAuth();
   const [resultsLoading, setResultsLoading] = useState(true);
@@ -63,44 +75,54 @@ export default function Results() {
         setResultsLoading(true);
 
         // First, try to load from student_grades (newer system)
+        // Only query with valid UUID student_id values to avoid 22P02 errors
+        const isValidUuid = (value: string | undefined | null) =>
+          !!value &&
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            value
+          );
+        const studentId = isValidUuid(user.id) ? user.id : null;
+        if (!studentId) {
+          setResultsLoading(false);
+          return;
+        }
+
+        console.log("Loading results for student:", studentId);
+
         let data: any[] | null = null;
         let error: any = null;
 
+        // First try lecturer-side student_grades (grade book)
         try {
-          console.log("Loading results for student:", user.id);
-
-          const response = await (supabase as any)
+          const sgResponse = await (supabase as any)
             .from("student_grades")
             .select(
               "id, course_id, academic_year, semester, assignment1, assignment2, midterm, participation, final_exam, total, grade, gp, courses(title, code, credits)"
             )
-            .eq("student_id", user.id)
+            .eq("student_id", studentId)
             .order("academic_year", { ascending: false })
             .order("semester", { ascending: false });
 
-          console.log("student_grades response:", response);
+          console.log("student_grades response:", sgResponse);
 
-          if (!response.error && response.data && response.data.length > 0) {
-            // Successfully loaded from student_grades
-            console.log("Loaded from student_grades:", response.data);
-            data = response.data;
+          if (
+            !sgResponse.error &&
+            sgResponse.data &&
+            sgResponse.data.length > 0
+          ) {
+            data = sgResponse.data;
           } else {
-            // Fall back to exam_results
-            console.log(
-              "No data from student_grades, falling back to exam_results"
-            );
-            throw new Error("Use exam_results");
+            throw new Error("No student_grades rows");
           }
-        } catch (fallbackError) {
-          console.log("Falling back to exam_results:", fallbackError);
+        } catch (sgError) {
+          console.log("Falling back to exam_results due to:", sgError);
 
-          // Fall back to exam_results table
           const { data: examData, error: examError } = await supabase
             .from("exam_results")
             .select(
-              "id, course_id, academic_year, semester, marks, grade, grade_point, courses(title, code, credits)"
+              "id, course_id, academic_year, semester, marks, grade, grade_point, remarks, courses(title, code, credits)"
             )
-            .eq("student_id", user.id)
+            .eq("student_id", studentId)
             .order("academic_year", { ascending: false })
             .order("semester", { ascending: false });
 
@@ -126,6 +148,9 @@ export default function Results() {
           credits: row.courses?.credits || 3,
           marks: row.total || row.marks || 0,
           grade_point: row.gp || row.grade_point || 0,
+          semester_remark:
+            row.semester_remark ||
+            calculateSemesterRemark(row.gp || row.grade_point || 0, row.grade),
           a1: row.assignment1 || 0,
           a2: row.assignment2 || 0,
           mid: row.midterm || 0,
@@ -153,10 +178,16 @@ export default function Results() {
           termMap.set(term, existing);
         });
 
-        const terms = Array.from(termMap.values()).map((t) => ({
-          ...t,
-          gpa: t.totalCredits ? Number((t.gpa / t.totalCredits).toFixed(2)) : 0,
-        }));
+        const terms = Array.from(termMap.values()).map((t) => {
+          const gpa = t.totalCredits
+            ? Number((t.gpa / t.totalCredits).toFixed(2))
+            : 0;
+          return {
+            ...t,
+            gpa,
+            remark: calculateSemesterRemark(gpa, t.entries[0]?.grade || null),
+          };
+        });
 
         console.log("Terms:", terms);
 
@@ -181,7 +212,7 @@ export default function Results() {
     };
 
     loadResults();
-  }, [user]);
+  }, [user, profile]);
 
   const getPerformanceLevel = (
     gpa: number
@@ -398,7 +429,7 @@ export default function Results() {
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <span className="text-xs font-bold text-emerald-600">
-                                    NP
+                                    {course.semester_remark || "—"}
                                   </span>
                                 </td>
                               </tr>
@@ -450,7 +481,7 @@ export default function Results() {
                               <div>
                                 <p className="text-muted-foreground">Rmk</p>
                                 <p className="font-semibold text-emerald-600">
-                                  NP
+                                  {course.semester_remark || "—"}
                                 </p>
                               </div>
                             </div>
