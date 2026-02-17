@@ -30,7 +30,7 @@ function ensureMTNConfig() {
   if (!MTN_API_KEY || !MTN_SUBSCRIPTION_KEY || !MTN_COLLECTION_ACCOUNT) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "MTN configuration is missing. Please set mtn.api_key, mtn.subscription_key, and mtn.collection_account in functions config."
+      "MTN configuration is missing. Please set mtn.api_key, mtn.subscription_key, and mtn.collection_account in functions config.",
     );
   }
 }
@@ -39,7 +39,7 @@ function ensureAirtelConfig() {
   if (!AIRTEL_API_KEY || !AIRTEL_BUSINESS_ID) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "Airtel configuration is missing. Please set airtel.api_key and airtel.business_id in functions config."
+      "Airtel configuration is missing. Please set airtel.api_key and airtel.business_id in functions config.",
     );
   }
 }
@@ -68,7 +68,10 @@ function generateMTNSignature(requestBody: string): string {
  * Sends USSD prompt to user's phone for real payment processing
  */
 export const sendMTNPaymentPrompt = functions.https.onCall(
-  async (data: SendMoMoPaymentRequest, context) => {
+  async (
+    data: SendMoMoPaymentRequest,
+    context: functions.https.CallableContext,
+  ) => {
     // For now, we accept requests without Firebase auth
     // Auth is handled on frontend via Supabase
     // TODO: Implement Supabase auth token verification
@@ -83,7 +86,7 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
     if (!phoneNumber || !provider || !amount || !transactionId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Missing required fields"
+        "Missing required fields",
       );
     }
 
@@ -91,7 +94,7 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
     if (!/^\d{9,10}$/.test(phoneNumber)) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Invalid phone number format. Use 9-10 digits."
+        "Invalid phone number format. Use 9-10 digits.",
       );
     }
 
@@ -129,12 +132,12 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
             Authorization: `Bearer ${MTN_API_KEY}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       // Log the payment initiation
       console.log(
-        `MTN payment initiated. Reference: ${transactionId}, Phone: ${fullPhoneNumber}`
+        `MTN payment initiated. Reference: ${transactionId}, Phone: ${fullPhoneNumber}`,
       );
 
       // Store payment record in Firestore
@@ -168,7 +171,7 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
     } catch (error: any) {
       console.error(
         "Error initiating MTN payment:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
 
       // Store failed attempt
@@ -191,10 +194,10 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
 
       throw new functions.https.HttpsError(
         "internal",
-        `MTN Payment Error: ${error.response?.data?.message || error.message}`
+        `MTN Payment Error: ${error.response?.data?.message || error.message}`,
       );
     }
-  }
+  },
 );
 
 /**
@@ -206,7 +209,7 @@ export const checkMTNPaymentStatus = functions.https.onCall(
     data: {
       transactionId: string;
     },
-    context
+    context: functions.https.CallableContext,
   ) => {
     // For now, we accept requests without Firebase auth
     // Auth is handled on frontend via Supabase
@@ -220,7 +223,7 @@ export const checkMTNPaymentStatus = functions.https.onCall(
     if (!transactionId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Transaction ID is required"
+        "Transaction ID is required",
       );
     }
 
@@ -235,7 +238,7 @@ export const checkMTNPaymentStatus = functions.https.onCall(
       if (!paymentDoc.exists) {
         throw new functions.https.HttpsError(
           "not-found",
-          "Payment record not found"
+          "Payment record not found",
         );
       }
 
@@ -273,10 +276,10 @@ export const checkMTNPaymentStatus = functions.https.onCall(
             "Ocp-Apim-Subscription-Key": MTN_SUBSCRIPTION_KEY,
             Authorization: `Bearer ${MTN_API_KEY}`,
           },
-        }
+        },
       );
 
-      const mtnStatus = response.data?.status;
+      const mtnStatus = (response.data as { status?: string })?.status;
 
       // Update Firestore with current status
       await db
@@ -300,14 +303,14 @@ export const checkMTNPaymentStatus = functions.https.onCall(
     } catch (error: any) {
       console.error(
         "Error checking payment status:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       throw new functions.https.HttpsError(
         "internal",
-        `Failed to check payment status: ${error.message}`
+        `Failed to check payment status: ${error.message}`,
       );
     }
-  }
+  },
 );
 
 /**
@@ -315,7 +318,7 @@ export const checkMTNPaymentStatus = functions.https.onCall(
  * Webhook endpoint that MTN calls when payment is completed
  */
 export const mtnPaymentCallback = functions.https.onRequest(
-  async (req, res) => {
+  async (req: functions.https.Request, res: functions.Response) => {
     try {
       const { referenceId, status, amount } = req.body;
 
@@ -344,7 +347,7 @@ export const mtnPaymentCallback = functions.https.onRequest(
         message: "Failed to process callback",
       });
     }
-  }
+  },
 );
 
 /**
@@ -352,7 +355,10 @@ export const mtnPaymentCallback = functions.https.onRequest(
  * Sends USSD prompt to user's phone for AIRTEL payment
  */
 export const sendAIRTELPaymentPrompt = functions.https.onCall(
-  async (data: SendMoMoPaymentRequest, context) => {
+  async (
+    data: SendMoMoPaymentRequest,
+    context: functions.https.CallableContext,
+  ) => {
     // For now, we accept requests without Firebase auth
     // Auth is handled on frontend via Supabase
     // TODO: Implement Supabase auth token verification
@@ -367,7 +373,7 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
     if (!phoneNumber || !provider || !amount || !transactionId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Missing required fields"
+        "Missing required fields",
       );
     }
 
@@ -375,7 +381,7 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
     if (!/^\d{9,10}$/.test(phoneNumber)) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Invalid phone number format. Use 9-10 digits."
+        "Invalid phone number format. Use 9-10 digits.",
       );
     }
 
@@ -409,12 +415,12 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
             "Content-Type": "application/json",
             "X-Country": "UG",
           },
-        }
+        },
       );
 
       // Log the payment initiation
       console.log(
-        `AIRTEL payment initiated. Reference: ${transactionId}, Phone: ${fullPhoneNumber}`
+        `AIRTEL payment initiated. Reference: ${transactionId}, Phone: ${fullPhoneNumber}`,
       );
 
       // Store payment record in Firestore
@@ -433,7 +439,8 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
           transactionId: transactionId,
           email: email || "unknown@university.ac.ug",
           status: "pending",
-          airtelReference: response.data?.id || transactionId,
+          airtelReference:
+            (response.data as { id?: string })?.id || transactionId,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           expiresAt: new Date(Date.now() + 4 * 60 * 1000), // 4 minutes
         });
@@ -441,14 +448,14 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
       return {
         success: true,
         transactionId: transactionId,
-        airtelReference: response.data?.id,
+        airtelReference: (response.data as { id?: string })?.id,
         message: `USSD prompt sent to +${fullPhoneNumber}. Please complete payment on your phone.`,
         expiresIn: 240, // seconds
       };
     } catch (error: any) {
       console.error(
         "Error initiating AIRTEL payment:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
 
       // Store failed attempt
@@ -473,10 +480,10 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
         "internal",
         `AIRTEL Payment Error: ${
           error.response?.data?.message || error.message
-        }`
+        }`,
       );
     }
-  }
+  },
 );
 
 /**
@@ -488,7 +495,7 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
     data: {
       transactionId: string;
     },
-    context
+    context: functions.https.CallableContext,
   ) => {
     // For now, we accept requests without Firebase auth
     // Auth is handled on frontend via Supabase
@@ -502,7 +509,7 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
     if (!transactionId) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Transaction ID is required"
+        "Transaction ID is required",
       );
     }
 
@@ -517,7 +524,7 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
       if (!paymentDoc.exists) {
         throw new functions.https.HttpsError(
           "not-found",
-          "Payment record not found"
+          "Payment record not found",
         );
       }
 
@@ -554,10 +561,10 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
             Authorization: `Bearer ${AIRTEL_API_KEY}`,
             "X-Country": "UG",
           },
-        }
+        },
       );
 
-      const airtelStatus = response.data?.status;
+      const airtelStatus = (response.data as { status?: string })?.status;
 
       // Update Firestore with current status
       await db
@@ -581,14 +588,14 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
     } catch (error: any) {
       console.error(
         "Error checking AIRTEL payment status:",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       throw new functions.https.HttpsError(
         "internal",
-        `Failed to check payment status: ${error.message}`
+        `Failed to check payment status: ${error.message}`,
       );
     }
-  }
+  },
 );
 
 /**
@@ -596,7 +603,7 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
  * Webhook endpoint that AIRTEL calls when payment is completed
  */
 export const airtelPaymentCallback = functions.https.onRequest(
-  async (req, res) => {
+  async (req: functions.https.Request, res: functions.Response) => {
     try {
       const { reference, status, transaction } = req.body;
 
@@ -626,5 +633,5 @@ export const airtelPaymentCallback = functions.https.onRequest(
         message: "Failed to process callback",
       });
     }
-  }
+  },
 );
