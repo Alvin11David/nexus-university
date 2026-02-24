@@ -26,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/integrations/firebase/client";
 
 type AuthStep =
   | "signin"
@@ -186,16 +187,10 @@ export default function Auth() {
       );
       if (error) throw error;
 
-      // Check user role from profile and redirect accordingly
-      const {
-        data: { user: currentUser },
-      } = await supabase.auth.getUser();
+      const currentUser = auth.currentUser;
       if (currentUser) {
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", currentUser.id)
-          .single();
+        const profileDoc = await getDoc(doc(db, "profiles", currentUser.uid));
+        const profileData = profileDoc.exists() ? profileDoc.data() : null;
 
         const userRole = profileData?.role || "student";
         toast({ title: "Welcome back!" });
@@ -325,9 +320,9 @@ export default function Auth() {
         emailToUse,
         formData.password,
         studentRecord?.full_name ||
-          (isLecturerSignup
-            ? "Lecturer"
-            : isRegistrarEmail
+        (isLecturerSignup
+          ? "Lecturer"
+          : isRegistrarEmail
             ? "Registrar"
             : "Student"),
         isLecturerSignup || isRegistrarEmail
@@ -339,8 +334,8 @@ export default function Auth() {
         isLecturerSignup
           ? "lecturer"
           : isRegistrarEmail
-          ? "registrar"
-          : "student",
+            ? "registrar"
+            : "student",
         isLecturerSignup || isRegistrarSignup ? formData.department : undefined
       );
       if (error) {
@@ -457,21 +452,21 @@ export default function Auth() {
     const steps =
       isLecturerSignup || isRegistrarSignup
         ? [
-            { key: "signup-details", label: "Email" },
-            {
-              key: isLecturerSignup
-                ? "lecturer-personal-details"
-                : "registrar-personal-details",
-              label: "Details",
-            },
-            { key: "signup-otp", label: "Verify" },
-            { key: "signup-password", label: "Password" },
-          ]
+          { key: "signup-details", label: "Email" },
+          {
+            key: isLecturerSignup
+              ? "lecturer-personal-details"
+              : "registrar-personal-details",
+            label: "Details",
+          },
+          { key: "signup-otp", label: "Verify" },
+          { key: "signup-password", label: "Password" },
+        ]
         : [
-            { key: "signup-details", label: "Details" },
-            { key: "signup-otp", label: "Verify" },
-            { key: "signup-password", label: "Password" },
-          ];
+          { key: "signup-details", label: "Details" },
+          { key: "signup-otp", label: "Verify" },
+          { key: "signup-password", label: "Password" },
+        ];
 
     const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -480,19 +475,17 @@ export default function Auth() {
         {steps.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2">
             <div
-              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
-                i <= currentIndex
-                  ? "bg-secondary text-secondary-foreground"
-                  : "bg-muted text-muted-foreground"
-              }`}
+              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${i <= currentIndex
+                ? "bg-secondary text-secondary-foreground"
+                : "bg-muted text-muted-foreground"
+                }`}
             >
               {i < currentIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
             </div>
             {i < steps.length - 1 && (
               <div
-                className={`w-8 h-0.5 ${
-                  i < currentIndex ? "bg-secondary" : "bg-muted"
-                }`}
+                className={`w-8 h-0.5 ${i < currentIndex ? "bg-secondary" : "bg-muted"
+                  }`}
               />
             )}
           </div>
@@ -678,8 +671,8 @@ export default function Auth() {
                 {formData.email.endsWith("@lecturer.com")
                   ? "Lecturer registration: Enter email in format firstname.lastname@lecturer.com"
                   : formData.email.endsWith("@registrar.com")
-                  ? "Registrar registration: Enter email in format firstname.lastname@registrar.com"
-                  : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
+                    ? "Registrar registration: Enter email in format firstname.lastname@registrar.com"
+                    : "We'll verify you're a registered student by checking your registration and student numbers against our records."}
               </p>
             </div>
 
@@ -1228,19 +1221,19 @@ export default function Auth() {
               {step === "signin"
                 ? "Welcome back"
                 : step === "signup-details"
-                ? "Create an account"
-                : step === "signup-otp"
-                ? "Verify your email"
-                : "Set your password"}
+                  ? "Create an account"
+                  : step === "signup-otp"
+                    ? "Verify your email"
+                    : "Set your password"}
             </h1>
             <p className="text-muted-foreground text-lg">
               {step === "signin"
                 ? "Sign in with your student credentials"
                 : step === "signup-details"
-                ? "Verify your student identity to get started"
-                : step === "signup-otp"
-                ? "Enter the code sent to your email"
-                : "Almost there! Create a secure password"}
+                  ? "Verify your student identity to get started"
+                  : step === "signup-otp"
+                    ? "Enter the code sent to your email"
+                    : "Almost there! Create a secure password"}
             </p>
           </div>
 

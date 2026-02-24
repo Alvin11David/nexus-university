@@ -37,7 +37,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy, deleteDoc, or, and } from "firebase/firestore";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, auth, storage } from "@/integrations/firebase/client";
 import { formatDistanceToNow, format } from "date-fns";
 import {
   DropdownMenu,
@@ -126,21 +128,16 @@ export default function Webmail() {
     attachmentName: string
   ) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("message-attachments")
-        .download(attachmentUrl);
+      const storageRef = ref(storage, attachmentUrl);
+      const url = await getDownloadURL(storageRef);
 
-      if (error) throw error;
-
-      // Create a download link
-      const url = URL.createObjectURL(data);
       const a = document.createElement("a");
       a.href = url;
       a.download = attachmentName;
+      a.target = "_blank"; // Firebase URLs can be opened in new tab or downloaded
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error downloading attachment:", error);
       alert("Failed to download attachment");
@@ -186,14 +183,14 @@ export default function Webmail() {
 
   const fetchUsers = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url, role")
-        .neq("id", user?.id)
-        .order("full_name");
+      const profilesRef = collection(db, "profiles");
+      const q = query(profilesRef, orderBy("full_name"));
+      const snapshot = await getDocs(q);
 
-      if (error) throw error;
-      const allUsers = data || [];
+      const allUsers = snapshot.docs
+        .map(d => ({ id: d.id, ...d.data() } as any))
+        .filter(u => u.id !== user?.uid);
+
       const lecturers = allUsers.filter(
         (u) => u.role && u.role.toLowerCase() === "lecturer"
       );
@@ -202,7 +199,6 @@ export default function Webmail() {
         setUsers(lecturers);
         setShowingAllUsers(false);
       } else {
-        // Fallback: show everyone (student asked for lecturers, but none exist yet)
         setUsers(allUsers);
         setShowingAllUsers(true);
       }
@@ -216,62 +212,68 @@ export default function Webmail() {
 
     try {
       setLoading(true);
-      let query = supabase
-        .from("messages")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const messagesRef = collection(db, "messages");
+      let q;
 
       if (selectedView === "inbox") {
-        query = query
-          .eq("to_user_id", user.id)
-          .eq("is_deleted_by_recipient", false);
+        q = query(
+          messagesRef,
+          where("to_user_id", "==", user.uid),
+          where("is_deleted_by_recipient", "==", false),
+          orderBy("created_at", "desc")
+        );
       } else if (selectedView === "sent") {
-        query = query
-          .eq("from_user_id", user.id)
-          .eq("is_deleted_by_sender", false);
+        q = query(
+          messagesRef,
+          where("from_user_id", "==", user.uid),
+          where("is_deleted_by_sender", "==", false),
+          orderBy("created_at", "desc")
+        );
       } else if (selectedView === "starred") {
-        query = query
-          .eq("is_starred", true)
-          .or(`to_user_id.eq.${user.id},from_user_id.eq.${user.id}`);
+        q = query(
+          messagesRef,
+          and(
+            where("is_starred", "==", true),
+            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+          ),
+          orderBy("created_at", "desc")
+        );
       } else if (selectedView === "archived") {
-        query = query
-          .eq("is_archived", true)
-          .or(`to_user_id.eq.${user.id},from_user_id.eq.${user.id}`);
+        q = query(
+          messagesRef,
+          and(
+            where("is_archived", "==", true),
+            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+          ),
+          orderBy("created_at", "desc")
+        );
+      } else {
+        q = query(messagesRef, orderBy("created_at", "desc"));
       }
 
-      const { data, error } = await query;
+      const snapshot = await getDocs(q);
+      const messagesData = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Message));
 
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
+      if (messagesData.length === 0) {
         setMessages([]);
         return;
       }
 
-      // Get unique user IDs from messages
-      const userIds = new Set<string>();
-      data.forEach((msg) => {
-        userIds.add(msg.from_user_id);
-        userIds.add(msg.to_user_id);
-      });
+      // Get unique user IDs
+      const userIds = Array.from(new Set(messagesData.flatMap(m => [m.from_user_id, m.to_user_id])));
 
-      // Fetch profiles for all users
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .in("id", Array.from(userIds));
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        setMessages(data);
-        return;
+      // Fetch profiles in chunks (Firestore 'in' limit is 10)
+      const profilesData: any[] = [];
+      for (let i = 0; i < userIds.length; i += 10) {
+        const chunk = userIds.slice(i, i + 10);
+        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pSnapshot = await getDocs(pQuery);
+        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
       }
 
-      // Create a map for quick lookup
-      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+      const profileMap = new Map(profilesData.map(p => [p.id, p]));
 
-      // Attach profiles to messages
-      const messagesWithProfiles = data.map((msg) => ({
+      const messagesWithProfiles = messagesData.map(msg => ({
         ...msg,
         from_profile: profileMap.get(msg.from_user_id) || null,
         to_profile: profileMap.get(msg.to_user_id) || null,
@@ -289,46 +291,37 @@ export default function Webmail() {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from("message_drafts")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("updated_at", { ascending: false });
+      const draftsRef = collection(db, "message_drafts");
+      const q = query(draftsRef, where("user_id", "==", user.uid), orderBy("updated_at", "desc"));
+      const snapshot = await getDocs(q);
+      const draftsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
+      if (draftsData.length === 0) {
         setDrafts([]);
         return;
       }
 
-      // Get unique recipient IDs
-      const recipientIds = data
-        .filter((d) => d.to_user_id)
-        .map((d) => d.to_user_id as string);
+      const recipientIds = draftsData
+        .filter((d: any) => d.to_user_id)
+        .map((d: any) => d.to_user_id as string);
 
       if (recipientIds.length === 0) {
-        setDrafts(data);
+        setDrafts(draftsData);
         return;
       }
 
       // Fetch profiles for recipients
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", recipientIds);
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        setDrafts(data);
-        return;
+      const profilesData: any[] = [];
+      for (let i = 0; i < recipientIds.length; i += 10) {
+        const chunk = recipientIds.slice(i, i + 10);
+        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pSnapshot = await getDocs(pQuery);
+        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
       }
 
-      // Create a map for quick lookup
-      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
+      const profileMap = new Map(profilesData.map(p => [p.id, p]));
 
-      // Attach profiles to drafts
-      const draftsWithProfiles = data.map((draft) => ({
+      const draftsWithProfiles = draftsData.map((draft: any) => ({
         ...draft,
         to_profile: draft.to_user_id
           ? profileMap.get(draft.to_user_id) || null
@@ -373,25 +366,19 @@ export default function Webmail() {
       if (attachmentFile) {
         setUploadingAttachment(true);
         const fileExt = attachmentFile.name.split(".").pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        const fileName = `${user.uid}/${Date.now()}.${fileExt}`;
+        const storageRef = ref(storage, `message-attachments/${fileName}`);
 
-        const { error: uploadError } = await supabase.storage
-          .from("message-attachments")
-          .upload(fileName, attachmentFile);
+        await uploadBytes(storageRef, attachmentFile);
 
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-          throw new Error("Failed to upload attachment");
-        }
-
-        attachmentUrl = fileName;
+        attachmentUrl = `message-attachments/${fileName}`;
         attachmentName = attachmentFile.name;
         attachmentSize = attachmentFile.size;
         setUploadingAttachment(false);
       }
 
-      const { error } = await supabase.from("messages").insert({
-        from_user_id: user.id,
+      const messageData = {
+        from_user_id: user.uid,
         to_user_id: composeToId,
         subject: composeSubject,
         body: composeBody,
@@ -404,28 +391,24 @@ export default function Webmail() {
         attachment_url: attachmentUrl,
         attachment_name: attachmentName,
         attachment_size: attachmentSize,
+        created_at: serverTimestamp(),
+      };
+
+      await addDoc(collection(db, "messages"), messageData);
+
+      // Notify the recipient
+      const senderName = profile?.full_name || "Student";
+      await addDoc(collection(db, "notifications"), {
+        user_id: composeToId,
+        title: `New message from ${senderName}`,
+        message: composeSubject || "You have a new message",
+        type: "info",
+        link: "/webmail",
+        created_at: serverTimestamp(),
       });
 
-      if (error) throw error;
-
-      // Notify the recipient lecturer
-      const senderName = profile?.full_name || "Student";
-      const { error: notifError } = await supabase
-        .from("notifications")
-        .insert({
-          user_id: composeToId,
-          title: `New message from ${senderName}`,
-          message: composeSubject || "You have a new message",
-          type: "info",
-          link: "/webmail",
-        });
-
-      if (notifError) {
-        console.error("Error creating notification:", notifError);
-      } else {
-        // Emit event to update notification counts
-        window.dispatchEvent(new Event("notifications-updated"));
-      }
+      // Emit event to update notification counts
+      window.dispatchEvent(new Event("notifications-updated"));
 
       // Reset compose form
       setComposeTo("");
@@ -439,11 +422,11 @@ export default function Webmail() {
       fetchMessages();
 
       alert("Message sent successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
       alert(
         "Failed to send message. Please try again. Error: " +
-          (error as any).message
+        error.message
       );
     } finally {
       setSending(false);
@@ -455,14 +438,14 @@ export default function Webmail() {
 
     try {
       setSavingDraft(true);
-      const { error } = await supabase.from("message_drafts").insert({
-        user_id: user.id,
+      await addDoc(collection(db, "message_drafts"), {
+        user_id: user.uid,
         to_user_id: composeToId,
         subject: composeSubject,
         body: composeBody,
+        updated_at: serverTimestamp(),
+        created_at: serverTimestamp(),
       });
-
-      if (error) throw error;
 
       setComposeTo("");
       setComposeSubject("");
@@ -472,9 +455,9 @@ export default function Webmail() {
       fetchDrafts();
 
       alert("Draft saved successfully!");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error saving draft:", error);
-      alert("Failed to save draft. Error: " + (error as any).message);
+      alert("Failed to save draft. Error: " + error.message);
     } finally {
       setSavingDraft(false);
     }
@@ -482,12 +465,10 @@ export default function Webmail() {
 
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
     try {
-      const { error } = await supabase
-        .from("messages")
-        .update({ is_starred: !currentValue })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "messages", messageId), {
+        is_starred: !currentValue,
+        updated_at: serverTimestamp(),
+      });
       fetchMessages();
       if (selectedMessage?.id === messageId) {
         setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
@@ -499,12 +480,10 @@ export default function Webmail() {
 
   const handleMarkAsRead = async (messageId: string) => {
     try {
-      const { error } = await supabase
-        .from("messages")
-        .update({ is_read: true })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "messages", messageId), {
+        is_read: true,
+        updated_at: serverTimestamp(),
+      });
       fetchMessages();
       if (selectedMessage?.id === messageId) {
         setSelectedMessage({ ...selectedMessage, is_read: true });
@@ -521,17 +500,15 @@ export default function Webmail() {
       const message = messages.find((m) => m.id === messageId);
       if (!message) return;
 
-      const isSent = message.from_user_id === user.id;
+      const isSent = message.from_user_id === user.uid;
       const updateField = isSent
         ? "is_deleted_by_sender"
         : "is_deleted_by_recipient";
 
-      const { error } = await supabase
-        .from("messages")
-        .update({ [updateField]: true })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "messages", messageId), {
+        [updateField]: true,
+        updated_at: serverTimestamp(),
+      });
 
       setSelectedMessage(null);
       fetchMessages();
@@ -543,7 +520,7 @@ export default function Webmail() {
   const handleReply = () => {
     if (!selectedMessage) return;
 
-    const replyTo = selectedMessage.from_user_id === user?.id
+    const replyTo = selectedMessage.from_user_id === user?.uid
       ? selectedMessage.to_profile
       : selectedMessage.from_profile;
 
@@ -584,12 +561,10 @@ export default function Webmail() {
 
   const handleArchive = async (messageId: string, currentValue: boolean) => {
     try {
-      const { error } = await supabase
-        .from("messages")
-        .update({ is_archived: !currentValue })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "messages", messageId), {
+        is_archived: !currentValue,
+        updated_at: serverTimestamp(),
+      });
       fetchMessages();
       if (selectedMessage?.id === messageId) {
         setSelectedMessage({ ...selectedMessage, is_archived: !currentValue });
@@ -684,11 +659,10 @@ export default function Webmail() {
                 <CardContent className="p-4 space-y-1">
                   <button
                     onClick={() => setSelectedView("inbox")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === "inbox"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "inbox"
+                      ? "bg-secondary text-secondary-foreground shadow-md"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     <Inbox className="h-5 w-5" />
                     <span className="font-medium">Inbox</span>
@@ -701,11 +675,10 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("sent")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === "sent"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "sent"
+                      ? "bg-secondary text-secondary-foreground shadow-md"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     <Send className="h-5 w-5" />
                     <span className="font-medium">Sent</span>
@@ -713,11 +686,10 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("drafts")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === "drafts"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "drafts"
+                      ? "bg-secondary text-secondary-foreground shadow-md"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     <FileText className="h-5 w-5" />
                     <span className="font-medium">Drafts</span>
@@ -730,11 +702,10 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("starred")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === "starred"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "starred"
+                      ? "bg-secondary text-secondary-foreground shadow-md"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     <Star className="h-5 w-5" />
                     <span className="font-medium">Starred</span>
@@ -742,11 +713,10 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("archived")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                      selectedView === "archived"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "archived"
+                      ? "bg-secondary text-secondary-foreground shadow-md"
+                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     <Archive className="h-5 w-5" />
                     <span className="font-medium">Archived</span>
@@ -878,11 +848,10 @@ export default function Webmail() {
                                 }
                               >
                                 <Star
-                                  className={`h-4 w-4 mr-2 ${
-                                    selectedMessage.is_starred
-                                      ? "fill-amber-500 text-amber-500"
-                                      : ""
-                                  }`}
+                                  className={`h-4 w-4 mr-2 ${selectedMessage.is_starred
+                                    ? "fill-amber-500 text-amber-500"
+                                    : ""
+                                    }`}
                                 />
                                 {selectedMessage.is_starred ? "Unstar" : "Star"}
                               </DropdownMenuItem>
@@ -927,7 +896,7 @@ export default function Webmail() {
                                 <AvatarFallback>
                                   {getInitials(
                                     selectedMessage.from_profile?.full_name ||
-                                      "U"
+                                    "U"
                                   )}
                                 </AvatarFallback>
                               </Avatar>
@@ -960,11 +929,10 @@ export default function Webmail() {
                                 }
                               >
                                 <Star
-                                  className={`h-5 w-5 ${
-                                    selectedMessage.is_starred
-                                      ? "fill-amber-500 text-amber-500"
-                                      : ""
-                                  }`}
+                                  className={`h-5 w-5 ${selectedMessage.is_starred
+                                    ? "fill-amber-500 text-amber-500"
+                                    : ""
+                                    }`}
                                 />
                               </Button>
                             </div>
@@ -988,7 +956,7 @@ export default function Webmail() {
                                   downloadAttachment(
                                     selectedMessage.attachment_url!,
                                     selectedMessage.attachment_name ||
-                                      "attachment"
+                                    "attachment"
                                   )
                                 }
                                 className="gap-2"
@@ -1004,16 +972,16 @@ export default function Webmail() {
                           )}
 
                           <div className="flex gap-2 pt-4 border-t">
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               className="gap-2"
                               onClick={handleReply}
                             >
                               <Reply className="h-4 w-4" />
                               Reply
                             </Button>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               className="gap-2"
                               onClick={handleForward}
                             >
@@ -1055,11 +1023,10 @@ export default function Webmail() {
                                       animate={{ opacity: 1, x: 0 }}
                                       exit={{ opacity: 0, x: 20 }}
                                       transition={{ delay: index * 0.03 }}
-                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
-                                        !message.is_read && !isSent
-                                          ? "bg-primary/5"
-                                          : ""
-                                      }`}
+                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${!message.is_read && !isSent
+                                        ? "bg-primary/5"
+                                        : ""
+                                        }`}
                                       onClick={() => {
                                         setSelectedMessage(message);
                                         if (!message.is_read && !isSent) {
@@ -1118,11 +1085,10 @@ export default function Webmail() {
                                             }}
                                           >
                                             <Star
-                                              className={`h-4 w-4 ${
-                                                message.is_starred
-                                                  ? "fill-amber-500 text-amber-500"
-                                                  : ""
-                                              }`}
+                                              className={`h-4 w-4 ${message.is_starred
+                                                ? "fill-amber-500 text-amber-500"
+                                                : ""
+                                                }`}
                                             />
                                           </Button>
                                           <Button
@@ -1173,7 +1139,7 @@ export default function Webmail() {
                     const foundUser = users.find(
                       (u) =>
                         u.email.toLowerCase() ===
-                          e.target.value.toLowerCase() ||
+                        e.target.value.toLowerCase() ||
                         u.full_name
                           .toLowerCase()
                           .includes(e.target.value.toLowerCase())

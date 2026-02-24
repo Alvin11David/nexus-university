@@ -26,7 +26,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, and, or } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
@@ -107,72 +108,28 @@ export default function StudentQuiz() {
     try {
       setLoading(true);
       const now = new Date().toISOString();
-      console.log("StudentQuiz: Current user:", user);
-      console.log("StudentQuiz: Current time (now):", now);
 
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select(
-          `
-          id,
-          title,
-          description,
-          course_id,
-          time_limit_minutes,
-          max_attempts,
-          passing_score,
-          status,
-          start_date,
-          end_date,
-          created_at
-        `
-        )
-        .eq("status", "active")
-        .lte("start_date", now)
-        .or(`end_date.is.null,end_date.gte.${now}`)
-        .order("created_at", { ascending: false });
+      const quizzesRef = collection(db, "quizzes");
+      const q = query(
+        quizzesRef,
+        and(
+          where("status", "==", "active"),
+          where("start_date", "<=", now),
+          or(
+            where("end_date", "==", null),
+            where("end_date", ">=", now)
+          )
+        ),
+        orderBy("created_at", "desc")
+      );
 
-      console.log("Fetching quizzes with query params:", {
-        status: "active",
-        start_date_lte: now,
-        end_date_condition: `end_date.is.null,end_date.gte.${now}`,
-      });
-
-      console.log("Fetching quizzes with query params:", {
-        status: "active",
-        start_date_lte: now,
-        end_date_condition: `end_date.is.null,end_date.gte.${now}`,
-      });
-
-      if (error) {
-        console.error("Error loading quizzes:", error);
-        throw error;
-      }
-
-      console.log("Fetched quizzes:", data);
-      console.log("Number of quizzes found:", data?.length || 0);
-
-      // Debug date comparisons
-      if (data && data.length > 0) {
-        data.forEach((quiz, index) => {
-          const startDate = new Date(quiz.start_date);
-          const endDate = new Date(quiz.end_date);
-          const currentTime = new Date(now);
-
-          console.log(`Quiz ${index + 1} date check:`);
-          console.log(`  Title: ${quiz.title}`);
-          console.log(`  Start: ${quiz.start_date} (${startDate})`);
-          console.log(`  End: ${quiz.end_date} (${endDate})`);
-          console.log(`  Now: ${now} (${currentTime})`);
-          console.log(`  Start <= Now: ${startDate <= currentTime}`);
-          console.log(`  End >= Now: ${endDate >= currentTime}`);
-        });
-      }
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Quiz[];
 
       // Check for any expired active quizzes and auto-close them
-      await autoCloseExpiredQuizzes(supabase);
+      await autoCloseExpiredQuizzes();
 
-      setQuizzes(data || []);
+      setQuizzes(data);
     } catch (error: any) {
       console.error("Error loading quizzes:", error);
       toast({
@@ -587,13 +544,11 @@ export default function StudentQuiz() {
                 </div>
                 <div className="flex items-center gap-3">
                   {timeLeft !== null && (
-                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${
-                      timeLeft < 300 ? 'bg-red-500/20 border border-red-400/30' : 'bg-white/20'
-                    }`}>
-                      <Timer className={`h-4 w-4 ${timeLeft < 300 ? 'text-red-300' : ''}`} />
-                      <span className={`font-mono text-sm font-semibold ${
-                        timeLeft < 300 ? 'text-red-200' : ''
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${timeLeft < 300 ? 'bg-red-500/20 border border-red-400/30' : 'bg-white/20'
                       }`}>
+                      <Timer className={`h-4 w-4 ${timeLeft < 300 ? 'text-red-300' : ''}`} />
+                      <span className={`font-mono text-sm font-semibold ${timeLeft < 300 ? 'text-red-200' : ''
+                        }`}>
                         {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
                       </span>
                     </div>
@@ -655,17 +610,15 @@ export default function StudentQuiz() {
                             return (
                               <label
                                 key={index}
-                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                                  isSelected
-                                    ? 'border-primary bg-primary/5 shadow-md'
-                                    : 'border-border hover:border-primary/50 hover:bg-accent/50'
-                                }`}
+                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${isSelected
+                                  ? 'border-primary bg-primary/5 shadow-md'
+                                  : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                                  }`}
                               >
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                                  isSelected
-                                    ? 'border-primary bg-primary'
-                                    : 'border-muted-foreground group-hover:border-primary'
-                                }`}>
+                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
+                                  ? 'border-primary bg-primary'
+                                  : 'border-muted-foreground group-hover:border-primary'
+                                  }`}>
                                   {isSelected && (
                                     <div className="w-3 h-3 bg-white rounded-full"></div>
                                   )}
@@ -683,9 +636,8 @@ export default function StudentQuiz() {
                                   }
                                   className="sr-only"
                                 />
-                                <span className={`flex-1 text-sm leading-relaxed ${
-                                  isSelected ? 'font-medium text-primary' : ''
-                                }`}>
+                                <span className={`flex-1 text-sm leading-relaxed ${isSelected ? 'font-medium text-primary' : ''
+                                  }`}>
                                   {option}
                                 </span>
                                 {isSelected && (
@@ -699,85 +651,84 @@ export default function StudentQuiz() {
                     </div>
                   )}
 
-                      {/* Navigation */}
-                      <div className="bg-muted/30 rounded-xl p-6 border border-border/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <Button
-                            variant="outline"
-                            onClick={() =>
-                              setCurrentQuestionIndex((prev) =>
-                                Math.max(0, prev - 1)
-                              )
-                            }
-                            disabled={currentQuestionIndex === 0}
-                            className="gap-2"
-                          >
-                            <ChevronLeft className="h-4 w-4" />
-                            Previous
-                          </Button>
+                  {/* Navigation */}
+                  <div className="bg-muted/30 rounded-xl p-6 border border-border/50">
+                    <div className="flex items-center justify-between mb-4">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setCurrentQuestionIndex((prev) =>
+                            Math.max(0, prev - 1)
+                          )
+                        }
+                        disabled={currentQuestionIndex === 0}
+                        className="gap-2"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
 
-                          <div className="flex flex-col items-center gap-2">
-                            <div className="text-sm font-medium text-muted-foreground">
-                              Question {currentQuestionIndex + 1} of {quizQuestions.length}
-                            </div>
-                            <div className="flex gap-1">
-                              {quizQuestions.map((_, index) => {
-                                const isAnswered = answers[quizQuestions[index].id] !== undefined;
-                                const isCurrent = index === currentQuestionIndex;
-                                return (
-                                  <button
-                                    key={index}
-                                    onClick={() => setCurrentQuestionIndex(index)}
-                                    className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${
-                                      isCurrent
-                                        ? 'bg-primary text-white shadow-lg scale-110'
-                                        : isAnswered
-                                        ? 'bg-green-500 text-white hover:bg-green-600'
-                                        : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                                    }`}
-                                  >
-                                    {index + 1}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
-
-                          {currentQuestionIndex === quizQuestions.length - 1 ? (
-                            <Button
-                              onClick={submitQuiz}
-                              className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
-                              size="lg"
-                            >
-                              <Trophy className="h-4 w-4" />
-                              Submit Quiz
-                            </Button>
-                          ) : (
-                            <Button
-                              onClick={() =>
-                                setCurrentQuestionIndex((prev) =>
-                                  Math.min(quizQuestions.length - 1, prev + 1)
-                                )
-                              }
-                              className="gap-2"
-                            >
-                              Next
-                              <ChevronRight className="h-4 w-4" />
-                            </Button>
-                          )}
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="text-sm font-medium text-muted-foreground">
+                          Question {currentQuestionIndex + 1} of {quizQuestions.length}
                         </div>
-
-                        {/* Progress summary */}
-                        <div className="flex items-center justify-between text-sm text-muted-foreground pt-4 border-t border-border/50">
-                          <span>
-                            Answered: {Object.keys(answers).length} of {quizQuestions.length}
-                          </span>
-                          <span>
-                            {Math.round((Object.keys(answers).length / quizQuestions.length) * 100)}% complete
-                          </span>
+                        <div className="flex gap-1">
+                          {quizQuestions.map((_, index) => {
+                            const isAnswered = answers[quizQuestions[index].id] !== undefined;
+                            const isCurrent = index === currentQuestionIndex;
+                            return (
+                              <button
+                                key={index}
+                                onClick={() => setCurrentQuestionIndex(index)}
+                                className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${isCurrent
+                                  ? 'bg-primary text-white shadow-lg scale-110'
+                                  : isAnswered
+                                    ? 'bg-green-500 text-white hover:bg-green-600'
+                                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                                  }`}
+                              >
+                                {index + 1}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
-                  y i 
+
+                      {currentQuestionIndex === quizQuestions.length - 1 ? (
+                        <Button
+                          onClick={submitQuiz}
+                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
+                          size="lg"
+                        >
+                          <Trophy className="h-4 w-4" />
+                          Submit Quiz
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() =>
+                            setCurrentQuestionIndex((prev) =>
+                              Math.min(quizQuestions.length - 1, prev + 1)
+                            )
+                          }
+                          className="gap-2"
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Progress summary */}
+                    <div className="flex items-center justify-between text-sm text-muted-foreground pt-4 border-t border-border/50">
+                      <span>
+                        Answered: {Object.keys(answers).length} of {quizQuestions.length}
+                      </span>
+                      <span>
+                        {Math.round((Object.keys(answers).length / quizQuestions.length) * 100)}% complete
+                      </span>
+                    </div>
+                  </div>
+                  y i
                 </>
               ) : (
                 /* Results */
@@ -822,22 +773,20 @@ export default function StudentQuiz() {
                       </div>
                       <div className="w-full bg-muted rounded-full h-3">
                         <div
-                          className={`h-3 rounded-full transition-all duration-1000 ${
-                            quizScore >= takingQuiz.passing_score
-                              ? 'bg-gradient-to-r from-green-400 to-green-500'
-                              : 'bg-gradient-to-r from-orange-400 to-orange-500'
-                          }`}
+                          className={`h-3 rounded-full transition-all duration-1000 ${quizScore >= takingQuiz.passing_score
+                            ? 'bg-gradient-to-r from-green-400 to-green-500'
+                            : 'bg-gradient-to-r from-orange-400 to-orange-500'
+                            }`}
                           style={{ width: `${(quizScore / 10) * 100}%` }}
                         ></div>
                       </div>
                     </div>
 
                     {/* Result badge */}
-                    <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold ${
-                      quizScore >= takingQuiz.passing_score
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                        : 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                    }`}>
+                    <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold ${quizScore >= takingQuiz.passing_score
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+                      }`}>
                       {quizScore >= takingQuiz.passing_score ? (
                         <>
                           <Trophy className="h-4 w-4" />

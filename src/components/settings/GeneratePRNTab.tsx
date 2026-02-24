@@ -53,8 +53,8 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { functions } from "@/integrations/firebase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db, functions } from "@/integrations/firebase/client";
 import { httpsCallable } from "firebase/functions";
 
 interface GeneratedPRN {
@@ -153,14 +153,15 @@ export function GeneratePRNTab() {
   const fetchFees = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("fees")
-        .select("*")
-        .eq("student_id", user?.id)
-        .order("due_date", { ascending: false });
-
-      if (error) throw error;
-      setFees(data || []);
+      if (!user) return;
+      const q = query(
+        collection(db, "fees"),
+        where("student_id", "==", user.uid),
+        orderBy("due_date", "desc")
+      );
+      const snap = await getDocs(q);
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setFees(data as Fee[]);
     } catch (error) {
       console.error("Error fetching fees:", error);
     } finally {
@@ -332,18 +333,13 @@ export function GeneratePRNTab() {
       if (responseData.success && responseData.status === "successful") {
         // Payment confirmed - update database
         if (generatedPRN?.id && generatedPRN?.fee_id) {
-          const { error: updateError } = await supabase
-            .from("payments")
-            .update({
-              payment_method: `Mobile Money (${
-                selectedProvider === "mtn" ? "MTN" : "AIRTEL"
-              })`,
-              transaction_ref: transactionId,
-              status: "completed",
-            })
-            .eq("id", generatedPRN.id);
-
-          if (updateError) throw updateError;
+          const paymentRef = doc(db, "payments", generatedPRN.id);
+          await updateDoc(paymentRef, {
+            payment_method: `Mobile Money (${selectedProvider === "mtn" ? "MTN" : "AIRTEL"})`,
+            transaction_ref: transactionId,
+            status: "completed",
+            updated_at: serverTimestamp()
+          });
         }
 
         // Close modals and reset state
@@ -434,16 +430,13 @@ export function GeneratePRNTab() {
       // If PRN already has a fee_id and payment record, update it
       if (generatedPRN.id && generatedPRN.fee_id) {
         // Update existing payment record with new method details
-        const { error: updateError } = await supabase
-          .from("payments")
-          .update({
-            payment_method: method.name,
-            transaction_ref: transactionRef,
-            status: status,
-          })
-          .eq("id", generatedPRN.id);
-
-        if (updateError) throw updateError;
+        const paymentRef = doc(db, "payments", generatedPRN.id);
+        await updateDoc(paymentRef, {
+          payment_method: method.name,
+          transaction_ref: transactionRef,
+          status: status,
+          updated_at: serverTimestamp()
+        });
 
         toast({
           title: method.instant ? "Payment Processed" : "Payment Submitted",
@@ -455,9 +448,8 @@ export function GeneratePRNTab() {
         // No fee linked - just show confirmation
         toast({
           title: "Payment Method Selected",
-          description: `You can now proceed to pay UGX ${generatedPRN.amount.toLocaleString()} via ${
-            method.name
-          }`,
+          description: `You can now proceed to pay UGX ${generatedPRN.amount.toLocaleString()} via ${method.name
+            }`,
         });
       }
 
@@ -499,7 +491,7 @@ export function GeneratePRNTab() {
 
       // If a fee is selected, create a payment record
       let paymentId: string | undefined;
-      if (selectedFeeId && user?.id) {
+      if (selectedFeeId && user?.uid) {
         const selectedFee = fees.find((f) => f.id === selectedFeeId);
         if (!selectedFee) {
           throw new Error("Fee not found");
@@ -518,33 +510,27 @@ export function GeneratePRNTab() {
         }
 
         // Create payment record in database
-        const { data: paymentData, error: paymentError } = await supabase
-          .from("payments")
-          .insert({
-            fee_id: selectedFeeId,
-            student_id: user.id,
-            amount: parsedAmount,
-            payment_method: "PRN",
-            transaction_ref: prnCode,
-            status: "completed",
-            paid_at: new Date().toISOString(),
-          })
-          .select()
-          .single();
+        const paymentData = {
+          fee_id: selectedFeeId,
+          student_id: user.uid,
+          amount: parsedAmount,
+          payment_method: "PRN",
+          transaction_ref: prnCode,
+          status: "completed",
+          paid_at: serverTimestamp(),
+          created_at: serverTimestamp()
+        };
 
-        if (paymentError) throw paymentError;
-        paymentId = paymentData?.id;
+        const paymentRes = await addDoc(collection(db, "payments"), paymentData);
+        paymentId = paymentRes.id;
 
         // Update the fee's paid_amount
         const newPaidAmount = selectedFee.paid_amount + parsedAmount;
-        const { error: updateError } = await supabase
-          .from("fees")
-          .update({
-            paid_amount: newPaidAmount,
-          })
-          .eq("id", selectedFeeId);
-
-        if (updateError) throw updateError;
+        const feeRef = doc(db, "fees", selectedFeeId);
+        await updateDoc(feeRef, {
+          paid_amount: newPaidAmount,
+          updated_at: serverTimestamp()
+        });
 
         toast({
           title: "Payment Recorded Successfully",
@@ -649,11 +635,9 @@ export function GeneratePRNTab() {
   const sharePRN = async () => {
     if (!generatedPRN) return;
 
-    const shareText = `PRN Code: ${
-      generatedPRN.code
-    }\nAmount: UGX ${generatedPRN.amount.toLocaleString()}\nPurpose: ${
-      generatedPRN.purpose
-    }\n\nExpires: ${generatedPRN.expiresAt.toLocaleString()}`;
+    const shareText = `PRN Code: ${generatedPRN.code
+      }\nAmount: UGX ${generatedPRN.amount.toLocaleString()}\nPurpose: ${generatedPRN.purpose
+      }\n\nExpires: ${generatedPRN.expiresAt.toLocaleString()}`;
 
     if (navigator.share) {
       try {
@@ -779,11 +763,10 @@ export function GeneratePRNTab() {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: i * 0.05 }}
                         onClick={() => handlePurposeChange(p.value)}
-                        className={`relative p-4 rounded-2xl border-2 transition-all duration-300 text-left group ${
-                          purpose === p.value
-                            ? "border-secondary bg-secondary/10 shadow-lg shadow-secondary/20"
-                            : "border-border hover:border-secondary/50 hover:bg-muted/50"
-                        }`}
+                        className={`relative p-4 rounded-2xl border-2 transition-all duration-300 text-left group ${purpose === p.value
+                          ? "border-secondary bg-secondary/10 shadow-lg shadow-secondary/20"
+                          : "border-border hover:border-secondary/50 hover:bg-muted/50"
+                          }`}
                       >
                         <span className="text-2xl mb-2 block">{p.icon}</span>
                         <span className="text-xs font-medium block truncate">
@@ -1108,9 +1091,8 @@ export function GeneratePRNTab() {
                               </span>
                             </div>
                             <p
-                              className={`font-semibold truncate ${
-                                item.label === "Expires" ? "text-amber-600" : ""
-                              }`}
+                              className={`font-semibold truncate ${item.label === "Expires" ? "text-amber-600" : ""
+                                }`}
                             >
                               {item.value}
                             </p>
@@ -1756,11 +1738,10 @@ export function GeneratePRNTab() {
           >
             {/* Dynamic Header based on Provider */}
             <div
-              className={`relative overflow-hidden p-8 pb-12 ${
-                selectedProvider === "mtn"
-                  ? "bg-gradient-to-br from-yellow-500 via-yellow-600 to-amber-600"
-                  : "bg-gradient-to-br from-red-600 via-red-700 to-rose-700"
-              }`}
+              className={`relative overflow-hidden p-8 pb-12 ${selectedProvider === "mtn"
+                ? "bg-gradient-to-br from-yellow-500 via-yellow-600 to-amber-600"
+                : "bg-gradient-to-br from-red-600 via-red-700 to-rose-700"
+                }`}
             >
               {/* Animated Orbs */}
               <motion.div
@@ -1856,11 +1837,10 @@ export function GeneratePRNTab() {
                     <div className="relative">
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                         <div
-                          className={`h-8 w-8 rounded-lg flex items-center justify-center ${
-                            selectedProvider === "mtn"
-                              ? "bg-yellow-100 text-yellow-600"
-                              : "bg-red-100 text-red-600"
-                          }`}
+                          className={`h-8 w-8 rounded-lg flex items-center justify-center ${selectedProvider === "mtn"
+                            ? "bg-yellow-100 text-yellow-600"
+                            : "bg-red-100 text-red-600"
+                            }`}
                         >
                           <Smartphone className="h-4 w-4" />
                         </div>
@@ -1891,44 +1871,39 @@ export function GeneratePRNTab() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.4 }}
-                  className={`p-4 rounded-2xl ${
-                    selectedProvider === "mtn"
-                      ? "bg-yellow-50 border border-yellow-200"
-                      : "bg-red-50 border border-red-200"
-                  }`}
+                  className={`p-4 rounded-2xl ${selectedProvider === "mtn"
+                    ? "bg-yellow-50 border border-yellow-200"
+                    : "bg-red-50 border border-red-200"
+                    }`}
                 >
                   <div className="flex items-start gap-3">
                     <div
-                      className={`h-10 w-10 rounded-xl flex items-center justify-center ${
-                        selectedProvider === "MTN"
-                          ? "bg-yellow-100"
-                          : "bg-red-100"
-                      }`}
+                      className={`h-10 w-10 rounded-xl flex items-center justify-center ${selectedProvider === "MTN"
+                        ? "bg-yellow-100"
+                        : "bg-red-100"
+                        }`}
                     >
                       <Zap
-                        className={`h-5 w-5 ${
-                          selectedProvider === "mtn"
-                            ? "text-yellow-600"
-                            : "text-red-600"
-                        }`}
+                        className={`h-5 w-5 ${selectedProvider === "mtn"
+                          ? "text-yellow-600"
+                          : "text-red-600"
+                          }`}
                       />
                     </div>
                     <div>
                       <p
-                        className={`font-bold text-sm mb-1 ${
-                          selectedProvider === "mtn"
-                            ? "text-yellow-900"
-                            : "text-red-900"
-                        }`}
+                        className={`font-bold text-sm mb-1 ${selectedProvider === "mtn"
+                          ? "text-yellow-900"
+                          : "text-red-900"
+                          }`}
                       >
                         How it works
                       </p>
                       <ul
-                        className={`text-xs space-y-1 ${
-                          selectedProvider === "mtn"
-                            ? "text-yellow-800"
-                            : "text-red-800"
-                        }`}
+                        className={`text-xs space-y-1 ${selectedProvider === "mtn"
+                          ? "text-yellow-800"
+                          : "text-red-800"
+                          }`}
                       >
                         <li>• Enter your {selectedProvider} phone number</li>
                         <li>• You'll receive a prompt on your phone</li>
@@ -1958,11 +1933,10 @@ export function GeneratePRNTab() {
                     <Button
                       onClick={handleMoMoPayment}
                       disabled={phoneNumber.length < 9 || processingPayment}
-                      className={`h-14 rounded-xl gap-2 text-base w-full shadow-xl ${
-                        selectedProvider === "mtn"
-                          ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700"
-                          : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800"
-                      }`}
+                      className={`h-14 rounded-xl gap-2 text-base w-full shadow-xl ${selectedProvider === "mtn"
+                        ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700"
+                        : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800"
+                        }`}
                     >
                       {processingPayment ? (
                         <>
@@ -1995,11 +1969,10 @@ export function GeneratePRNTab() {
           >
             {/* Phone Frame - Mimics phone notification */}
             <div
-              className={`relative overflow-hidden ${
-                selectedProvider === "mtn"
-                  ? "bg-gradient-to-b from-yellow-400 to-yellow-500"
-                  : "bg-gradient-to-b from-red-500 to-red-600"
-              } p-6 pt-12`}
+              className={`relative overflow-hidden ${selectedProvider === "mtn"
+                ? "bg-gradient-to-b from-yellow-400 to-yellow-500"
+                : "bg-gradient-to-b from-red-500 to-red-600"
+                } p-6 pt-12`}
             >
               {/* Top Status Bar Effect */}
               <div className="absolute top-0 inset-x-0 h-8 bg-black/20 flex items-center justify-between px-6 text-white text-xs">
@@ -2020,11 +1993,10 @@ export function GeneratePRNTab() {
               >
                 {/* Header */}
                 <div
-                  className={`${
-                    selectedProvider === "mtn"
-                      ? "bg-gradient-to-r from-yellow-400 to-amber-500"
-                      : "bg-gradient-to-r from-red-500 to-red-600"
-                  } p-6 text-white`}
+                  className={`${selectedProvider === "mtn"
+                    ? "bg-gradient-to-r from-yellow-400 to-amber-500"
+                    : "bg-gradient-to-r from-red-500 to-red-600"
+                    } p-6 text-white`}
                 >
                   <div className="flex items-center gap-3 mb-4">
                     <div className="h-12 w-12 rounded-full bg-white/30 flex items-center justify-center">
@@ -2105,11 +2077,10 @@ export function GeneratePRNTab() {
                         {[0, 1, 2, 3].map((i) => (
                           <motion.div
                             key={i}
-                            className={`h-3 w-3 rounded-full ${
-                              i < pin.length
-                                ? "bg-emerald-500 shadow-lg shadow-emerald-500/50"
-                                : "bg-muted"
-                            }`}
+                            className={`h-3 w-3 rounded-full ${i < pin.length
+                              ? "bg-emerald-500 shadow-lg shadow-emerald-500/50"
+                              : "bg-muted"
+                              }`}
                             animate={
                               i < pin.length ? { scale: [1, 1.2, 1] } : {}
                             }
@@ -2176,11 +2147,10 @@ export function GeneratePRNTab() {
                       <Button
                         onClick={handlePinVerification}
                         disabled={pin.length !== 4 || verifyingPin}
-                        className={`h-12 rounded-xl gap-2 w-full font-semibold shadow-lg ${
-                          selectedProvider === "mtn"
-                            ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 disabled:opacity-50"
-                            : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50"
-                        }`}
+                        className={`h-12 rounded-xl gap-2 w-full font-semibold shadow-lg ${selectedProvider === "mtn"
+                          ? "bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 disabled:opacity-50"
+                          : "bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50"
+                          }`}
                       >
                         {verifyingPin ? (
                           <>

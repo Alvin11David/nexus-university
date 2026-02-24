@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  GraduationCap, BookOpen, Award, Calendar, Clock, 
+import {
+  GraduationCap, BookOpen, Award, Calendar, Clock,
   Target, TrendingUp, FileText, Building, Users
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 
 export function MyProgrammeTab() {
   const { user, profile } = useAuth();
@@ -121,9 +120,9 @@ export function MyProgrammeTab() {
                   {programmeData.coursesCompleted} / {programmeData.coursesCompleted + programmeData.coursesRemaining} courses
                 </span>
               </div>
-              <Progress 
-                value={(programmeData.coursesCompleted / (programmeData.coursesCompleted + programmeData.coursesRemaining)) * 100} 
-                className="h-3" 
+              <Progress
+                value={(programmeData.coursesCompleted / (programmeData.coursesCompleted + programmeData.coursesRemaining)) * 100}
+                className="h-3"
               />
             </div>
 
@@ -189,7 +188,7 @@ export function MyProgrammeTab() {
           <div className="relative">
             {/* Timeline Line */}
             <div className="absolute left-[27px] top-0 bottom-0 w-0.5 bg-muted" />
-            
+
             <div className="space-y-6">
               {milestones.map((milestone, i) => (
                 <motion.div
@@ -199,32 +198,29 @@ export function MyProgrammeTab() {
                   transition={{ delay: i * 0.15 }}
                   className="relative flex gap-4"
                 >
-                  <div className={`relative z-10 h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                    milestone.status === 'completed' 
-                      ? 'bg-emerald-500 text-white' 
+                  <div className={`relative z-10 h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 ${milestone.status === 'completed'
+                      ? 'bg-emerald-500 text-white'
                       : milestone.status === 'current'
-                      ? 'bg-gradient-to-br from-primary to-secondary text-white'
-                      : 'bg-muted text-muted-foreground'
-                  }`}>
+                        ? 'bg-gradient-to-br from-primary to-secondary text-white'
+                        : 'bg-muted text-muted-foreground'
+                    }`}>
                     <span className="text-lg font-bold">Y{milestone.year}</span>
                   </div>
-                  <div className={`flex-1 p-4 rounded-xl ${
-                    milestone.status === 'current' 
-                      ? 'bg-primary/10 border-2 border-primary/20' 
+                  <div className={`flex-1 p-4 rounded-xl ${milestone.status === 'current'
+                      ? 'bg-primary/10 border-2 border-primary/20'
                       : 'bg-muted/50'
-                  }`}>
+                    }`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <h4 className="font-semibold">{milestone.name}</h4>
-                        <Badge className={`${
-                          milestone.status === 'completed' 
+                        <Badge className={`${milestone.status === 'completed'
                             ? 'bg-emerald-500/10 text-emerald-600'
                             : milestone.status === 'current'
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-muted text-muted-foreground'
-                        }`}>
-                          {milestone.status === 'completed' ? 'Completed' : 
-                           milestone.status === 'current' ? 'In Progress' : 'Upcoming'}
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                          {milestone.status === 'completed' ? 'Completed' :
+                            milestone.status === 'current' ? 'In Progress' : 'Upcoming'}
                         </Badge>
                       </div>
                     </div>

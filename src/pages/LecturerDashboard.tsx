@@ -32,7 +32,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 const rise = {
   hidden: { opacity: 0, y: 16 },
@@ -46,8 +47,7 @@ const rise = {
 export default function LecturerDashboard() {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
-  const displayName =
-    profile?.full_name || user?.user_metadata?.full_name || "Lecturer";
+  const displayName = profile?.full_name || user?.displayName || "Lecturer";
   const firstName = displayName.split(" ")[0];
 
   const [stats, setStats] = useState({
@@ -65,23 +65,19 @@ export default function LecturerDashboard() {
 
   const loadStats = async () => {
     try {
-      const currentYear = new Date().getFullYear().toString();
-
-      // Get courses - using existing courses table
-      const { data: coursesData } = await supabase
-        .from("courses")
-        .select("id")
-        .limit(10);
+      // Get courses
+      const coursesRef = collection(db, "courses");
+      const qCourses = query(coursesRef, limit(10));
+      const coursesSnapshot = await getDocs(qCourses);
 
       // Get total enrollments
-      const { data: enrollmentsData } = await supabase
-        .from("enrollments")
-        .select("id")
-        .limit(100);
+      const enrollmentsRef = collection(db, "enrollments");
+      const qEnrollments = query(enrollmentsRef, limit(100));
+      const enrollmentsSnapshot = await getDocs(qEnrollments);
 
       setStats({
-        courses: coursesData?.length || 0,
-        students: enrollmentsData?.length || 0,
+        courses: coursesSnapshot.size,
+        students: enrollmentsSnapshot.size,
         pendingMarks: 12, // Mock data for now
         submissions: 8, // Mock data for now
       });
@@ -817,8 +813,8 @@ export default function LecturerDashboard() {
                               course.tag === "emerald"
                                 ? "82%"
                                 : course.tag === "amber"
-                                ? "64%"
-                                : "42%",
+                                  ? "64%"
+                                  : "42%",
                           }}
                           transition={{ duration: 1, delay: idx * 0.2 }}
                           className={`h-full rounded-full bg-${course.tag}-500`}

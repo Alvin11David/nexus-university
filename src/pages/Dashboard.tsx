@@ -79,7 +79,7 @@ type DashboardAssignment = {
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const displayName =
-    profile?.full_name || user?.user_metadata?.full_name || "Student";
+    profile?.full_name || user?.displayName || "Student";
   const firstName = displayName.split(" ")[0];
   const [stats, setStats] = useState({
     enrolled: 0,
@@ -277,16 +277,17 @@ export default function Dashboard() {
         setAssignmentsLoading(true);
         setAssignmentsError(null);
 
-        const { data: enrollments, error: enrollError } = await supabase
-          .from("enrollments")
-          .select("course_id, status")
-          .eq("student_id", user.id)
-          .in("status", ["approved", "pending"]);
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"])
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrollmentsData = enrollSnapshot.docs.map(d => d.data());
 
-        if (enrollError) throw enrollError;
-
-        const courseIds = (enrollments || [])
-          .map((enrollment) => enrollment.course_id)
+        const courseIds = enrollmentsData
+          .map((enrollment: any) => enrollment.course_id)
           .filter(Boolean);
 
         if (!courseIds.length) {
@@ -297,53 +298,49 @@ export default function Dashboard() {
           return;
         }
 
-        const { data: assignmentsData, error: assignmentsError } =
-          await supabase
-            .from("assignments")
-            .select(
-              "id, title, due_date, total_points, status, course_id, courses(code, title)"
-            )
-            .in("course_id", courseIds)
-            .order("due_date", { ascending: true });
+        const assignmentsRef = collection(db, "assignments");
+        const qAssign = query(
+          assignmentsRef,
+          where("course_id", "in", courseIds.slice(0, 10)),
+          orderBy("due_date", "asc")
+        );
+        const assignSnapshot = await getDocs(qAssign);
+        const assignmentsData = assignSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        if (assignmentsError) throw assignmentsError;
+        const assignmentIds = assignmentsData.map(a => a.id);
+        let submissions: any[] = [];
 
-        const assignmentIds = (assignmentsData || []).map((a) => a.id);
-        let submissions:
-          | {
-            assignment_id: string;
-            status: string | null;
-            submitted_at?: string;
-          }[] = [];
-
-        if (assignmentIds.length) {
-          const { data: subs, error: subsError } = await supabase
-            .from("submissions")
-            .select("assignment_id, status, submitted_at")
-            .eq("student_id", user.id)
-            .in("assignment_id", assignmentIds);
-
-          if (subsError) throw subsError;
-          submissions = subs || [];
+        if (assignmentIds.length > 0) {
+          const subsRef = collection(db, "submissions");
+          const qSubs = query(
+            subsRef,
+            where("student_id", "==", user.uid),
+            where("assignment_id", "in", assignmentIds.slice(0, 10))
+          );
+          const subsSnapshot = await getDocs(qSubs);
+          submissions = subsSnapshot.docs.map(d => d.data());
         }
 
-        const mappedAssignments = (assignmentsData || []).map((assignment) => {
+        const mappedAssignments = await Promise.all(assignmentsData.map(async (assignment: any) => {
           const submission = submissions.find(
             (s) => s.assignment_id === assignment.id
           );
+
+          const courseDoc = await getDoc(doc(db, "courses", assignment.course_id));
+          const courseInfo = courseDoc.exists() ? courseDoc.data() : { title: "Course", code: "" };
 
           return {
             id: assignment.id,
             title: assignment.title,
             dueDate: assignment.due_date,
-            courseTitle: assignment.courses?.title || "Course",
-            courseCode: assignment.courses?.code || "",
+            courseTitle: courseInfo.title || "Course",
+            courseCode: courseInfo.code || "",
             totalPoints: assignment.total_points,
             status:
               submission?.status === "submitted" ? "submitted" : "pending",
             rawStatus: assignment.status,
           } as DashboardAssignment;
-        });
+        }));
 
         if (isActive) setAssignments(mappedAssignments);
       } catch (error) {
@@ -368,56 +365,47 @@ export default function Dashboard() {
       try {
         setResultsLoading(true);
 
-        const isValidUuid = (value: string | undefined | null) =>
-          !!value &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            value
-          );
-        const studentId = isValidUuid(user.id) ? user.id : null;
-        if (!studentId) {
-          setResultsLoading(false);
-          return;
-        }
-
+        const studentId = user.uid;
         let data: any[] | null = null;
-        let error: any = null;
 
-        // Try lecturer-side grade book first
+        // Try lecturer-side grade book first (student_grades)
         try {
-          const sgResponse = await (supabase as any)
-            .from("student_grades")
-            .select(
-              "id, course_id, academic_year, semester, assignment1, assignment2, midterm, participation, final_exam, total, grade, gp, courses(title, code, credits)"
-            )
-            .eq("student_id", studentId)
-            .order("academic_year", { ascending: false })
-            .order("semester", { ascending: false });
+          const gradesRef = collection(db, "student_grades");
+          const qGrades = query(
+            gradesRef,
+            where("student_id", "==", studentId),
+            orderBy("academic_year", "desc"),
+            orderBy("semester", "desc")
+          );
+          const gradesSnapshot = await getDocs(qGrades);
 
-          if (
-            !sgResponse.error &&
-            sgResponse.data &&
-            sgResponse.data.length > 0
-          ) {
-            data = sgResponse.data;
+          if (!gradesSnapshot.empty) {
+            data = await Promise.all(gradesSnapshot.docs.map(async d => {
+              const gradeData = d.data();
+              const courseDoc = await getDoc(doc(db, "courses", gradeData.course_id));
+              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+              return { id: d.id, ...gradeData, courses: courseInfo };
+            }));
           } else {
             throw new Error("No student_grades rows");
           }
         } catch (sgError) {
           // Fallback to exam_results
-          const erResponse = await supabase
-            .from("exam_results")
-            .select(
-              "id, course_id, academic_year, semester, marks, grade, grade_point, courses(title, code, credits)"
-            )
-            .eq("student_id", studentId)
-            .order("academic_year", { ascending: false })
-            .order("semester", { ascending: false });
-
-          data = erResponse.data;
-          error = erResponse.error;
+          const resultsRef = collection(db, "exam_results");
+          const qResults = query(
+            resultsRef,
+            where("student_id", "==", studentId),
+            orderBy("academic_year", "desc"),
+            orderBy("semester", "desc")
+          );
+          const resultsSnapshot = await getDocs(qResults);
+          data = await Promise.all(resultsSnapshot.docs.map(async d => {
+            const resultData = d.data();
+            const courseDoc = await getDoc(doc(db, "courses", resultData.course_id));
+            const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+            return { id: d.id, ...resultData, courses: courseInfo };
+          }));
         }
-
-        if (error) throw error;
 
         const normalized = (data as any[] | null)?.map((row) => ({
           ...row,
@@ -490,26 +478,29 @@ export default function Dashboard() {
     setIsSubmitting(true);
     try {
       // First, find the classroom by join code
-      const { data: classroom, error: classroomError } = await supabase
-        .from("classrooms")
-        .select("id, name")
-        .eq("join_code", joinCode.trim())
-        .single();
+      const classroomsRef = collection(db, "classrooms");
+      const q = query(classroomsRef, where("join_code", "==", joinCode.trim()), limit(1));
+      const qSnapshot = await getDocs(q);
 
-      if (classroomError || !classroom) {
+      if (qSnapshot.empty) {
         alert("Invalid class code. Please check and try again.");
         return;
       }
 
-      // Check if student is already enrolled
-      const { data: existingEnrollment } = await supabase
-        .from("classroom_enrollments")
-        .select("id")
-        .eq("classroom_id", classroom.id)
-        .eq("student_id", user.id)
-        .single();
+      const classroomDoc = qSnapshot.docs[0];
+      const classroom = { id: classroomDoc.id, ...classroomDoc.data() } as any;
 
-      if (existingEnrollment) {
+      // Check if student is already enrolled
+      const enrollmentRef = collection(db, "classroom_enrollments");
+      const qEnroll = query(
+        enrollmentRef,
+        where("classroom_id", "==", classroom.id),
+        where("student_id", "==", user.uid),
+        limit(1)
+      );
+      const enrollSnapshot = await getDocs(qEnroll);
+
+      if (!enrollSnapshot.empty) {
         alert("You are already enrolled in this class");
         setShowClassDialog(false);
         setJoinCode("");
@@ -517,22 +508,18 @@ export default function Dashboard() {
       }
 
       // Add student to classroom
-      const { error: enrollError } = await supabase
-        .from("classroom_enrollments")
-        .insert({
-          classroom_id: classroom.id,
-          student_id: user.id,
-          role: "student",
-          enrolled_at: new Date().toISOString(),
-        });
-
-      if (enrollError) throw enrollError;
+      await addDoc(collection(db, "classroom_enrollments"), {
+        classroom_id: classroom.id,
+        student_id: user.uid,
+        role: "student",
+        enrolled_at: new Date().toISOString(),
+      });
 
       alert(`Successfully joined "${classroom.name}"!`);
       setShowClassDialog(false);
       setJoinCode("");
 
-      // Refresh the page to show new classroom
+      // Refresh the page
       window.location.reload();
     } catch (error) {
       console.error("Error joining class:", error);
@@ -556,41 +543,33 @@ export default function Dashboard() {
     setIsSubmitting(true);
     try {
       // Generate a unique join code
-      const joinCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const joinCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
 
       // Create the classroom
-      const { data: newClassroom, error: createError } = await supabase
-        .from("classrooms")
-        .insert({
-          name: className.trim(),
-          join_code: joinCode,
-          instructor_id: user.id,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
+      const newClassroomData = {
+        name: className.trim(),
+        join_code: joinCodeGenerated,
+        instructor_id: user.uid,
+        created_at: new Date().toISOString(),
+      };
 
-      if (createError) throw createError;
+      const classroomRef = await addDoc(collection(db, "classrooms"), newClassroomData);
 
       // Add the creator as instructor
-      const { error: enrollError } = await supabase
-        .from("classroom_enrollments")
-        .insert({
-          classroom_id: newClassroom.id,
-          student_id: user.id,
-          role: "instructor",
-          enrolled_at: new Date().toISOString(),
-        });
-
-      if (enrollError) throw enrollError;
+      await addDoc(collection(db, "classroom_enrollments"), {
+        classroom_id: classroomRef.id,
+        student_id: user.uid,
+        role: "instructor",
+        enrolled_at: new Date().toISOString(),
+      });
 
       alert(
-        `Class "${className}" created successfully!\nClass Code: ${joinCode}`
+        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`
       );
       setShowClassDialog(false);
       setClassName("");
 
-      // Refresh the page to show new classroom
+      // Refresh the page
       window.location.reload();
     } catch (error) {
       console.error("Error creating class:", error);

@@ -7,7 +7,8 @@ import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface ResultCourse {
   title: string;
@@ -74,98 +75,74 @@ export default function Results() {
       try {
         setResultsLoading(true);
 
-        // First, try to load from student_grades (newer system)
-        // Only query with valid UUID student_id values to avoid 22P02 errors
-        const isValidUuid = (value: string | undefined | null) =>
-          !!value &&
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            value
-          );
-        const studentId = isValidUuid(user.id) ? user.id : null;
-        if (!studentId) {
-          setResultsLoading(false);
-          return;
-        }
-
+        const studentId = user.uid;
         console.log("Loading results for student:", studentId);
 
-        let data: any[] | null = null;
-        let error: any = null;
+        let data: any[] = [];
 
-        // First try lecturer-side student_grades (grade book)
-        try {
-          const sgResponse = await (supabase as any)
-            .from("student_grades")
-            .select(
-              "id, course_id, academic_year, semester, assignment1, assignment2, midterm, participation, final_exam, total, grade, gp, courses(title, code, credits)"
-            )
-            .eq("student_id", studentId)
-            .order("academic_year", { ascending: false })
-            .order("semester", { ascending: false });
+        // Try to fetch from student_grades
+        const sgRef = collection(db, "student_grades");
+        const qSg = query(
+          sgRef,
+          where("student_id", "==", studentId),
+          orderBy("academic_year", "desc"),
+          orderBy("semester", "desc")
+        );
+        const sgSnap = await getDocs(qSg);
 
-          console.log("student_grades response:", sgResponse);
-
-          if (
-            !sgResponse.error &&
-            sgResponse.data &&
-            sgResponse.data.length > 0
-          ) {
-            data = sgResponse.data;
-          } else {
-            throw new Error("No student_grades rows");
-          }
-        } catch (sgError) {
-          console.log("Falling back to exam_results due to:", sgError);
-
-          const { data: examData, error: examError } = await supabase
-            .from("exam_results")
-            .select(
-              "id, course_id, academic_year, semester, marks, grade, grade_point, remarks, courses(title, code, credits)"
-            )
-            .eq("student_id", studentId)
-            .order("academic_year", { ascending: false })
-            .order("semester", { ascending: false });
-
-          console.log("exam_results response:", {
-            data: examData,
-            error: examError,
-          });
-
-          data = examData;
-          error = examError;
+        if (!sgSnap.empty) {
+          data = sgSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } else {
+          // Fallback to exam_results
+          const erRef = collection(db, "exam_results");
+          const qEr = query(
+            erRef,
+            where("student_id", "==", studentId),
+            orderBy("academic_year", "desc"),
+            orderBy("semester", "desc")
+          );
+          const erSnap = await getDocs(qEr);
+          data = erSnap.docs.map(d => ({ id: d.id, ...d.data() }));
         }
 
-        if (error) {
-          console.error("Error in results loading:", error);
-          throw error;
+        // Fetch course details
+        const uniqueCourseIds = Array.from(new Set(data.map(r => r.course_id)));
+        const courseMap = new Map();
+        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+          const chunk = uniqueCourseIds.slice(i, i + 10);
+          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const courseSnap = await getDocs(qCourse);
+          courseSnap.docs.forEach(d => courseMap.set(d.id, d.data()));
         }
 
-        // Normalize data from both sources
-        const normalized = (data as any[] | null)?.map((row) => ({
-          ...row,
-          courseTitle: row.courses?.title || "Course",
-          courseCode: row.courses?.code || "",
-          credits: row.courses?.credits || 3,
-          marks: row.total || row.marks || 0,
-          grade_point: row.gp || row.grade_point || 0,
-          semester_remark:
-            row.semester_remark ||
-            calculateSemesterRemark(row.gp || row.grade_point || 0, row.grade),
-          a1: row.assignment1 || 0,
-          a2: row.assignment2 || 0,
-          mid: row.midterm || 0,
-          part: row.participation || 0,
-          final: row.final_exam || 0,
-        }));
-
-        console.log("Normalized data:", normalized);
+        // Normalize data
+        const normalized = data.map((row) => {
+          const course = courseMap.get(row.course_id);
+          return {
+            ...row,
+            courseTitle: course?.title || "Course",
+            courseCode: course?.code || "",
+            credits: course?.credits || 3,
+            marks: row.total || row.marks || 0,
+            grade_point: row.gp || row.grade_point || 0,
+            semester_remark:
+              row.semester_remark ||
+              calculateSemesterRemark(row.gp || row.grade_point || 0, row.grade),
+            a1: row.assignment1 || 0,
+            a2: row.assignment2 || 0,
+            mid: row.midterm || 0,
+            part: row.participation || 0,
+            final: row.final_exam || 0,
+          };
+        });
 
         const termMap = new Map<string, TermResult>();
-        (normalized || []).forEach((row) => {
+        normalized.forEach((row) => {
           const term = `${row.academic_year} · ${row.semester}`;
           const existing = termMap.get(term) || {
             term,
             gpa: 0,
+            cgpa: 0, // Placeholder
             totalCredits: 0,
             entries: [],
           };
@@ -189,8 +166,6 @@ export default function Results() {
           };
         });
 
-        console.log("Terms:", terms);
-
         const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
         const totalPoints = terms.reduce(
           (sum, t) => sum + t.gpa * t.totalCredits,
@@ -199,8 +174,6 @@ export default function Results() {
         const computedCgpa = totalCredits
           ? Number((totalPoints / totalCredits).toFixed(2))
           : 0;
-
-        console.log("CGPA:", computedCgpa);
 
         setTermResults(terms);
         setCgpa(computedCgpa);
@@ -284,7 +257,7 @@ export default function Results() {
                   const url = URL.createObjectURL(blob);
                   const link = document.createElement("a");
                   link.href = url;
-                  link.download = `academic-transcript-${user?.id}.html`;
+                  link.download = `academic-transcript-${user?.uid}.html`;
                   link.click();
                   URL.revokeObjectURL(url);
                 }}
@@ -557,7 +530,7 @@ export default function Results() {
               <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4 border border-border">
                 <div ref={qrRef}>
                   <QRCodeSVG
-                    value={`https://nexus-university.vercel.app/results?student=${user?.id}`}
+                    value={`https://nexus-university.vercel.app/results?student=${user?.uid}`}
                     size={256}
                     level="H"
                     includeMargin={true}
@@ -587,7 +560,7 @@ export default function Results() {
                     const canvas = qrRef.current?.querySelector("canvas");
                     if (canvas) {
                       link.href = canvas.toDataURL("image/png");
-                      link.download = `results-qr-${user?.id}.png`;
+                      link.download = `results-qr-${user?.uid}.png`;
                       link.click();
                     }
                   }}

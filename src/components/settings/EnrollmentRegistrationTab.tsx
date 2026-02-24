@@ -25,7 +25,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { Link } from "react-router-dom";
 
 interface Enrollment {
@@ -60,17 +61,19 @@ export function EnrollmentRegistrationTab() {
 
   const fetchPaymentData = async () => {
     try {
-      const { data: feesData, error: feesError } = await supabase
-        .from("fees")
-        .select("*")
-        .eq("student_id", user?.id);
+      if (!user) return;
+      const feesQ = query(collection(db, "fees"), where("student_id", "==", user.uid));
+      const paymentsQ = query(collection(db, "payments"), where("student_id", "==", user.uid));
 
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from("payments")
-        .select("*")
-        .eq("student_id", user?.id);
+      const [feesSnap, paymentsSnap] = await Promise.all([
+        getDocs(feesQ),
+        getDocs(paymentsQ)
+      ]);
 
-      if (feesData) {
+      const feesData = feesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const paymentsData = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (feesData.length > 0) {
         setFees(feesData);
         const totalFees = feesData.reduce(
           (sum: number, fee: any) => sum + (fee.amount || 0),
@@ -83,7 +86,7 @@ export function EnrollmentRegistrationTab() {
         const percentage = totalFees > 0 ? (totalPaid / totalFees) * 100 : 0;
         setPaymentPercentage(percentage);
       }
-      if (paymentsData) setPayments(paymentsData);
+      if (paymentsData.length > 0) setPayments(paymentsData);
     } catch (error) {
       console.error("Error fetching payment data:", error);
     }
@@ -91,18 +94,41 @@ export function EnrollmentRegistrationTab() {
 
   const fetchEnrollments = async () => {
     try {
-      const { data, error } = await supabase
-        .from("enrollments")
-        .select(
-          `
-          *,
-          course:courses(code, title, credits, semester, year)
-        `
-        )
-        .eq("student_id", user?.id)
-        .order("enrolled_at", { ascending: false });
+      if (!user) return;
+      setLoading(true);
+      const q = query(
+        collection(db, "enrollments"),
+        where("student_id", "==", user.uid),
+        orderBy("enrolled_at", "desc")
+      );
 
-      if (data) setEnrollments(data as Enrollment[]);
+      const snap = await getDocs(q);
+      const enrollmentDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      if (enrollmentDocs.length === 0) {
+        setEnrollments([]);
+        return;
+      }
+
+      const courseIds = [...new Set(enrollmentDocs.map((e: any) => e.course_id))];
+      const courseMap: Record<string, any> = {};
+
+      // Fetch courses in chunks of 10
+      for (let i = 0; i < courseIds.length; i += 10) {
+        const chunk = courseIds.slice(i, i + 10);
+        const courseQ = query(collection(db, "courses"), where("__name__", "in", chunk));
+        const courseSnap = await getDocs(courseQ);
+        courseSnap.docs.forEach(d => {
+          courseMap[d.id] = d.data();
+        });
+      }
+
+      const enrollmentData = enrollmentDocs.map((e: any) => ({
+        ...e,
+        course: courseMap[e.course_id] || { code: "N/A", title: "N/A", credits: 0, semester: "N/A", year: 0 }
+      }));
+
+      setEnrollments(enrollmentData as Enrollment[]);
     } catch (error) {
       console.error("Error fetching enrollments:", error);
     } finally {
@@ -247,7 +273,7 @@ export function EnrollmentRegistrationTab() {
                     qrContainer.style.display = "none";
                     document.body.appendChild(qrContainer);
 
-                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.id}&semester=1-2025`;
+                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.uid}&semester=1-2025`;
 
                     const html = `
                       <html>
@@ -291,27 +317,23 @@ export function EnrollmentRegistrationTab() {
                             <div class="info-grid">
                               <div class="info-box">
                                 <div class="label">Student Name</div>
-                                <div class="value">${
-                                  profile?.full_name || "N/A"
-                                }</div>
+                                <div class="value">${profile?.full_name || "N/A"
+                      }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Student Number</div>
-                                <div class="value">${
-                                  profile?.student_number || "N/A"
-                                }</div>
+                                <div class="value">${profile?.student_number || "N/A"
+                      }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Programme</div>
-                                <div class="value">${
-                                  profile?.programme || "N/A"
-                                }</div>
+                                <div class="value">${profile?.programme || "N/A"
+                      }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Department</div>
-                                <div class="value">${
-                                  profile?.department || "N/A"
-                                }</div>
+                                <div class="value">${profile?.department || "N/A"
+                      }</div>
                               </div>
                             </div>
                             
@@ -361,9 +383,8 @@ export function EnrollmentRegistrationTab() {
                           </div>
                           
                           <div class="footer">
-                            <p>Document ID: ${
-                              user?.id
-                            } | This is an official document from Nexus University. Issued on ${new Date().toLocaleDateString()}</p>
+                            <p>Document ID: ${user?.uid
+                      } | This is an official document from Nexus University. Issued on ${new Date().toLocaleDateString()}</p>
                             <p>To verify this document, scan the QR code in the top right corner.</p>
                           </div>
                         </body>
@@ -461,35 +482,30 @@ export function EnrollmentRegistrationTab() {
                               </div>
 
                               <div class="permit-number">
-                                Permit ID: ${
-                                  user?.id
-                                }-${new Date().getFullYear()}
+                                Permit ID: ${user?.uid
+                        }-${new Date().getFullYear()}
                               </div>
 
                               <div class="student-info">
                                 <div class="info-row">
                                   <div class="label">Student Name:</div>
-                                  <div class="value">${
-                                    profile?.full_name || "N/A"
-                                  }</div>
+                                  <div class="value">${profile?.full_name || "N/A"
+                        }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Student Number:</div>
-                                  <div class="value">${
-                                    profile?.student_number || "N/A"
-                                  }</div>
+                                  <div class="value">${profile?.student_number || "N/A"
+                        }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Programme:</div>
-                                  <div class="value">${
-                                    profile?.programme || "N/A"
-                                  }</div>
+                                  <div class="value">${profile?.programme || "N/A"
+                        }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Department:</div>
-                                  <div class="value">${
-                                    profile?.department || "N/A"
-                                  }</div>
+                                  <div class="value">${profile?.department || "N/A"
+                        }</div>
                                 </div>
                               </div>
 
@@ -498,8 +514,8 @@ export function EnrollmentRegistrationTab() {
                                 <div class="notice-text">
                                   This student has met all academic and financial requirements for examination eligibility.
                                   Payment Status: ${paymentPercentage.toFixed(
-                                    1
-                                  )}% of tuition fees paid.
+                          1
+                        )}% of tuition fees paid.
                                 </div>
                               </div>
 

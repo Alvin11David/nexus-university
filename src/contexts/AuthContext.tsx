@@ -42,10 +42,12 @@ interface Profile {
   registration_number?: string | null;
   department: string | null;
   college: string | null;
+  programme?: string | null;
   phone: string | null;
   phone_number?: string | null;
   bio: string | null;
   role?: "student" | "lecturer" | "admin" | "registrar";
+  updated_at?: any;
 }
 
 interface StudentRecord {

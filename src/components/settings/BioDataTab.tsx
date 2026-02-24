@@ -30,7 +30,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 
 export function BioDataTab() {
@@ -67,25 +68,19 @@ export function BioDataTab() {
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          bio: formData.bio,
-          department: formData.department,
-          college: formData.college,
-        })
-        .eq("id", user.id);
-
-      if (error) throw error;
+      const profileRef = doc(db, "profiles", user.uid);
+      await updateDoc(profileRef, {
+        full_name: formData.full_name,
+        phone: formData.phone,
+        bio: formData.bio,
+        department: formData.department,
+        college: formData.college,
+        updated_at: serverTimestamp(),
+      });
 
       // Refetch profile to update global state
-      const { data: updatedProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
+      const snap = await getDoc(profileRef);
+      const updatedProfile = snap.data();
 
       if (updatedProfile) {
         setFormData({
@@ -293,8 +288,8 @@ export function BioDataTab() {
                     label: "Last Updated",
                     value: profile?.updated_at
                       ? formatDistanceToNow(new Date(profile.updated_at), {
-                          addSuffix: true,
-                        })
+                        addSuffix: true,
+                      })
                       : "Recently",
                   },
                   { label: "Profile Status", value: "Complete" },

@@ -18,7 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 
 interface StudentAssignment {
@@ -67,64 +68,63 @@ export default function StudentAssignments() {
         setLoading(true);
 
         // Get all courses the student is enrolled in
-        const { data: enrollments, error: enrollError } = await supabase
-          .from("enrollments")
-          .select("course_id, status")
-          .eq("student_id", user.id)
-          .in("status", ["approved", "pending"]);
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"])
+        );
+        const enrollSnap = await getDocs(qEnroll);
 
-        if (enrollError) throw enrollError;
+        const courseIds = enrollSnap.docs.map(d => d.data().course_id).filter(Boolean);
 
-        const courseIds = (enrollments || [])
-          .map((e) => e.course_id)
-          .filter(Boolean);
-
-        if (!courseIds.length) {
+        if (courseIds.length === 0) {
           setAssignments([]);
           setLoading(false);
           return;
         }
 
         // Get all assignments for these courses
-        const { data: assignmentsData, error: assignmentsError } =
-          await supabase
-            .from("assignments")
-            .select(
-              "id, title, description, due_date, total_points, status, course_id, instruction_document_url, instruction_document_name, courses(code, title)"
-            )
-            .in("course_id", courseIds)
-            .order("due_date", { ascending: true });
+        const assignmentsRef = collection(db, "assignments");
+        const assignmentsData: any[] = [];
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const qAssign = query(assignmentsRef, where("course_id", "in", chunk), orderBy("due_date", "asc"));
+          const assignSnap = await getDocs(qAssign);
+          assignmentsData.push(...assignSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }
 
-        if (assignmentsError) throw assignmentsError;
+        if (assignmentsData.length === 0) {
+          setAssignments([]);
+          setLoading(false);
+          return;
+        }
 
-        const assignmentIds = ((assignmentsData as any[]) || []).map(
-          (a) => a.id
-        );
-        let submissions:
-          | {
-              assignment_id: string;
-              status: string | null;
-              score?: number;
-              feedback?: string;
-            }[] = [];
+        const assignmentIds = assignmentsData.map(a => a.id);
 
         // Get student's submissions for these assignments
-        if (assignmentIds.length) {
-          const { data: subs, error: subsError } = await supabase
-            .from("submissions")
-            .select("assignment_id, status, score, feedback")
-            .eq("student_id", user.id)
-            .in("assignment_id", assignmentIds);
+        const submissionsRef = collection(db, "submissions");
+        const submissionsData: any[] = [];
+        for (let i = 0; i < assignmentIds.length; i += 10) {
+          const chunk = assignmentIds.slice(i, i + 10);
+          const qSubs = query(submissionsRef, where("student_id", "==", user.uid), where("assignment_id", "in", chunk));
+          const subSnap = await getDocs(qSubs);
+          submissionsData.push(...subSnap.docs.map(d => d.data()));
+        }
 
-          if (subsError) throw subsError;
-          submissions = subs || [];
+        // Fetch course details for these assignments
+        const uniqueCourseIds = Array.from(new Set(assignmentsData.map(a => a.course_id)));
+        const courseMap = new Map();
+        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+          const chunk = uniqueCourseIds.slice(i, i + 10);
+          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const courseSnap = await getDocs(qCourse);
+          courseSnap.docs.forEach(d => courseMap.set(d.id, d.data()));
         }
 
         // Map assignments with submission status
-        const mapped: StudentAssignment[] = (
-          (assignmentsData as any[]) || []
-        ).map((assignment: any) => {
-          const submission = submissions.find(
+        const mapped: StudentAssignment[] = assignmentsData.map((assignment: any) => {
+          const submission = submissionsData.find(
             (s) => s.assignment_id === assignment.id
           );
 
@@ -133,14 +133,16 @@ export default function StudentAssignments() {
             status = submission.score !== undefined ? "graded" : "submitted";
           }
 
+          const course = courseMap.get(assignment.course_id);
+
           return {
             id: assignment.id,
             title: assignment.title,
             description: assignment.description || "",
             dueDate: assignment.due_date,
             totalPoints: assignment.total_points ?? 100,
-            courseTitle: assignment.courses?.title || "Course",
-            courseCode: assignment.courses?.code || "",
+            courseTitle: course?.title || "Course",
+            courseCode: course?.code || "",
             status,
             instructionDocumentUrl: assignment.instruction_document_url,
             instructionDocumentName: assignment.instruction_document_name,
@@ -151,11 +153,11 @@ export default function StudentAssignments() {
         });
 
         setAssignments(mapped);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error loading assignments:", error);
         toast({
           title: "Could not load assignments",
-          description: "There was an error loading your assignments.",
+          description: error.message || "There was an error loading your assignments.",
           variant: "destructive",
         });
       } finally {
@@ -425,7 +427,7 @@ export default function StudentAssignments() {
                           <span
                             className={
                               isOverdue(assignment.dueDate) &&
-                              assignment.status === "pending"
+                                assignment.status === "pending"
                                 ? "text-red-600 font-semibold"
                                 : "text-muted-foreground"
                             }
@@ -476,7 +478,7 @@ export default function StudentAssignments() {
                               handleDownloadDocument(
                                 assignment.instructionDocumentUrl!,
                                 assignment.instructionDocumentName ||
-                                  "assignment-document.pdf"
+                                "assignment-document.pdf"
                               );
                             }}
                             disabled={downloading}
@@ -607,7 +609,7 @@ export default function StudentAssignments() {
                     handleDownloadDocument(
                       selectedAssignment.instructionDocumentUrl!,
                       selectedAssignment.instructionDocumentName ||
-                        "assignment-document.pdf"
+                      "assignment-document.pdf"
                     )
                   }
                   disabled={downloading}

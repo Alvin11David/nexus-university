@@ -27,7 +27,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, onSnapshot, getCountFromServer } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export function StudentHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -49,38 +50,34 @@ export function StudentHeader() {
 
     fetchUnreadCount();
 
+    const q = query(
+      collection(db, "notifications"),
+      where("user_id", "==", user.uid),
+      where("is_read", "==", false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUnreadCount(snapshot.size);
+    });
+
     const handlePing = () => fetchUnreadCount();
     window.addEventListener("notifications-updated", handlePing);
 
-    const subscription = supabase
-      .channel("notifications")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${user.id}`,
-        },
-        fetchUnreadCount
-      )
-      .subscribe();
-
     return () => {
-      subscription.unsubscribe();
+      unsubscribe();
       window.removeEventListener("notifications-updated", handlePing);
     };
   }, [user]);
 
   const fetchUnreadCount = async () => {
     if (!user) return;
-    const { count } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
-
-    setUnreadCount(count || 0);
+    const q = query(
+      collection(db, "notifications"),
+      where("user_id", "==", user.uid),
+      where("is_read", "==", false)
+    );
+    const snapshot = await getCountFromServer(q);
+    setUnreadCount(snapshot.data().count);
   };
 
   const studentNavItems = [

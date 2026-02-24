@@ -46,9 +46,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface Fee {
   id: string;
@@ -117,67 +118,58 @@ export function PaymentsTab() {
 
   const fetchData = async () => {
     try {
+      if (!user) return;
       setLoading(true);
 
-      // Fetch fees data
-      const { data: feesData, error: feesError } = await supabase
-        .from("fees")
-        .select("*")
-        .eq("student_id", user?.id)
-        .order("due_date", { ascending: false });
+      const feesQ = query(
+        collection(db, "fees"),
+        where("student_id", "==", user.uid),
+        orderBy("due_date", "desc")
+      );
+      const paymentsQ = query(
+        collection(db, "payments"),
+        where("student_id", "==", user.uid),
+        orderBy("paid_at", "desc")
+      );
+      const enrollmentsQ = query(
+        collection(db, "enrollments"),
+        where("student_id", "==", user.uid),
+        orderBy("enrolled_at", "desc")
+      );
 
-      // Fetch payments data
-      const { data: paymentsData, error: paymentsError } = await supabase
-        .from("payments")
-        .select("*")
-        .eq("student_id", user?.id)
-        .order("paid_at", { ascending: false });
+      const [feesSnap, paymentsSnap, enrollmentsSnap] = await Promise.all([
+        getDocs(feesQ),
+        getDocs(paymentsQ),
+        getDocs(enrollmentsQ)
+      ]);
 
-      // Fetch enrollments with course data
-      const { data: enrollmentsData, error: enrollmentsError } = await supabase
-        .from("enrollments")
-        .select(
-          `
-          id,
-          course_id,
-          status,
-          enrolled_at,
-          courses (
-            id,
-            title,
-            code,
-            credits,
-            semester,
-            year
-          )
-        `
-        )
-        .eq("student_id", user?.id)
-        .order("enrolled_at", { ascending: false });
+      const feesData = feesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const paymentsData = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const enrollmentDocs = enrollmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      if (feesError) {
-        console.error("Error fetching fees:", feesError);
-      } else if (feesData) {
-        setFees(feesData);
-      }
+      setFees(feesData as Fee[]);
+      setPayments(paymentsData as Payment[]);
 
-      if (paymentsError) {
-        console.error("Error fetching payments:", paymentsError);
-      } else if (paymentsData) {
-        setPayments(paymentsData);
-      }
+      if (enrollmentDocs.length > 0) {
+        const courseIds = [...new Set(enrollmentDocs.map((e: any) => e.course_id))];
+        const courseMap: Record<string, any> = {};
 
-      if (enrollmentsError) {
-        console.error("Error fetching enrollments:", enrollmentsError);
-      } else if (enrollmentsData) {
-        const transformedEnrollments = enrollmentsData.map((e: any) => ({
-          id: e.id,
-          course_id: e.course_id,
-          status: e.status,
-          enrolled_at: e.enrolled_at,
-          course: e.courses,
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const courseQ = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const courseSnap = await getDocs(courseQ);
+          courseSnap.docs.forEach(d => {
+            courseMap[d.id] = d.data();
+          });
+        }
+
+        const transformedEnrollments = enrollmentDocs.map((e: any) => ({
+          ...e,
+          course: courseMap[e.course_id]
         }));
-        setEnrollments(transformedEnrollments);
+        setEnrollments(transformedEnrollments as Enrollment[]);
+      } else {
+        setEnrollments([]);
       }
     } catch (error) {
       console.error("Error fetching payment data:", error);
@@ -301,23 +293,21 @@ export function PaymentsTab() {
     const status = method.instant ? "completed" : "pending";
 
     try {
-      const { data, error } = await supabase
-        .from("payments")
-        .insert({
-          fee_id: targetFee.id,
-          student_id: user.id,
-          amount,
-          payment_method: method.title,
-          transaction_ref: transactionRef,
-          status,
-          paid_at: new Date().toISOString(),
-        })
-        .select("*")
-        .single();
+      const paymentData = {
+        fee_id: targetFee.id,
+        student_id: user.uid,
+        amount,
+        payment_method: method.title,
+        transaction_ref: transactionRef,
+        status,
+        paid_at: new Date().toISOString(),
+        created_at: serverTimestamp(),
+      };
 
-      if (error) throw error;
+      const docRef = await addDoc(collection(db, "payments"), paymentData);
+      const newPayment = { id: docRef.id, ...paymentData };
 
-      setPayments((prev) => [data as Payment, ...prev]);
+      setPayments((prev) => [newPayment as Payment, ...prev]);
       toast({
         title: method.instant ? "Payment recorded" : "Payment submitted",
         description: method.instant
@@ -718,14 +708,13 @@ export function PaymentsTab() {
                                 </div>
                               </div>
                               <Badge
-                                className={`${
-                                  courseRemaining <= 0
-                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                                    : courseRemaining <
-                                      breakdown.totalCost * 0.25
+                                className={`${courseRemaining <= 0
+                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                  : courseRemaining <
+                                    breakdown.totalCost * 0.25
                                     ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
                                     : "bg-destructive/10 text-destructive border-destructive/30"
-                                }`}
+                                  }`}
                               >
                                 {courseRemaining <= 0 ? "✓ Paid" : "Pending"}
                               </Badge>
@@ -743,9 +732,9 @@ export function PaymentsTab() {
                                     const progress =
                                       fee.amount > 0
                                         ? Math.min(
-                                            (paid / fee.amount) * 100,
-                                            100
-                                          )
+                                          (paid / fee.amount) * 100,
+                                          100
+                                        )
                                         : 0;
 
                                     return (
@@ -789,13 +778,12 @@ export function PaymentsTab() {
                                             initial={{ width: 0 }}
                                             animate={{ width: `${progress}%` }}
                                             transition={{ duration: 0.8 }}
-                                            className={`h-full ${
-                                              isPaid
-                                                ? "bg-gradient-to-r from-emerald-500 to-teal-500"
-                                                : isPartial
+                                            className={`h-full ${isPaid
+                                              ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                                              : isPartial
                                                 ? "bg-gradient-to-r from-amber-500 to-orange-500"
                                                 : "bg-gradient-to-r from-primary to-secondary"
-                                            }`}
+                                              }`}
                                           />
                                         </div>
                                       </motion.div>

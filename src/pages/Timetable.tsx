@@ -24,7 +24,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -282,63 +283,124 @@ export default function Timetable() {
   const [copied, setCopied] = useState(false);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
+  const [dynamicCourses, setDynamicCourses] = useState<any[]>([]);
+  const [submissionStatuses, setSubmissionStatuses] = useState<Map<string, string>>(new Map());
   const timetableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const currentDay = days[new Date().getDay() - 1] || "Monday";
   const timetableUrl = window.location.origin + "/timetable";
 
-  // Fetch assignments from enrolled courses
+  // Helper to get color for a course index
+  const getCourseColors = (index: number) => {
+    const palettes = [
+      { color: "from-indigo-500 to-blue-500", textColor: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200" },
+      { color: "from-emerald-500 to-teal-500", textColor: "text-emerald-600", bgColor: "bg-emerald-50", borderColor: "border-emerald-200" },
+      { color: "from-purple-500 to-fuchsia-500", textColor: "text-purple-600", bgColor: "bg-purple-50", borderColor: "border-purple-200" },
+      { color: "from-orange-500 to-red-500", textColor: "text-orange-600", bgColor: "bg-orange-50", borderColor: "border-orange-200" },
+      { color: "from-rose-500 to-pink-500", textColor: "text-rose-600", bgColor: "bg-rose-50", borderColor: "border-rose-200" },
+      { color: "from-cyan-500 to-blue-500", textColor: "text-cyan-600", bgColor: "bg-cyan-50", borderColor: "border-cyan-200" },
+    ];
+    return palettes[index % palettes.length];
+  };
+
+  // Fetch all data from Firestore
   useEffect(() => {
     if (!user) return;
 
-    const fetchAssignments = async () => {
+    const fetchData = async () => {
       try {
         setLoadingAssignments(true);
 
-        // Get enrolled courses
-        const { data: enrollments, error: enrollError } = await supabase
-          .from("enrollments")
-          .select("course_id")
-          .eq("student_id", user.id)
-          .in("status", ["approved", "pending"]); // allow pending so students see upcoming work
+        // 1. Get enrolled courses
+        const enrollRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"])
+        );
+        const enrollSnap = await getDocs(qEnroll);
 
-        if (enrollError) throw enrollError;
-
-        if (!enrollments || enrollments.length === 0) {
+        if (enrollSnap.empty) {
           setAssignments([]);
+          setDynamicCourses([]);
+          setLoadingAssignments(false);
           return;
         }
 
-        const courseIds = enrollments.map((e) => e.course_id);
+        const enrolledCourseIds = enrollSnap.docs.map(d => d.data().course_id).filter(Boolean);
 
-        // Fetch assignments for enrolled courses
-        const { data: assignmentsData, error: assignError } = await supabase
-          .from("assignments")
-          .select(
-            `
-            id,
-            title,
-            description,
-            due_date,
-            course_id,
-            total_points,
-            status,
-            course:courses(code, title)
-          `
-          )
-          .in("course_id", courseIds)
-          .gte("due_date", new Date().toISOString())
-          .order("due_date", { ascending: true });
+        // 2. Fetch course details
+        const courseMap = new Map();
+        const coursesList: any[] = [];
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const courseSnap = await getDocs(qCourse);
+          courseSnap.docs.forEach((d, idx) => {
+            const data = d.data();
+            const colors = getCourseColors(coursesList.length);
+            const courseInfo = { id: d.id, ...data, ...colors };
+            courseMap.set(d.id, courseInfo);
+            coursesList.push(courseInfo);
+          });
+        }
+        setDynamicCourses(coursesList);
 
-        if (assignError) throw assignError;
+        // 3. Fetch assignments for enrolled courses
+        const assignmentsRef = collection(db, "assignments");
+        const assignmentsData: any[] = [];
+        const now = new Date().toISOString();
 
-        setAssignments(assignmentsData || []);
-      } catch (error) {
-        console.error("Error fetching assignments:", error);
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qAssign = query(
+            assignmentsRef,
+            where("course_id", "in", chunk),
+            where("due_date", ">=", now),
+            orderBy("due_date", "asc")
+          );
+          const assignSnap = await getDocs(qAssign);
+          assignmentsData.push(...assignSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+        }
+
+        // 4. Fetch submission statuses
+        const assignmentIds = assignmentsData.map(a => a.id);
+        const statusMap = new Map<string, string>();
+        if (assignmentIds.length > 0) {
+          const submissionsRef = collection(db, "submissions");
+          for (let i = 0; i < assignmentIds.length; i += 10) {
+            const chunk = assignmentIds.slice(i, i + 10);
+            const qSubs = query(
+              submissionsRef,
+              where("student_id", "==", user.uid),
+              where("assignment_id", "in", chunk)
+            );
+            const subSnap = await getDocs(qSubs);
+            subSnap.docs.forEach(d => {
+              const data = d.data();
+              statusMap.set(data.assignment_id, data.status || "submitted");
+            });
+          }
+        }
+        setSubmissionStatuses(statusMap);
+
+        // Map assignments with course and status
+        const mapped: Assignment[] = assignmentsData.map(a => ({
+          ...a,
+          status: statusMap.get(a.id) || "pending",
+          course: courseMap.get(a.course_id) ? {
+            code: courseMap.get(a.course_id).code,
+            title: courseMap.get(a.course_id).title
+          } : undefined
+        }));
+
+        setAssignments(mapped);
+      } catch (error: any) {
+        console.error("Error fetching timetable data:", error);
         toast({
-          title: "Could not load assignments",
-          description: "Please refresh the page to try again.",
+          title: "Could not load timetable data",
+          description: error.message || "Please refresh the page to try again.",
           variant: "destructive",
         });
       } finally {
@@ -346,10 +408,10 @@ export default function Timetable() {
       }
     };
 
-    fetchAssignments();
+    fetchData();
   }, [user]);
 
-  const getCourseById = (id: number) => courses.find((c) => c.id === id);
+  const getCourseById = (id: string | number) => dynamicCourses.find((c) => c.id === id) || courses.find((c) => c.id === (typeof id === 'string' ? id : id)); // Keep fallback for mocked schedule
 
   // Share functionality
   const handleShare = async () => {
@@ -405,9 +467,8 @@ export default function Timetable() {
       });
 
       const link = document.createElement("a");
-      link.download = `teaching-timetable-${
-        new Date().toISOString().split("T")[0]
-      }.png`;
+      link.download = `teaching-timetable-${new Date().toISOString().split("T")[0]
+        }.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
 
@@ -833,7 +894,7 @@ export default function Timetable() {
                   <BookOpen className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{courses.length}</p>
+                  <p className="text-2xl font-bold">{dynamicCourses.length}</p>
                   <p className="text-xs text-muted-foreground">Courses</p>
                 </div>
               </div>
@@ -907,7 +968,7 @@ export default function Timetable() {
                   const dueDate = new Date(assignment.due_date);
                   const daysUntilDue = Math.ceil(
                     (dueDate.getTime() - new Date().getTime()) /
-                      (1000 * 60 * 60 * 24)
+                    (1000 * 60 * 60 * 24)
                   );
                   const isUrgent = daysUntilDue <= 3;
 
@@ -937,6 +998,19 @@ export default function Timetable() {
                           <Badge variant="outline" className="text-xs">
                             {assignment.course?.code}
                           </Badge>
+                          {assignment.status && (
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "text-[10px] h-4",
+                                assignment.status === "submitted" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
+                                  assignment.status === "graded" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                                    "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                              )}
+                            >
+                              {assignment.status}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground line-clamp-1">
                           {assignment.course?.title}
@@ -1026,7 +1100,7 @@ export default function Timetable() {
           <Card className="p-6">
             <h3 className="font-semibold mb-4">Course Legend</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {courses.map((course) => (
+              {dynamicCourses.map((course) => (
                 <div
                   key={course.id}
                   className={cn(

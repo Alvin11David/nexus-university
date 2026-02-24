@@ -33,7 +33,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, onSnapshot } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface CalendarEvent {
   id: string;
@@ -145,7 +146,7 @@ const academicEvents: CalendarEvent[] = [
   },
 ];
 
-// Mock assignment data - kept for reference but not used; real data comes from Supabase
+// Mock assignment data - kept for reference but not used; real data comes from Firestore
 /*
 const assignmentsData: Assignment[] = [
   {
@@ -280,7 +281,7 @@ export function AcademicCalendarTab() {
   const [dynamicAssignments, setDynamicAssignments] = useState<CalendarEvent[]>(
     []
   );
-  const [supabaseAssignments, setSupabaseAssignments] = useState<
+  const [firestoreAssignments, setFirestoreAssignments] = useState<
     Array<{
       id: string;
       title: string;
@@ -297,70 +298,78 @@ export function AcademicCalendarTab() {
   >(new Map());
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
 
-  // Fetch assignments from Supabase and convert to calendar events
+  // Fetch assignments from Firestore and convert to calendar events
   useEffect(() => {
+    if (!user) {
+      setAssignmentsLoading(false);
+      return;
+    }
+
+    setAssignmentsLoading(true);
+
     const fetchAssignments = async () => {
-      if (!user) {
-        setAssignmentsLoading(false);
-        return;
-      }
-
       try {
-        setAssignmentsLoading(true);
-
         // Get student's enrolled courses
-        const { data: enrollments, error: enrollError } = await supabase
-          .from("enrollments")
-          .select("course_id, status")
-          .eq("student_id", user.id)
-          .in("status", ["approved", "pending"]);
-
-        if (enrollError) throw enrollError;
+        const enrollQ = query(
+          collection(db, "enrollments"),
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"])
+        );
+        const enrollSnap = await getDocs(enrollQ);
+        const enrollments = enrollSnap.docs.map(d => d.data());
 
         if (enrollments && enrollments.length > 0) {
-          const courseIds = enrollments.map((e) => e.course_id);
+          const courseIds = enrollments.map((e: any) => e.course_id);
 
-          // Fetch assignments for enrolled courses with course info
-          const { data: assignmentsResult, error: assignmentsError } =
-            await supabase
-              .from("assignments")
-              .select(
-                "id, title, due_date, total_points, description, status, course_id, courses(code, title)"
-              )
-              .in("course_id", courseIds);
+          // Fetch assignments for enrolled courses
+          const assignmentsQ = query(
+            collection(db, "assignments"),
+            where("course_id", "in", courseIds.slice(0, 10)) // Firestore limitation: in supports up to 10
+          );
 
-          if (assignmentsError) throw assignmentsError;
+          const assignmentsSnap = await getDocs(assignmentsQ);
+          const assignmentsResult = assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-          if (assignmentsResult) {
-            setSupabaseAssignments(
-              assignmentsResult as typeof supabaseAssignments
-            );
+          if (assignmentsResult.length > 0) {
+            // Fetch courses info
+            const uniqueCourseIds = [...new Set(assignmentsResult.map((a: any) => a.course_id))];
+            const courseMap: Record<string, any> = {};
 
-            // Fetch submission statuses for each assignment
-            const assignmentIds = assignmentsResult.map((a) => a.id);
-            if (assignmentIds.length > 0) {
-              const { data: submissions, error: subError } = await supabase
-                .from("submissions")
-                .select("assignment_id, status")
-                .eq("student_id", user.id)
-                .in("assignment_id", assignmentIds);
-
-              if (subError) throw subError;
-
-              const statusMap = new Map<string, string>();
-              (submissions || []).forEach((sub) => {
-                statusMap.set(sub.assignment_id, sub.status || "pending");
-              });
-              setSubmissionStatuses(statusMap);
+            for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+              const chunk = uniqueCourseIds.slice(i, i + 10);
+              const courseQ = query(collection(db, "courses"), where("__name__", "in", chunk));
+              const courseSnap = await getDocs(courseQ);
+              courseSnap.docs.forEach(d => { courseMap[d.id] = d.data(); });
             }
 
-            // Convert assignments to calendar events
-            const assignmentEvents: CalendarEvent[] = (
-              assignmentsResult as any[]
-            ).map((a) => ({
+            const assignmentsWithInfo = assignmentsResult.map((a: any) => ({
+              ...a,
+              courses: courseMap[a.course_id]
+            }));
+
+            setFirestoreAssignments(assignmentsWithInfo as any);
+
+            // Fetch submission statuses
+            const assignmentIds = assignmentsResult.map(a => a.id);
+            const submissionsQ = query(
+              collection(db, "submissions"),
+              where("student_id", "==", user.uid),
+              where("assignment_id", "in", assignmentIds.slice(0, 10))
+            );
+            const submissionsSnap = await getDocs(submissionsQ);
+
+            const statusMap = new Map<string, string>();
+            submissionsSnap.docs.forEach(d => {
+              const data = d.data();
+              statusMap.set(data.assignment_id, data.status || "pending");
+            });
+            setSubmissionStatuses(statusMap);
+
+            // Convert to calendar events
+            const assignmentEvents: CalendarEvent[] = assignmentsResult.map((a: any) => ({
               id: `assign-${a.id}`,
               title: a.title,
-              date: new Date(a.due_date).toISOString().split("T")[0],
+              date: a.due_date ? new Date(a.due_date).toISOString().split("T")[0] : "",
               type: "assignment" as const,
               description: a.description || "",
               important: false,
@@ -369,12 +378,11 @@ export function AcademicCalendarTab() {
             setDynamicAssignments(assignmentEvents);
           }
         } else {
-          setSupabaseAssignments([]);
+          setFirestoreAssignments([]);
           setDynamicAssignments([]);
         }
       } catch (error) {
         console.error("Error fetching assignments:", error);
-        setSupabaseAssignments([]);
       } finally {
         setAssignmentsLoading(false);
       }
@@ -382,52 +390,40 @@ export function AcademicCalendarTab() {
 
     fetchAssignments();
 
-    // Set up real-time listener for new assignments
-    const subscription = supabase
-      .channel("assignment-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "assignments",
-        },
-        () => {
-          fetchAssignments();
-        }
-      )
-      .subscribe();
+    // Set up real-time listener
+    const assignmentsRef = collection(db, "assignments");
+    const unsub = onSnapshot(assignmentsRef, () => {
+      fetchAssignments();
+    });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => unsub();
   }, [user]);
 
-  // Convert Supabase assignments to mock Assignment format for display
-  const displayAssignments: Assignment[] = supabaseAssignments.map(
-    (supaAsg) => {
-      const submissionStatus = submissionStatuses.get(supaAsg.id) || "pending";
+  // Convert Firestore assignments to mock Assignment format for display
+  const displayAssignments: Assignment[] = firestoreAssignments.map(
+    (fAsg) => {
+      const submissionStatus = submissionStatuses.get(fAsg.id) || "pending";
       return {
-        id: supaAsg.id,
-        title: supaAsg.title,
-        course: supaAsg.courses?.title || "Unknown Course",
-        dueDate: supaAsg.due_date,
-        points: supaAsg.total_points || 0,
+        id: fAsg.id,
+        title: fAsg.title,
+        course: fAsg.courses?.title || "Unknown Course",
+        dueDate: fAsg.due_date,
+        points: fAsg.total_points || 0,
         status:
           submissionStatus === "submitted"
             ? "submitted"
             : submissionStatus === "graded"
-            ? "graded"
-            : "pending",
+              ? "graded"
+              : "pending",
         type: "coding" as const, // Default type; could be enhanced with db field
-        instructions: supaAsg.description || "No instructions provided",
+        instructions: fAsg.description || "No instructions provided",
         attachments: [],
         submissions:
           submissionStatus === "graded"
             ? [{ id: "sub", date: new Date().toISOString(), fileName: "" }]
             : submissionStatus === "submitted"
-            ? [{ id: "sub", date: new Date().toISOString(), fileName: "" }]
-            : [],
+              ? [{ id: "sub", date: new Date().toISOString(), fileName: "" }]
+              : [],
       };
     }
   );
@@ -532,9 +528,9 @@ export function AcademicCalendarTab() {
 
   const selectedDateEvents = selectedDate
     ? allEvents.filter((event) => {
-        const eventDate = new Date(event.date).toDateString();
-        return eventDate === new Date(selectedDate).toDateString();
-      })
+      const eventDate = new Date(event.date).toDateString();
+      return eventDate === new Date(selectedDate).toDateString();
+    })
     : [];
 
   // File upload handler
@@ -701,13 +697,12 @@ export function AcademicCalendarTab() {
                         Status
                       </p>
                       <p
-                        className={`font-semibold text-sm capitalize flex items-center gap-1 ${
-                          selectedAssignment.status === "graded"
-                            ? "text-emerald-600"
-                            : selectedAssignment.status === "submitted"
+                        className={`font-semibold text-sm capitalize flex items-center gap-1 ${selectedAssignment.status === "graded"
+                          ? "text-emerald-600"
+                          : selectedAssignment.status === "submitted"
                             ? "text-blue-600"
                             : "text-amber-600"
-                        }`}
+                          }`}
                       >
                         {selectedAssignment.status === "graded" ? (
                           <CheckCircle className="h-4 w-4" />
@@ -1098,9 +1093,8 @@ export function AcademicCalendarTab() {
                 <CardContent className="p-4 md:p-6">
                   {/* Weekday Headers */}
                   <div
-                    className={`grid gap-1 md:gap-2 mb-3 md:mb-4 ${
-                      isMobile ? "grid-cols-7" : "grid-cols-7"
-                    }`}
+                    className={`grid gap-1 md:gap-2 mb-3 md:mb-4 ${isMobile ? "grid-cols-7" : "grid-cols-7"
+                      }`}
                   >
                     {weekDays.map((day) => (
                       <div
@@ -1115,9 +1109,8 @@ export function AcademicCalendarTab() {
 
                   {/* Calendar Grid */}
                   <div
-                    className={`grid gap-1 md:gap-2 ${
-                      isMobile ? "grid-cols-7" : "grid-cols-7"
-                    }`}
+                    className={`grid gap-1 md:gap-2 ${isMobile ? "grid-cols-7" : "grid-cols-7"
+                      }`}
                   >
                     {calendarDays.map((day, idx) => {
                       const dayEvents = day ? getEventsForDate(day) : [];
@@ -1160,17 +1153,16 @@ export function AcademicCalendarTab() {
                               }
                             }
                           }}
-                          className={`aspect-square rounded-lg md:rounded-xl p-1 md:p-2 text-[10px] md:text-sm font-medium transition-all relative group ${
-                            !day
-                              ? "cursor-default"
-                              : isToday
+                          className={`aspect-square rounded-lg md:rounded-xl p-1 md:p-2 text-[10px] md:text-sm font-medium transition-all relative group ${!day
+                            ? "cursor-default"
+                            : isToday
                               ? "bg-gradient-to-br from-primary to-accent text-primary-foreground shadow-lg ring-2 ring-primary/50"
                               : isSelected
-                              ? "bg-primary/20 border-2 border-primary text-primary"
-                              : allItems.length > 0
-                              ? "bg-gradient-to-br from-secondary/30 to-accent/20 border-2 border-secondary/40 text-foreground hover:border-secondary/60"
-                              : "hover:bg-muted/50 text-muted-foreground border border-transparent"
-                          }`}
+                                ? "bg-primary/20 border-2 border-primary text-primary"
+                                : allItems.length > 0
+                                  ? "bg-gradient-to-br from-secondary/30 to-accent/20 border-2 border-secondary/40 text-foreground hover:border-secondary/60"
+                                  : "hover:bg-muted/50 text-muted-foreground border border-transparent"
+                            }`}
                         >
                           <div className="flex flex-col h-full gap-0.5">
                             <span className="text-xs md:text-base font-bold">
@@ -1213,9 +1205,8 @@ export function AcademicCalendarTab() {
 
                   {/* Legend */}
                   <div
-                    className={`flex flex-wrap gap-2 md:gap-3 justify-center mt-4 md:mt-6 py-3 md:py-4 border-t border-border/50 ${
-                      isMobile ? "text-[11px]" : "text-sm"
-                    }`}
+                    className={`flex flex-wrap gap-2 md:gap-3 justify-center mt-4 md:mt-6 py-3 md:py-4 border-t border-border/50 ${isMobile ? "text-[11px]" : "text-sm"
+                      }`}
                   >
                     {[
                       { type: "academic", label: "Academic" },
@@ -1497,7 +1488,7 @@ export function AcademicCalendarTab() {
                 const daysUntilDue = Math.ceil(
                   (new Date(assignment.dueDate).getTime() -
                     new Date().getTime()) /
-                    (1000 * 60 * 60 * 24)
+                  (1000 * 60 * 60 * 24)
                 );
                 const isOverdue = daysUntilDue < 0;
                 const isDueSoon = daysUntilDue <= 3 && daysUntilDue >= 0;
@@ -1518,22 +1509,20 @@ export function AcademicCalendarTab() {
                         <div className="flex items-start gap-4">
                           {/* Icon & Type */}
                           <div
-                            className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              assignment.status === "graded"
-                                ? "bg-emerald-500/20"
-                                : assignment.status === "submitted"
+                            className={`h-12 w-12 rounded-xl flex items-center justify-center flex-shrink-0 ${assignment.status === "graded"
+                              ? "bg-emerald-500/20"
+                              : assignment.status === "submitted"
                                 ? "bg-blue-500/20"
                                 : "bg-purple-500/20"
-                            }`}
+                              }`}
                           >
                             <FileText
-                              className={`h-6 w-6 ${
-                                assignment.status === "graded"
-                                  ? "text-emerald-600"
-                                  : assignment.status === "submitted"
+                              className={`h-6 w-6 ${assignment.status === "graded"
+                                ? "text-emerald-600"
+                                : assignment.status === "submitted"
                                   ? "text-blue-600"
                                   : "text-purple-600"
-                              }`}
+                                }`}
                             />
                           </div>
 
@@ -1577,7 +1566,7 @@ export function AcademicCalendarTab() {
                             {/* Progress & Details */}
                             <div className="space-y-3">
                               {assignment.status === "submitted" ||
-                              assignment.status === "graded" ? (
+                                assignment.status === "graded" ? (
                                 <div>
                                   <div className="flex items-center justify-between mb-2">
                                     <span className="text-xs font-medium text-muted-foreground">
