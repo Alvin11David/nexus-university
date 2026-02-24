@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +88,23 @@ type StatusFilter = "All" | "Open" | "Close" | "Current" | "Completed";
 export default function AcademicCalendar() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [viewMode, setViewMode] = useState<"grid" | "timeline">("grid");
+
+  // Save academic calendar data to Firestore on first render
+  useEffect(() => {
+    const saveCalendar = async () => {
+      try {
+        await addDoc(collection(db, "AcademicCalendar"), {
+          ...calendarData,
+          savedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        // Optionally handle error (e.g., log or toast)
+      }
+    };
+    saveCalendar();
+    // Only run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const matchesFilter = (semesterStatus: string, eventStatus: string) => {
     if (statusFilter === "All") return true;
