@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface StudentGrade {
   id: string;
@@ -226,7 +228,7 @@ export default function LecturerGradeBook() {
         (enrollment: any) => {
           const profile = profilesMap[enrollment.student_id];
           const existingGrade: any = grades?.find(
-            (g: any) => g.student_id === enrollment.student_id
+            (g: any) => g.student_id === enrollment.student_id,
           );
 
           const assignment1 = existingGrade?.assignment1 || 0;
@@ -262,7 +264,7 @@ export default function LecturerGradeBook() {
             status,
             grade_id: existingGrade?.id,
           };
-        }
+        },
       );
 
       setStudents(studentsWithGrades);
@@ -277,7 +279,7 @@ export default function LecturerGradeBook() {
   const updateStudentGrade = (
     studentId: string,
     field: keyof StudentGrade,
-    value: number
+    value: number,
   ) => {
     setStudents((prev) =>
       prev.map((student) => {
@@ -303,7 +305,7 @@ export default function LecturerGradeBook() {
         else status = "failing";
 
         return { ...updated, total, grade, gp, status };
-      })
+      }),
     );
 
     // Mark this student's grade as changed
@@ -334,7 +336,11 @@ export default function LecturerGradeBook() {
         gp: student.gp,
         semester: "Spring",
         academic_year: "2025-2026",
+        saved_at: new Date().toISOString(),
       };
+
+      // Save to Firestore 'StudentGrades' collection
+      await addDoc(collection(db, "StudentGrades"), gradeData);
 
       try {
         // @ts-ignore - student_grades table will be added in migration
@@ -379,7 +385,7 @@ export default function LecturerGradeBook() {
           type: "grade_update",
           title: "Grade Updated",
           message: `Your grades for ${courseName} have been updated. Total: ${student.total.toFixed(
-            1
+            1,
           )}%, Grade: ${student.grade}`,
           related_id: selectedCourse,
           is_read: false,
@@ -416,7 +422,13 @@ export default function LecturerGradeBook() {
         gp: student.gp,
         semester: "Spring",
         academic_year: "2025-2026",
+        saved_at: new Date().toISOString(),
       }));
+
+      // Save all grades to Firestore 'StudentGrades' collection
+      for (const grade of upsertData) {
+        await addDoc(collection(db, "StudentGrades"), grade);
+      }
 
       try {
         // @ts-ignore - student_grades table will be added in migration
@@ -442,7 +454,7 @@ export default function LecturerGradeBook() {
         fetchStudentsAndGrades();
       } catch (e) {
         console.warn(
-          "Could not save to database - student_grades table not yet available"
+          "Could not save to database - student_grades table not yet available",
         );
         alert("Local changes saved. Database table will be available soon.");
       }
@@ -599,7 +611,7 @@ export default function LecturerGradeBook() {
         const matchedStudents = importedStudents
           .map((imported) => {
             const existing = students.find(
-              (s) => s.email.toLowerCase() === imported.email.toLowerCase()
+              (s) => s.email.toLowerCase() === imported.email.toLowerCase(),
             );
             if (existing) {
               return {
@@ -621,7 +633,7 @@ export default function LecturerGradeBook() {
 
         if (matchedStudents.length === 0) {
           alert(
-            "No matching students found. Make sure the email addresses in CSV match enrolled students."
+            "No matching students found. Make sure the email addresses in CSV match enrolled students.",
           );
           setImporting(false);
           return;
@@ -632,11 +644,11 @@ export default function LecturerGradeBook() {
           prev.map((student) => {
             const imported = matchedStudents.find((m) => m.id === student.id);
             return imported || student;
-          })
+          }),
         );
 
         alert(
-          `Successfully imported grades for ${matchedStudents.length} student(s). Click "Save All" to save to database.`
+          `Successfully imported grades for ${matchedStudents.length} student(s). Click "Save All" to save to database.`,
         );
       } catch (error) {
         console.error("Error importing CSV:", error);
@@ -974,7 +986,7 @@ export default function LecturerGradeBook() {
                               updateStudentGrade(
                                 student.id,
                                 "assignment1",
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -990,7 +1002,7 @@ export default function LecturerGradeBook() {
                               updateStudentGrade(
                                 student.id,
                                 "assignment2",
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -1006,7 +1018,7 @@ export default function LecturerGradeBook() {
                               updateStudentGrade(
                                 student.id,
                                 "midterm",
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -1022,7 +1034,7 @@ export default function LecturerGradeBook() {
                               updateStudentGrade(
                                 student.id,
                                 "participation",
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -1038,7 +1050,7 @@ export default function LecturerGradeBook() {
                               updateStudentGrade(
                                 student.id,
                                 "finalExam",
-                                parseFloat(e.target.value) || 0
+                                parseFloat(e.target.value) || 0,
                               )
                             }
                             className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
