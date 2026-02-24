@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 
 interface Assignment {
@@ -100,7 +102,7 @@ export default function LecturerAssignments() {
            lecturer_id,
            assignment_submissions(count),
            courses:course_id(title, code)
-          `
+          `,
         )
         .eq("lecturer_id", user.id)
         .order("due_date", { ascending: true });
@@ -258,6 +260,21 @@ export default function LecturerAssignments() {
       }
 
       // Create assignment in database
+
+      // Save assignment to Firestore 'Assignments' collection
+      await addDoc(collection(db, "Assignments"), {
+        course_id: selectedCourse,
+        lecturer_id: user.id,
+        title: formData.title,
+        description: formData.description,
+        due_date: new Date(formData.dueDate).toISOString(),
+        total_points: formData.totalPoints,
+        status: "draft",
+        instruction_document_url: instructionDocUrl,
+        instruction_document_name: instructionDocName,
+        created_at: new Date().toISOString(),
+      });
+
       const { data: assignmentData, error: assignmentError } = await supabase
         .from("assignments")
         .insert({
@@ -290,7 +307,7 @@ export default function LecturerAssignments() {
           user_id: enrollment.student_id,
           title: `New Assignment: ${formData.title}`,
           message: `A new assignment has been added to your course. Due: ${new Date(
-            formData.dueDate
+            formData.dueDate,
           ).toLocaleDateString()}`,
           type: "assignment",
           related_id: assignmentData.id,
@@ -448,7 +465,7 @@ export default function LecturerAssignments() {
           `id, title, description, due_date, total_points, status, course_id,
            instruction_document_url, instruction_document_name,
            assignment_submissions(count),
-           courses:course_id(title, code)`
+           courses:course_id(title, code)`,
         )
         .single();
 
@@ -476,7 +493,7 @@ export default function LecturerAssignments() {
       };
 
       setAssignments((prev) =>
-        prev.map((a) => (a.id === editing.id ? updated : a))
+        prev.map((a) => (a.id === editing.id ? updated : a)),
       );
       setEditing(null);
       toast({ title: "Assignment updated" });
@@ -759,7 +776,7 @@ export default function LecturerAssignments() {
                           <Badge
                             variant="outline"
                             className={`font-semibold border-2 ${getStatusColor(
-                              assignment.status
+                              assignment.status,
                             )}`}
                           >
                             {assignment.status.charAt(0).toUpperCase() +
@@ -1033,8 +1050,8 @@ export default function LecturerAssignments() {
                   {uploadingDocument
                     ? "Uploading..."
                     : loading
-                    ? "Creating..."
-                    : "Create"}
+                      ? "Creating..."
+                      : "Create"}
                 </Button>
               </div>
             </motion.div>
@@ -1109,7 +1126,7 @@ export default function LecturerAssignments() {
                   </span>
                   <Badge
                     className={`font-semibold ${getStatusColor(
-                      viewing.status
+                      viewing.status,
                     )}`}
                   >
                     {viewing.status.charAt(0).toUpperCase() +
@@ -1345,8 +1362,8 @@ export default function LecturerAssignments() {
                   {uploadingDocument
                     ? "Uploading..."
                     : loading
-                    ? "Saving..."
-                    : "Save Changes"}
+                      ? "Saving..."
+                      : "Save Changes"}
                 </Button>
               </div>
             </motion.div>
