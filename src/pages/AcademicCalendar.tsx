@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { addDoc, collection } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
@@ -89,22 +89,19 @@ export default function AcademicCalendar() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [viewMode, setViewMode] = useState<"grid" | "timeline">("grid");
 
-  // Save academic calendar data to Firestore on first render
-  useEffect(() => {
-    const saveCalendar = async () => {
-      try {
-        await addDoc(collection(db, "AcademicCalendar"), {
-          ...calendarData,
-          savedAt: new Date().toISOString(),
-        });
-      } catch (e) {
-        // Optionally handle error (e.g., log or toast)
-      }
-    };
-    saveCalendar();
-    // Only run once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Handler to save academic calendar data to Firestore
+  const handleSaveCalendar = async () => {
+    try {
+      await addDoc(collection(db, "AcademicCalendar"), {
+        ...calendarData,
+        savedAt: new Date().toISOString(),
+      });
+      // Optionally show a success message
+      alert("Academic calendar saved to Firestore.");
+    } catch (e) {
+      alert("Failed to save academic calendar.");
+    }
+  };
 
   const matchesFilter = (semesterStatus: string, eventStatus: string) => {
     if (statusFilter === "All") return true;
@@ -183,6 +180,9 @@ export default function AcademicCalendar() {
                   </Button>
                 )
               )}
+              <Button size="sm" variant="outline" onClick={handleSaveCalendar}>
+                Save Calendar to Firestore
+              </Button>
             </div>
             <div className="flex gap-2">
               <Button
