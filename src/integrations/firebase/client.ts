@@ -1,6 +1,8 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
+import { getStorage } from "firebase/storage";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -21,6 +23,12 @@ export const auth = getAuth(app);
 // Initialize Cloud Functions
 // Note: Functions are deployed to us-central1 region
 export const functions = getFunctions(app, "us-central1");
+
+// Initialize Firestore
+export const db = getFirestore(app);
+
+// Initialize Firebase Storage
+export const storage = getStorage(app);
 
 // Connect to emulator in development
 if (

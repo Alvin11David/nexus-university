@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase } from "@/integrations/supabase/client";
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -203,46 +204,46 @@ export default function Dashboard() {
       try {
         setLoadingStats(true);
 
-        const { data: enrollments, error: enrollError } = await supabase
-          .from("enrollments")
-          .select("status, course_id")
-          .eq("student_id", user.id);
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(enrollmentsRef, where("student_id", "==", user.uid));
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrollments = enrollSnapshot.docs.map(d => d.data());
 
-        if (enrollError) throw enrollError;
+        const enrolledCoursesCount = enrollments.length;
+        const completedCoursesCount = enrollments.filter((e: any) => e.status === "completed").length;
 
-        const enrolledCourses = enrollments?.length || 0;
-        const completedCourses =
-          enrollments?.filter((e) => e.status === "completed").length || 0;
+        const courseIds = enrollments.map((e: any) => e.course_id).filter(Boolean);
 
-        const courseIds = (enrollments || [])
-          .map((e) => e.course_id)
-          .filter(Boolean);
+        let pendingAssignmentsCount = 0;
+        if (courseIds.length > 0) {
+          // Note: Firestore 'in' queries are limited to 10 items. 
+          // For more, we'd need to chunk the request.
+          const assignmentsRef = collection(db, "assignments");
+          const qAssign = query(
+            assignmentsRef,
+            where("course_id", "in", courseIds.slice(0, 10)),
+            // Note: Cloud Firestore does not support inequality on one field and equality on another easily without index
+          );
+          const assignSnapshot = await getDocs(qAssign);
+          const assignments = assignSnapshot.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter((a: any) => a.due_date && new Date(a.due_date) >= new Date());
 
-        let pendingAssignments = 0;
-        if (courseIds.length) {
-          const { data: assignments, error: assignError } = await supabase
-            .from("assignments")
-            .select("id, due_date, course_id")
-            .in("course_id", courseIds)
-            .gte("due_date", new Date().toISOString());
+          const assignmentIds = assignments.map(a => a.id);
+          let submissions: any[] = [];
 
-          if (assignError) throw assignError;
-
-          const assignmentIds = (assignments || []).map((a) => a.id);
-          let submissions: { assignment_id: string; status: string }[] = [];
-
-          if (assignmentIds.length) {
-            const { data: subs, error: subError } = await supabase
-              .from("submissions")
-              .select("assignment_id, status")
-              .eq("student_id", user.id)
-              .in("assignment_id", assignmentIds);
-
-            if (subError) throw subError;
-            submissions = subs || [];
+          if (assignmentIds.length > 0) {
+            const subsRef = collection(db, "submissions");
+            const qSubs = query(
+              subsRef,
+              where("student_id", "==", user.uid),
+              where("assignment_id", "in", assignmentIds.slice(0, 10))
+            );
+            const subsSnapshot = await getDocs(qSubs);
+            submissions = subsSnapshot.docs.map(d => d.data());
           }
 
-          pendingAssignments = (assignments || []).filter((a) => {
+          pendingAssignmentsCount = assignments.filter((a: any) => {
             const submission = submissions.find(
               (s) => s.assignment_id === a.id
             );
@@ -251,9 +252,9 @@ export default function Dashboard() {
         }
 
         setStats({
-          enrolled: enrolledCourses,
-          completed: completedCourses,
-          assignments: pendingAssignments,
+          enrolled: enrolledCoursesCount,
+          completed: completedCoursesCount,
+          assignments: pendingAssignmentsCount,
           liveMeets: meetSessions.filter((m) => m.isLive).length,
         });
       } catch (error) {
@@ -310,10 +311,10 @@ export default function Dashboard() {
         const assignmentIds = (assignmentsData || []).map((a) => a.id);
         let submissions:
           | {
-              assignment_id: string;
-              status: string | null;
-              submitted_at?: string;
-            }[] = [];
+            assignment_id: string;
+            status: string | null;
+            submitted_at?: string;
+          }[] = [];
 
         if (assignmentIds.length) {
           const { data: subs, error: subsError } = await supabase
@@ -998,11 +999,10 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right space-y-1 flex-shrink-0">
                             <span
-                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${
-                                isSubmitted
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border-amber-200"
-                              }`}
+                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${isSubmitted
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
                             >
                               {isSubmitted ? "Submitted" : "Pending"}
                             </span>
@@ -1168,11 +1168,10 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                  classAction === "join"
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground"
-                }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "join"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground"
+                  }`}
               >
                 Join Class
               </button>
@@ -1182,11 +1181,10 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                  classAction === "create"
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground"
-                }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "create"
+                  ? "bg-white text-foreground shadow-sm"
+                  : "text-muted-foreground"
+                  }`}
               >
                 Create Class
               </button>
