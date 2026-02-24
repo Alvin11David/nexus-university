@@ -30,6 +30,13 @@ interface CourseOption {
 export default function CreateQuiz() {
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  
+  interface UserWithId {
+    id?: string;
+    [key: string]: any;
+  }
+  const typedUser = user as UserWithId;
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [courses] = useState<CourseOption[]>([
@@ -164,7 +171,7 @@ export default function CreateQuiz() {
       // Show debug info to user
       toast({
         title: "Debug Info",
-        description: `User ID: ${user?.id}, Course ID: ${formData.courseId}`,
+        description: `User ID: ${typedUser?.id ?? "unknown"}, Course ID: ${formData.courseId}`,
       });
 
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
@@ -195,7 +202,7 @@ export default function CreateQuiz() {
             attempts_allowed: formData.attemptsAllowed,
             shuffle_questions: formData.shuffleQuestions,
             show_answers: formData.showAnswers,
-            lecturer_id: user.id,
+            lecturer_id: typedUser.id,
             created_at: new Date().toISOString(),
           },
         ])
