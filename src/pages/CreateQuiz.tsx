@@ -19,6 +19,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CourseOption {
@@ -31,7 +33,6 @@ export default function CreateQuiz() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  
   interface UserWithId {
     id?: string;
     [key: string]: any;
@@ -127,7 +128,7 @@ export default function CreateQuiz() {
 
   const handleInputChange = (
     field: string,
-    value: string | number | boolean
+    value: string | number | boolean,
   ) => {
     setFormData((prev) => ({
       ...prev,
@@ -182,6 +183,27 @@ export default function CreateQuiz() {
         description: `Selected course: ${selectedCourse?.title}`,
       });
       console.log("Selected course:", selectedCourse);
+
+      // Save quiz to Firestore 'Quizzes' collection
+      await addDoc(collection(db, "Quizzes"), {
+        title: formData.title,
+        description: formData.description,
+        course_id: formData.courseId,
+        course_title: selectedCourse?.title,
+        course_code: selectedCourse?.code,
+        total_questions: formData.totalQuestions,
+        total_points: formData.totalPoints,
+        time_limit: formData.timeLimit,
+        passing_score: formData.passingScore,
+        start_date: formData.startDate,
+        end_date: formData.endDate,
+        status: formData.status,
+        attempts_allowed: formData.attemptsAllowed,
+        shuffle_questions: formData.shuffleQuestions,
+        show_answers: formData.showAnswers,
+        lecturer_id: typedUser.id,
+        created_at: new Date().toISOString(),
+      });
 
       const { data, error } = await supabase
         .from("quizzes")
@@ -419,7 +441,7 @@ export default function CreateQuiz() {
                       onChange={(e) =>
                         handleInputChange(
                           "totalQuestions",
-                          parseInt(e.target.value)
+                          parseInt(e.target.value),
                         )
                       }
                       className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -443,7 +465,7 @@ export default function CreateQuiz() {
                       onChange={(e) =>
                         handleInputChange(
                           "totalPoints",
-                          parseInt(e.target.value)
+                          parseInt(e.target.value),
                         )
                       }
                       className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -489,7 +511,7 @@ export default function CreateQuiz() {
                       onChange={(e) =>
                         handleInputChange(
                           "passingScore",
-                          parseInt(e.target.value)
+                          parseInt(e.target.value),
                         )
                       }
                       className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -513,7 +535,7 @@ export default function CreateQuiz() {
                       onChange={(e) =>
                         handleInputChange(
                           "attemptsAllowed",
-                          parseInt(e.target.value)
+                          parseInt(e.target.value),
                         )
                       }
                       className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -535,7 +557,7 @@ export default function CreateQuiz() {
                       onChange={(e) =>
                         handleInputChange(
                           "status",
-                          e.target.value as "draft" | "active" | "closed"
+                          e.target.value as "draft" | "active" | "closed",
                         )
                       }
                       className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
