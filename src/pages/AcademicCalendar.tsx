@@ -116,11 +116,11 @@ export default function AcademicCalendar() {
         .map((semester) => ({
           ...semester,
           events: semester.events.filter((event) =>
-            matchesFilter(semester.status, event.status)
+            matchesFilter(semester.status, event.status),
           ),
         }))
         .filter((semester) => semester.events.length > 0),
-    [statusFilter]
+    [statusFilter],
   );
 
   const timelineEvents = useMemo(() => {
@@ -135,7 +135,7 @@ export default function AcademicCalendar() {
             semesterStatus: semester.status,
             startDate: parseDate(event.start),
             endDate: parseDate(event.end),
-          }))
+          })),
       )
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
   }, [statusFilter]);
@@ -178,7 +178,7 @@ export default function AcademicCalendar() {
                   >
                     {status}
                   </Button>
-                )
+                ),
               )}
               <Button size="sm" variant="outline" onClick={handleSaveCalendar}>
                 Save Calendar to Firestore
