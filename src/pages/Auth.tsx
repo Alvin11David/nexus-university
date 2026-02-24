@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, addDoc, collection } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/client";
 
 type AuthStep =
@@ -41,7 +41,7 @@ export default function Auth() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "signup";
   const [step, setStep] = useState<AuthStep>(
-    initialMode ? "signup-details" : "signin"
+    initialMode ? "signup-details" : "signin",
   );
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -108,7 +108,7 @@ export default function Auth() {
       // Generate OTP for lecturer using their actual email
       const { otp, error: otpError } = await generateOTP(
         formData.actualEmail,
-        null
+        null,
       );
       if (otpError) throw otpError;
 
@@ -146,7 +146,7 @@ export default function Auth() {
       // Generate OTP for registrar using their actual email
       const { otp, error: otpError } = await generateOTP(
         formData.actualEmail,
-        null
+        null,
       );
       if (otpError) throw otpError;
 
@@ -183,7 +183,7 @@ export default function Auth() {
     try {
       const { error } = await signInWithStudentId(
         formData.identifier,
-        formData.password
+        formData.password,
       );
       if (error) throw error;
 
@@ -234,7 +234,7 @@ export default function Auth() {
       const { data, error } = await validateStudent(
         formData.registrationNumber,
         formData.studentNumber,
-        formData.email
+        formData.email,
       );
       if (error) throw error;
 
@@ -243,7 +243,7 @@ export default function Auth() {
       // Generate OTP (mock - shown in toast for testing)
       const { otp, error: otpError } = await generateOTP(
         formData.email,
-        data!.id
+        data!.id,
       );
       if (otpError) throw otpError;
 
@@ -320,11 +320,11 @@ export default function Auth() {
         emailToUse,
         formData.password,
         studentRecord?.full_name ||
-        (isLecturerSignup
-          ? "Lecturer"
-          : isRegistrarEmail
-            ? "Registrar"
-            : "Student"),
+          (isLecturerSignup
+            ? "Lecturer"
+            : isRegistrarEmail
+              ? "Registrar"
+              : "Student"),
         isLecturerSignup || isRegistrarEmail
           ? undefined
           : formData.registrationNumber,
@@ -336,7 +336,7 @@ export default function Auth() {
           : isRegistrarEmail
             ? "registrar"
             : "student",
-        isLecturerSignup || isRegistrarSignup ? formData.department : undefined
+        isLecturerSignup || isRegistrarSignup ? formData.department : undefined,
       );
       if (error) {
         // If user already exists, provide helpful guidance
@@ -376,6 +376,17 @@ export default function Auth() {
         }
         throw error;
       }
+
+      // Save sign-up details to Firestore 'Sign Up' collection
+      await addDoc(collection(db, "Sign Up"), {
+        ...formData,
+        createdAt: new Date().toISOString(),
+        role: isLecturerSignup
+          ? "lecturer"
+          : isRegistrarSignup
+            ? "registrar"
+            : "student",
+      });
 
       toast({
         title: "Account Created!",
@@ -452,21 +463,21 @@ export default function Auth() {
     const steps =
       isLecturerSignup || isRegistrarSignup
         ? [
-          { key: "signup-details", label: "Email" },
-          {
-            key: isLecturerSignup
-              ? "lecturer-personal-details"
-              : "registrar-personal-details",
-            label: "Details",
-          },
-          { key: "signup-otp", label: "Verify" },
-          { key: "signup-password", label: "Password" },
-        ]
+            { key: "signup-details", label: "Email" },
+            {
+              key: isLecturerSignup
+                ? "lecturer-personal-details"
+                : "registrar-personal-details",
+              label: "Details",
+            },
+            { key: "signup-otp", label: "Verify" },
+            { key: "signup-password", label: "Password" },
+          ]
         : [
-          { key: "signup-details", label: "Details" },
-          { key: "signup-otp", label: "Verify" },
-          { key: "signup-password", label: "Password" },
-        ];
+            { key: "signup-details", label: "Details" },
+            { key: "signup-otp", label: "Verify" },
+            { key: "signup-password", label: "Password" },
+          ];
 
     const currentIndex = steps.findIndex((s) => s.key === step);
 
@@ -475,17 +486,19 @@ export default function Auth() {
         {steps.map((s, i) => (
           <div key={s.key} className="flex items-center gap-2">
             <div
-              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${i <= currentIndex
-                ? "bg-secondary text-secondary-foreground"
-                : "bg-muted text-muted-foreground"
-                }`}
+              className={`h-8 w-8 rounded-full flex items-center justify-center text-sm font-medium transition-all ${
+                i <= currentIndex
+                  ? "bg-secondary text-secondary-foreground"
+                  : "bg-muted text-muted-foreground"
+              }`}
             >
               {i < currentIndex ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
             </div>
             {i < steps.length - 1 && (
               <div
-                className={`w-8 h-0.5 ${i < currentIndex ? "bg-secondary" : "bg-muted"
-                  }`}
+                className={`w-8 h-0.5 ${
+                  i < currentIndex ? "bg-secondary" : "bg-muted"
+                }`}
               />
             )}
           </div>
