@@ -99,16 +99,11 @@ export default function LecturerAssignments() {
 
   // Load assignments created by this lecturer from Supabase
   useEffect(() => {
-    if (!user) return;
-
     const loadAssignments = async () => {
       setLoading(true);
       try {
-        // Fetch assignments from Firestore
-        const assignmentsQuery = query(
-          collection(db, "Assignments"),
-          where("lecturer_id", "==", user.id),
-        );
+        // Fetch assignments from Firestore (no lecturer_id filter)
+        const assignmentsQuery = query(collection(db, "Assignments"));
         const snapshot = await getDocs(assignmentsQuery);
         const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
           const a = docSnap.data();
@@ -138,19 +133,17 @@ export default function LecturerAssignments() {
       setLoading(false);
     };
     loadAssignments();
-  }, [user, toast]);
+  }, [toast]);
 
   // Load lecturer courses from Supabase so we use real UUIDs, not placeholders
   useEffect(() => {
-    if (!user) return;
     const loadCourses = async () => {
       const currentAcademicYear = new Date().getFullYear().toString();
       const currentSemester = "1";
       try {
-        // Fetch lecturer_courses from Firestore
+        // Fetch lecturer_courses from Firestore (no lecturer_id filter)
         const lecturerCoursesQuery = query(
           collection(db, "lecturer_courses"),
-          where("lecturer_id", "==", user.id),
           where("academic_year", "==", currentAcademicYear),
           where("semester", "==", currentSemester),
         );
@@ -172,7 +165,7 @@ export default function LecturerAssignments() {
       }
     };
     loadCourses();
-  }, [user]);
+  }, []);
 
   const filteredAssignments =
     selectedFilter === "all"
@@ -211,7 +204,7 @@ export default function LecturerAssignments() {
   };
 
   const handleCreateAssignment = async () => {
-    if (!formData.title || !formData.dueDate || !selectedCourse || !user) {
+    if (!formData.title || !formData.dueDate || !selectedCourse) {
       toast({
         title: "Missing information",
         description: "Please fill in all fields and select a course",
@@ -237,7 +230,7 @@ export default function LecturerAssignments() {
       // Upload instruction document if provided
       if (formData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${formData.instructionDocument.name}`;
+        const fileName = `${Date.now()}-${formData.instructionDocument.name}`;
         const fileRef = ref(storage, `assignment-documents/${fileName}`);
         await uploadBytes(fileRef, formData.instructionDocument);
         instructionDocUrl = await getDownloadURL(fileRef);
@@ -247,7 +240,6 @@ export default function LecturerAssignments() {
       // Create assignment in Firestore
       const assignmentDoc = await addDoc(collection(db, "Assignments"), {
         course_id: selectedCourse,
-        lecturer_id: user.id,
         title: formData.title,
         description: formData.description,
         due_date: new Date(formData.dueDate).toISOString(),

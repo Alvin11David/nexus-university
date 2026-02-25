@@ -7,6 +7,7 @@ import {
   Eye,
   MessageSquare,
   Heart,
+  Loader2,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -14,7 +15,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+  getCountFromServer,
+  getDoc,
+  Timestamp,
+} from "firebase/firestore";
 
 interface Announcement {
   id: string;
@@ -53,7 +69,7 @@ interface StudentEngagement {
 }
 
 export default function LecturerAnnouncements() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -71,149 +87,79 @@ export default function LecturerAnnouncements() {
   });
 
   useEffect(() => {
-    if (user) {
-      fetchAnnouncements();
+    if (!user) return;
 
-      // Create a debounced refetch function
-      let debounceTimer: NodeJS.Timeout;
-      const debouncedFetch = () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(() => {
-          console.log("Real-time update detected, refetching announcements...");
-          fetchAnnouncements();
-        }, 500);
-      };
+    fetchAnnouncements();
 
-      // Listen for announcement interactions from other tabs/windows
-      const handleAnnouncementInteraction = (e: Event) => {
-        console.log("Announcement interaction event received:", e);
-        debouncedFetch();
-      };
-      window.addEventListener(
-        "announcement-interaction",
-        handleAnnouncementInteraction
-      );
+    // Listen for engagement changes
+    const unsubLikes = onSnapshot(collection(db, "announcement_likes"), () => fetchAnnouncements());
+    const unsubComments = onSnapshot(collection(db, "announcement_comments"), () => fetchAnnouncements());
+    const unsubViews = onSnapshot(collection(db, "announcement_views"), () => fetchAnnouncements());
 
-      // Subscribe to real-time updates for interactions
-      const likesSubscription = supabase
-        .channel("public:announcement_likes")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "announcement_likes",
-          },
-          (payload) => {
-            console.log("Like event received:", payload);
-            debouncedFetch();
-          }
-        )
-        .subscribe();
-
-      const commentsSubscription = supabase
-        .channel("public:announcement_comments")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "announcement_comments",
-          },
-          (payload) => {
-            console.log("Comment event received:", payload);
-            debouncedFetch();
-          }
-        )
-        .subscribe();
-
-      const viewsSubscription = supabase
-        .channel("public:announcement_views")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "announcement_views",
-          },
-          (payload) => {
-            console.log("View event received:", payload);
-            debouncedFetch();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        clearTimeout(debounceTimer);
-        window.removeEventListener(
-          "announcement-interaction",
-          handleAnnouncementInteraction
-        );
-        likesSubscription.unsubscribe();
-        commentsSubscription.unsubscribe();
-        viewsSubscription.unsubscribe();
-      };
-    }
+    return () => {
+      unsubLikes();
+      unsubComments();
+      unsubViews();
+    };
   }, [user]);
 
   const fetchAnnouncements = async () => {
+    if (!user?.uid) return;
     try {
       setIsLoading(true);
-      // Get lecturer's courses
-      const { data: lecturerCourses } = await supabase
-        .from("lecturer_courses")
-        .select("course_id")
-        .eq("lecturer_id", user?.id);
+      const lecturerCoursesQuery = query(
+        collection(db, "lecturer_courses"),
+        where("lecturer_id", "==", user.uid)
+      );
+      const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
 
-      if (lecturerCourses && lecturerCourses.length > 0) {
-        const courseIds = lecturerCourses.map((lc) => lc.course_id);
-
-        // Fetch announcements for these courses
-        const { data, error } = await supabase
-          .from("announcements")
-          .select("*")
-          .in("course_id", courseIds)
-          .order("created_at", { ascending: false });
-
-        if (error) throw error;
-
-        // Transform the data and fetch interaction counts
-        const transformedAnnouncements = await Promise.all(
-          (data || []).map(async (ann) => {
-            // Get view count
-            const { count: viewCount } = await supabase
-              .from("announcement_views")
-              .select("*", { count: "exact", head: true })
-              .eq("announcement_id", ann.id);
-
-            // Get like count
-            const { count: likeCount } = await supabase
-              .from("announcement_likes")
-              .select("*", { count: "exact", head: true })
-              .eq("announcement_id", ann.id);
-
-            // Get comment count
-            const { count: commentCount } = await supabase
-              .from("announcement_comments")
-              .select("*", { count: "exact", head: true })
-              .eq("announcement_id", ann.id);
-
-            return {
-              id: ann.id,
-              title: ann.title,
-              content: ann.content,
-              date: new Date(ann.created_at).toLocaleDateString(),
-              audience: "All Students",
-              views: viewCount || 0,
-              likes: likeCount || 0,
-              comments: commentCount || 0,
-              priority: "normal" as const,
-            };
-          })
-        );
-
-        setAnnouncements(transformedAnnouncements);
+      if (lecturerCoursesSnap.empty) {
+        setAnnouncements([]);
+        return;
       }
+
+      const courseIds = lecturerCoursesSnap.docs.map(d => d.data().course_id);
+      const annData: any[] = [];
+
+      for (let i = 0; i < courseIds.length; i += 30) {
+        const chunk = courseIds.slice(i, i + 30);
+        const qAnn = query(
+          collection(db, "announcements"),
+          where("course_id", "in", chunk),
+          orderBy("created_at", "desc")
+        );
+        const annSnap = await getDocs(qAnn);
+        annSnap.docs.forEach(d => annData.push({ id: d.id, ...d.data() }));
+      }
+
+      const transformedAnnouncements = await Promise.all(
+        annData.map(async (ann) => {
+          const viewsCountSnap = await getCountFromServer(
+            query(collection(db, "announcement_views"), where("announcement_id", "==", ann.id))
+          );
+          const likesCountSnap = await getCountFromServer(
+            query(collection(db, "announcement_likes"), where("announcement_id", "==", ann.id))
+          );
+          const commentsCountSnap = await getCountFromServer(
+            query(collection(db, "announcement_comments"), where("announcement_id", "==", ann.id))
+          );
+
+          return {
+            id: ann.id,
+            title: ann.title,
+            content: ann.content,
+            date: ann.created_at?.toDate
+              ? ann.created_at.toDate().toLocaleDateString()
+              : new Date().toLocaleDateString(),
+            audience: "All Students",
+            views: viewsCountSnap.data().count,
+            likes: likesCountSnap.data().count,
+            comments: commentsCountSnap.data().count,
+            priority: ann.priority || "normal",
+          };
+        })
+      );
+      setAnnouncements(transformedAnnouncements);
     } catch (error) {
       console.error("Error fetching announcements:", error);
     } finally {
@@ -230,198 +176,93 @@ export default function LecturerAnnouncements() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
-      case "high":
-        return "bg-red-500/20 text-red-700 border-red-300/30";
-      case "normal":
-        return "bg-blue-500/20 text-blue-700 border-blue-300/30";
-      case "low":
-        return "bg-gray-500/20 text-gray-700 border-gray-300/30";
-      default:
-        return "bg-muted/60";
+      case "high": return "bg-red-500/20 text-red-700 border-red-300/30";
+      case "normal": return "bg-blue-500/20 text-blue-700 border-blue-300/30";
+      case "low": return "bg-gray-500/20 text-gray-700 border-gray-300/30";
+      default: return "bg-muted/60";
     }
   };
 
   const handleCreateAnnouncement = async () => {
-    if (formData.title && formData.content) {
-      try {
-        setIsPublishing(true);
+    if (!user || !formData.title || !formData.content) return;
+    try {
+      setIsPublishing(true);
+      const lecturerCoursesQuery = query(
+        collection(db, "lecturer_courses"),
+        where("lecturer_id", "==", user.uid)
+      );
+      const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
+      if (lecturerCoursesSnap.empty) throw new Error("No courses found");
 
-        if (!user) {
-          throw new Error("User not authenticated");
-        }
+      const courseIds = lecturerCoursesSnap.docs.map(d => d.data().course_id);
+      const announcementDoc = {
+        course_id: courseIds[0],
+        author_id: user.uid,
+        title: formData.title,
+        content: formData.content,
+        priority: formData.priority,
+        is_global: false,
+        is_pinned: false,
+        created_at: serverTimestamp(),
+      };
 
-        // Get all lecturer's courses
-        const { data: lecturerCourses } = await supabase
-          .from("lecturer_courses")
-          .select("course_id")
-          .eq("lecturer_id", user.id);
-
-        if (!lecturerCourses || lecturerCourses.length === 0) {
-          throw new Error("No courses found");
-        }
-
-        const courseIds = lecturerCourses.map((lc) => lc.course_id);
-
-        // Save announcement to database - create ONE announcement, linked to the first course
-        // Students will see it based on their enrollment in any of the lecturer's courses
-        const announcementData = {
-          course_id: courseIds[0], // Link to first course for filtering
-          author_id: user.id,
-          title: formData.title,
-          content: formData.content,
-          is_global: false,
-          is_pinned: false,
-        };
-
-        const { data: insertedAnnouncement, error: insertError } =
-          await supabase
-            .from("announcements")
-            .insert(announcementData)
-            .select()
-            .single();
-
-        if (insertError) {
-          console.error("Error inserting announcement:", insertError);
-          throw insertError;
-        }
-
-        console.log(
-          "Announcement inserted successfully:",
-          insertedAnnouncement
-        );
-
-        // Get all students enrolled in any of the lecturer's courses
-        const { data: enrollments } = await supabase
-          .from("enrollments")
-          .select("student_id")
-          .in("course_id", courseIds);
-
-        console.log(
-          "Students enrolled in courses:",
-          enrollments?.length || 0,
-          "enrollments:",
-          enrollments
-        );
-
-        if (enrollments && enrollments.length > 0) {
-          // Get unique student IDs
-          const studentIds = [...new Set(enrollments.map((e) => e.student_id))];
-
-          const announcementId = insertedAnnouncement.id;
-
-          // Send notifications to all students
-          const notifications = studentIds.map((student_id) => ({
-            user_id: student_id,
-            title: `New Announcement: ${formData.title}`,
-            message:
-              formData.content.substring(0, 100) +
-              (formData.content.length > 100 ? "..." : ""),
-            type: "announcement",
-            link: `/announcements?id=${announcementId}`,
-          }));
-
-          await supabase.from("notifications").insert(notifications);
-
-          // Emit event to update notification counts
-          window.dispatchEvent(new Event("notifications-updated"));
-        }
-
-        // Refresh announcements
-        await fetchAnnouncements();
-
-        setFormData({
-          title: "",
-          content: "",
-          audience: "All Students",
-          priority: "normal",
-        });
-        setShowCreateModal(false);
-        alert("Announcement published successfully!");
-      } catch (error) {
-        console.error("Error creating announcement:", error);
-        alert("Failed to publish announcement. Please try again.");
-      } finally {
-        setIsPublishing(false);
+      const annRef = await addDoc(collection(db, "announcements"), announcementDoc);
+      const studentIdsSet = new Set<string>();
+      for (let i = 0; i < courseIds.length; i += 30) {
+        const chunk = courseIds.slice(i, i + 30);
+        const enrollSnap = await getDocs(query(collection(db, "enrollments"), where("course_id", "in", chunk)));
+        enrollSnap.docs.forEach(d => studentIdsSet.add(d.data().student_id));
       }
+
+      await Promise.all(Array.from(studentIdsSet).map(studentId =>
+        addDoc(collection(db, "notifications"), {
+          user_id: studentId,
+          title: `New Announcement: ${formData.title}`,
+          message: formData.content.substring(0, 100),
+          type: "announcement",
+          link: `/announcements?id=${annRef.id}`,
+          created_at: serverTimestamp(),
+          is_read: false
+        })
+      ));
+
+      setFormData({ title: "", content: "", audience: "All Students", priority: "normal" });
+      setShowCreateModal(false);
+      await fetchAnnouncements();
+      alert("Announcement published successfully!");
+    } catch (error) {
+      console.error("Error creating announcement:", error);
+      alert("Failed to publish announcement.");
+    } finally {
+      setIsPublishing(false);
     }
   };
 
   const fetchEngagementDetails = async (announcementId: string) => {
     try {
       setLoadingEngagement(true);
-
-      // Fetch views with student profiles
-      const { data: viewsData, error: viewsError } = await supabase
-        .from("announcement_views")
-        .select("student_id, viewed_at")
-        .eq("announcement_id", announcementId);
-
-      // Fetch likes with student profiles
-      const { data: likesData, error: likesError } = await supabase
-        .from("announcement_likes")
-        .select("student_id, created_at")
-        .eq("announcement_id", announcementId);
-
-      // Fetch comments with student profiles
-      const { data: commentsData, error: commentsError } = await supabase
-        .from("announcement_comments")
-        .select("student_id, content, created_at")
-        .eq("announcement_id", announcementId)
-        .order("created_at", { ascending: false });
-
-      if (viewsError || likesError || commentsError) {
-        console.error("Error fetching engagement:", {
-          viewsError,
-          likesError,
-          commentsError,
-        });
-        return;
-      }
-
-      // Get unique student IDs
-      const studentIds = new Set([
-        ...(viewsData?.map((v) => v.student_id) || []),
-        ...(likesData?.map((l) => l.student_id) || []),
-        ...(commentsData?.map((c) => c.student_id) || []),
+      const [viewsSnap, likesSnap, commentsSnap] = await Promise.all([
+        getDocs(query(collection(db, "announcement_views"), where("announcement_id", "==", announcementId))),
+        getDocs(query(collection(db, "announcement_likes"), where("announcement_id", "==", announcementId))),
+        getDocs(query(collection(db, "announcement_comments"), where("announcement_id", "==", announcementId), orderBy("created_at", "desc")))
       ]);
 
-      // Fetch student profiles
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in("id", Array.from(studentIds));
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        return;
+      const studentIds = Array.from(new Set([...viewsSnap.docs, ...likesSnap.docs, ...commentsSnap.docs].map(d => d.data().student_id)));
+      const profileMap = new Map();
+      if (studentIds.length > 0) {
+        for (let i = 0; i < studentIds.length; i += 30) {
+          const chunk = studentIds.slice(i, i + 30);
+          const profilesSnap = await getDocs(query(collection(db, "profiles"), where("__name__", "in", chunk)));
+          profilesSnap.docs.forEach(d => profileMap.set(d.id, d.data().full_name));
+        }
       }
 
-      // Create a map for quick lookup
-      const profileMap = new Map(
-        profiles?.map((p) => [p.id, p.full_name]) || []
-      );
-
-      // Combine data with student names
-      const engagement: StudentEngagement = {
-        views: (viewsData || []).map((v) => ({
-          student_id: v.student_id,
-          student_name: profileMap.get(v.student_id) || "Unknown Student",
-          viewed_at: v.viewed_at,
-        })),
-        likes: (likesData || []).map((l) => ({
-          student_id: l.student_id,
-          student_name: profileMap.get(l.student_id) || "Unknown Student",
-          created_at: l.created_at,
-        })),
-        comments: (commentsData || []).map((c) => ({
-          student_id: c.student_id,
-          student_name: profileMap.get(c.student_id) || "Unknown Student",
-          content: c.content,
-          created_at: c.created_at,
-        })),
-      };
-
-      setEngagementDetails(engagement);
+      const formatDate = (ts: any) => ts?.toDate ? ts.toDate().toISOString() : new Date().toISOString();
+      setEngagementDetails({
+        views: viewsSnap.docs.map(v => ({ student_id: v.data().student_id, student_name: profileMap.get(v.data().student_id) || "Unknown", viewed_at: formatDate(v.data().viewed_at || v.data().created_at) })),
+        likes: likesSnap.docs.map(l => ({ student_id: l.data().student_id, student_name: profileMap.get(l.data().student_id) || "Unknown", created_at: formatDate(l.data().created_at) })),
+        comments: commentsSnap.docs.map(c => ({ student_id: c.data().student_id, student_name: profileMap.get(c.data().student_id) || "Unknown", content: c.data().content, created_at: formatDate(c.data().created_at) })),
+      });
     } catch (error) {
       console.error("Error fetching engagement details:", error);
     } finally {
@@ -430,26 +271,14 @@ export default function LecturerAnnouncements() {
   };
 
   const handleDeleteAnnouncement = async (announcementId: string) => {
-    if (!window.confirm("Are you sure you want to delete this announcement?")) {
-      return;
-    }
-
+    if (!window.confirm("Are you sure?")) return;
     try {
       setDeletingId(announcementId);
-      const { error } = await supabase
-        .from("announcements")
-        .delete()
-        .eq("id", announcementId);
-
-      if (error) throw error;
-
-      // Remove from local state
+      await deleteDoc(doc(db, "announcements", announcementId));
       setAnnouncements(announcements.filter((a) => a.id !== announcementId));
-
-      alert("Announcement deleted successfully!");
+      alert("Deleted successfully!");
     } catch (error) {
       console.error("Error deleting announcement:", error);
-      alert("Failed to delete announcement. Please try again.");
     } finally {
       setDeletingId(null);
     }
