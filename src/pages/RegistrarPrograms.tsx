@@ -14,7 +14,17 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  query,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,13 +132,16 @@ export default function RegistrarPrograms() {
   const fetchPrograms = async () => {
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from("programs")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setPrograms((data as Program[]) || []);
+      const programsRef = collection(db, "programs");
+      const q = query(programsRef, orderBy("created_at", "desc"));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Program[];
+      setPrograms(data || []);
     } catch (error: any) {
+      console.error("Error fetching programs:", error);
       toast({
         title: "Error",
         description: "Failed to load programs",
@@ -180,7 +193,7 @@ export default function RegistrarPrograms() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await (supabase as any).from("programs").insert({
+      await addDoc(collection(db, "programs"), {
         code: formData.code,
         title: formData.title,
         department: formData.department || null,
@@ -189,8 +202,9 @@ export default function RegistrarPrograms() {
         duration_years: formData.duration_years,
         description: formData.description || null,
         status: "active",
+        created_at: serverTimestamp(),
       });
-      if (error) throw error;
+
       toast({ title: "Created", description: "Program added" });
       setShowAddDialog(false);
       setFormData({
@@ -204,6 +218,7 @@ export default function RegistrarPrograms() {
       });
       fetchPrograms();
     } catch (error: any) {
+      console.error("Error adding program:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create program",
@@ -216,14 +231,14 @@ export default function RegistrarPrograms() {
 
   const handleStatusChange = async (id: string, status: Program["status"]) => {
     try {
-      const { error } = await (supabase as any)
-        .from("programs")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      await updateDoc(doc(db, "programs", id), {
+        status,
+        updated_at: new Date().toISOString(),
+      });
       toast({ title: "Updated", description: `Status set to ${status}` });
       fetchPrograms();
     } catch (error: any) {
+      console.error("Error updating status:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to update status",

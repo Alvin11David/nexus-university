@@ -17,17 +17,64 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  getCountFromServer,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 export default function RegistrarDashboard() {
   const navigate = useNavigate();
   const { user, profile, signOut } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [counts, setCounts] = useState({
+    students: "...",
+    programs: "...",
+    transcripts: "...",
+    pending: "...",
+  });
 
   useEffect(() => {
     if (!user) {
       navigate("/auth");
+      return;
     }
+    fetchCounts();
   }, [user, navigate]);
+
+  const fetchCounts = async () => {
+    try {
+      const studentsQuery = query(collection(db, "student_records"));
+      const programsQuery = query(collection(db, "programs"));
+      const transcriptsQuery = query(
+        collection(db, "transcript_requests"),
+        where("status", "==", "issued")
+      );
+      const pendingQuery = query(
+        collection(db, "enrollments"),
+        where("status", "==", "pending")
+      );
+
+      const [studentsSnap, programsSnap, transcriptsSnap, pendingSnap] =
+        await Promise.all([
+          getCountFromServer(studentsQuery),
+          getCountFromServer(programsQuery),
+          getCountFromServer(transcriptsQuery),
+          getCountFromServer(pendingQuery),
+        ]);
+
+      setCounts({
+        students: studentsSnap.data().count.toLocaleString(),
+        programs: programsSnap.data().count.toLocaleString(),
+        transcripts: transcriptsSnap.data().count.toLocaleString(),
+        pending: pendingSnap.data().count.toLocaleString(),
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard counts:", error);
+    }
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -48,25 +95,25 @@ export default function RegistrarDashboard() {
   const stats = [
     {
       label: "Total Students",
-      value: "1,234",
+      value: counts.students,
       icon: Users,
       color: "bg-blue-500/10",
     },
     {
       label: "Programs",
-      value: "24",
+      value: counts.programs,
       icon: GraduationCap,
       color: "bg-purple-500/10",
     },
     {
       label: "Transcripts Issued",
-      value: "567",
+      value: counts.transcripts,
       icon: FileText,
       color: "bg-green-500/10",
     },
     {
       label: "Pending Approvals",
-      value: "12",
+      value: counts.pending,
       icon: CheckCircle2,
       color: "bg-orange-500/10",
     },

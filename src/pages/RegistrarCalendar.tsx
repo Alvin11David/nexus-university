@@ -14,7 +14,17 @@ import {
   MapPin,
   Shield,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  query,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,13 +123,17 @@ export default function RegistrarCalendar() {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from("academic_calendar_events")
-        .select("*")
-        .order("start_date", { ascending: true });
-      if (error) throw error;
-      setEvents((data as CalendarEvent[]) || []);
+      const eventsRef = collection(db, "academic_calendar_events");
+      // Ordering by start_date ascending as original code did
+      const q = query(eventsRef, orderBy("start_date", "asc"));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as CalendarEvent[];
+      setEvents(data || []);
     } catch (error: any) {
+      console.error("Error fetching calendar events:", error);
       toast({
         title: "Error",
         description: "Failed to load calendar",
@@ -165,9 +179,7 @@ export default function RegistrarCalendar() {
 
     setIsSubmitting(true);
     try {
-      const { error } = await (supabase as any)
-        .from("academic_calendar_events")
-        .insert({
+      await addDoc(collection(db, "academic_calendar_events"), {
         title: formData.title,
         description: formData.description || null,
         category: formData.category,
@@ -178,8 +190,9 @@ export default function RegistrarCalendar() {
         start_date: formData.start_date,
         end_date: formData.end_date,
         location: formData.location || null,
+        created_at: serverTimestamp(),
       });
-      if (error) throw error;
+
       toast({ title: "Created", description: "Event added to calendar" });
       setShowAddDialog(false);
       setFormData({
@@ -196,6 +209,7 @@ export default function RegistrarCalendar() {
       });
       fetchEvents();
     } catch (error: any) {
+      console.error("Error creating calendar event:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create event",
@@ -208,14 +222,14 @@ export default function RegistrarCalendar() {
 
   const updateStatus = async (id: string, status: CalendarEvent["status"]) => {
     try {
-      const { error } = await (supabase as any)
-        .from("academic_calendar_events")
-        .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", id);
-      if (error) throw error;
+      await updateDoc(doc(db, "academic_calendar_events", id), {
+        status,
+        updated_at: new Date().toISOString(),
+      });
       toast({ title: "Updated", description: `Marked ${status}` });
       fetchEvents();
     } catch (error: any) {
+      console.error("Error updating calendar event status:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to update status",
