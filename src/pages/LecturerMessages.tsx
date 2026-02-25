@@ -484,11 +484,10 @@ export default function LecturerMessages() {
               <button
                 key={view}
                 onClick={() => setSelectedView(view)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  selectedView === view
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedView === view
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/60 text-foreground hover:bg-muted"
-                }`}
+                  }`}
               >
                 {view === "inbox" && <Inbox className="inline h-4 w-4 mr-1" />}
                 {view === "sent" && <Send className="inline h-4 w-4 mr-1" />}
@@ -534,15 +533,13 @@ export default function LecturerMessages() {
                   custom={i}
                 >
                   <Card
-                    className={`border-border/60 cursor-pointer transition-all hover:shadow-md ${
-                      !message.is_read && message.to_user_id === user?.id
+                    className={`border-border/60 cursor-pointer transition-all hover:shadow-md ${!message.is_read && message.to_user_id === user?.id
                         ? "bg-primary/5 border-primary/30"
                         : "bg-card/70 backdrop-blur-lg"
-                    } ${
-                      selectedMessage?.id === message.id
+                      } ${selectedMessage?.id === message.id
                         ? "ring-2 ring-primary"
                         : ""
-                    }`}
+                      }`}
                     onClick={() => handleMessageClick(message)}
                   >
                     <CardContent className="pt-4">
@@ -559,12 +556,11 @@ export default function LecturerMessages() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p
-                                className={`font-semibold truncate ${
-                                  !message.is_read &&
-                                  message.to_user_id === user?.id
+                                className={`font-semibold truncate ${!message.is_read &&
+                                    message.to_user_id === user?.id
                                     ? "font-bold text-foreground"
                                     : "text-foreground"
-                                }`}
+                                  }`}
                               >
                                 {displayProfile?.full_name || "Unknown User"}
                               </p>
@@ -599,11 +595,10 @@ export default function LecturerMessages() {
                             title={message.is_starred ? "Unstar" : "Star"}
                           >
                             <Star
-                              className={`h-4 w-4 ${
-                                message.is_starred
+                              className={`h-4 w-4 ${message.is_starred
                                   ? "fill-primary text-primary"
                                   : "text-muted-foreground"
-                              }`}
+                                }`}
                             />
                           </button>
                           <button
@@ -778,8 +773,8 @@ export default function LecturerMessages() {
                             ? getInitials(selectedMessage.to_profile.full_name)
                             : "?"
                           : selectedMessage.from_profile?.full_name
-                          ? getInitials(selectedMessage.from_profile.full_name)
-                          : "?"}
+                            ? getInitials(selectedMessage.from_profile.full_name)
+                            : "?"}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1">

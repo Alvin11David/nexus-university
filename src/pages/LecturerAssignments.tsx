@@ -680,8 +680,8 @@ export default function LecturerAssignments() {
               key={filter}
               onClick={() => setSelectedFilter(filter)}
               className={`px-6 py-2 rounded-full font-semibold transition-all ${selectedFilter === filter
-                  ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
                 }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -830,10 +830,10 @@ export default function LecturerAssignments() {
                             initial={{ width: 0 }}
                             animate={{
                               width: `${assignment.totalStudents > 0
-                                  ? (assignment.submissions /
-                                    assignment.totalStudents) *
-                                  100
-                                  : 0
+                                ? (assignment.submissions /
+                                  assignment.totalStudents) *
+                                100
+                                : 0
                                 }%`,
                             }}
                             transition={{ delay: 0.5, duration: 1 }}

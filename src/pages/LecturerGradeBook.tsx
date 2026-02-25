@@ -680,8 +680,8 @@ export default function LecturerGradeBook() {
     classAverage:
       students.length > 0
         ? (
-            students.reduce((acc, s) => acc + s.total, 0) / students.length
-          ).toFixed(1)
+          students.reduce((acc, s) => acc + s.total, 0) / students.length
+        ).toFixed(1)
         : "0.0",
     highestScore:
       students.length > 0 ? Math.max(...students.map((s) => s.total)) : 0,

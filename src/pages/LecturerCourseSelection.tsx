@@ -9,8 +9,17 @@ import {
   X,
   AlertCircle,
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,7 +43,7 @@ interface LecturerCourse {
 }
 
 export default function LecturerCourseSelection() {
-  const { user } = useAuth();
+  const { user } = useAuth(); // Firebase user
   const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [lecturerCourses, setLecturerCourses] = useState<LecturerCourse[]>([]);
@@ -64,74 +73,44 @@ export default function LecturerCourseSelection() {
   const loadData = async () => {
     try {
       setLoading(true);
-
-      // Load all available courses
-      const { data: coursesData, error: coursesError } = await supabase
-        .from("courses")
-        .select("id, code, title, credits")
-        .order("code");
-
-      if (coursesError) {
-        console.error("Error loading courses:", coursesError);
-        toast({
-          title: "Error loading courses",
-          description: coursesError.message,
-          variant: "destructive",
-        });
-        throw coursesError;
-      }
-
-      console.log("Loaded courses:", coursesData);
-      setCourses(coursesData || []);
+      // Load all available courses from Firestore
+      const coursesSnapshot = await getDocs(collection(db, "courses"));
+      const coursesData: Course[] = coursesSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Course[];
+      setCourses(coursesData);
 
       // Load lecturer's selected courses for this semester
-      // Use the correct unique identifier property, e.g., 'user.id'
-      if (!user?.user_id) {
+      if (!user?.uid) {
         console.warn("No user ID available");
         return;
       }
-
-      const { data: lecturerCoursesData, error: lecturerCoursesError } =
-        await supabase
-          .from("lecturer_courses")
-          .select(
-            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`,
-          )
-          .eq("lecturer_id", user.user_id)
-          .eq("academic_year", currentAcademicYear)
-          .eq("semester", currentSemester);
-
-      if (lecturerCoursesError) {
-        console.error("Error loading lecturer courses:", lecturerCoursesError);
-        // Don't throw - this table might be empty which is OK
-      }
-
-      console.log("Loaded lecturer courses:", lecturerCoursesData);
-
-      const mappedCourses: LecturerCourse[] = (lecturerCoursesData || []).map(
-        (row) => {
-          const fallbackCourse =
-            row.courses ||
-            coursesData?.find((c) => c.id === row.course_id) ||
-            ({
-              id: row.course_id,
-              code: "Unknown",
-              title: "Course",
-              credits: 0,
-            } as Course);
-
-          return {
-            id: row.id,
-            course_id: row.course_id,
-            course: fallbackCourse,
-            semester: row.semester,
-            academic_year: row.academic_year,
-          };
-        },
+      const lecturerCoursesQuery = query(
+        collection(db, "lecturer_courses"),
+        where("lecturer_id", "==", user.uid),
+        where("academic_year", "==", currentAcademicYear),
+        where("semester", "==", currentSemester)
       );
-
-      setLecturerCourses(mappedCourses);
-      setSelectedCourses(mappedCourses.map((lc) => lc.course_id));
+      const lecturerCoursesSnapshot = await getDocs(lecturerCoursesQuery);
+      const lecturerCoursesData: LecturerCourse[] = lecturerCoursesSnapshot.docs.map((doc) => {
+        const data = doc.data();
+        const course = coursesData.find((c) => c.id === data.course_id) || {
+          id: data.course_id,
+          code: "Unknown",
+          title: "Course",
+          credits: 0,
+        };
+        return {
+          id: doc.id,
+          course_id: data.course_id,
+          course,
+          semester: data.semester,
+          academic_year: data.academic_year,
+        };
+      });
+      setLecturerCourses(lecturerCoursesData);
+      setSelectedCourses(lecturerCoursesData.map((lc) => lc.course_id));
     } catch (error) {
       console.error("Error loading data:", error);
       toast({
@@ -168,26 +147,20 @@ export default function LecturerCourseSelection() {
 
   const handleToggleCourse = async (courseId: string) => {
     if (!user || savingCourseId) return;
-
     setSavingCourseId(courseId);
-
     const course = courses.find((c) => c.id === courseId);
     const exists = selectedCourses.includes(courseId);
-
     try {
       if (exists) {
-        await supabase
-          .from("lecturer_courses")
-          .delete()
-          .eq("lecturer_id", user.user_id)
-          .eq("course_id", courseId)
-          .eq("academic_year", currentAcademicYear)
-          .eq("semester", currentSemester);
-
-        setSelectedCourses((prev) => prev.filter((id) => id !== courseId));
-        setLecturerCourses((prev) =>
-          prev.filter((lc) => lc.course_id !== courseId),
+        // Find the lecturer_course document to delete
+        const lecturerCourse = lecturerCourses.find(
+          (lc) => lc.course_id === courseId && lc.academic_year === currentAcademicYear && lc.semester === currentSemester
         );
+        if (lecturerCourse) {
+          await deleteDoc(doc(db, "lecturer_courses", lecturerCourse.id));
+        }
+        setSelectedCourses((prev) => prev.filter((id) => id !== courseId));
+        setLecturerCourses((prev) => prev.filter((lc) => lc.course_id !== courseId));
         toast({
           title: "Course removed",
           description: "It is no longer in your teaching list.",
@@ -196,30 +169,19 @@ export default function LecturerCourseSelection() {
         if (!course) {
           throw new Error("Course details missing");
         }
-
-        const { data, error } = await supabase
-          .from("lecturer_courses")
-          .insert({
-            lecturer_id: user.user_id,
-            course_id: courseId,
-            semester: currentSemester,
-            academic_year: currentAcademicYear,
-          })
-          .select(
-            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`,
-          )
-          .single();
-
-        if (error) throw error;
-
+        const docRef = await addDoc(collection(db, "lecturer_courses"), {
+          lecturer_id: user.uid,
+          course_id: courseId,
+          semester: currentSemester,
+          academic_year: currentAcademicYear,
+        });
         const newCourse: LecturerCourse = {
-          id: data.id,
-          course_id: data.course_id,
-          course: data.courses || course,
-          semester: data.semester,
-          academic_year: data.academic_year,
+          id: docRef.id,
+          course_id: courseId,
+          course,
+          semester: currentSemester,
+          academic_year: currentAcademicYear,
         };
-
         setSelectedCourses((prev) => [...prev, courseId]);
         setLecturerCourses((prev) => [newCourse, ...prev]);
         toast({
@@ -388,11 +350,10 @@ export default function LecturerCourseSelection() {
                         <Filter className="h-4 w-4 text-muted-foreground" />
                         <button
                           onClick={() => setFilterCredits(null)}
-                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                            filterCredits === null
+                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filterCredits === null
                               ? "bg-primary text-primary-foreground"
                               : "bg-muted/60 text-foreground hover:bg-muted"
-                          }`}
+                            }`}
                         >
                           All Units
                         </button>
@@ -408,11 +369,10 @@ export default function LecturerCourseSelection() {
                                     : credits.toString(),
                                 )
                               }
-                              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
-                                filterCredits === credits.toString()
+                              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filterCredits === credits.toString()
                                   ? "bg-primary text-primary-foreground"
                                   : "bg-muted/60 text-foreground hover:bg-muted"
-                              }`}
+                                }`}
                             >
                               {credits}u
                             </button>
@@ -457,13 +417,11 @@ export default function LecturerCourseSelection() {
                             whileTap={{ scale: 0.99 }}
                             onClick={() => handleToggleCourse(course.id)}
                             disabled={!!savingCourseId}
-                            className={`w-full p-4 rounded-xl border-2 transition-all text-left group ${
-                              selectedCourses.includes(course.id)
+                            className={`w-full p-4 rounded-xl border-2 transition-all text-left group ${selectedCourses.includes(course.id)
                                 ? "border-primary bg-gradient-to-r from-primary/15 to-primary/5 shadow-md"
                                 : "border-border/60 bg-gradient-to-r from-muted/40 to-muted/20 hover:border-primary/50 hover:bg-gradient-to-r hover:from-muted/60 hover:to-muted/40"
-                            } ${
-                              savingCourseId === course.id ? "opacity-70" : ""
-                            }`}
+                              } ${savingCourseId === course.id ? "opacity-70" : ""
+                              }`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">
