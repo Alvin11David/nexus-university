@@ -45,7 +45,19 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  collection,
+  query,
+  getDocs,
+  addDoc,
+  doc,
+  orderBy,
+  where,
+  serverTimestamp,
+  limit,
+  getDoc,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface TranscriptRequest {
   id: string;
@@ -158,14 +170,18 @@ export default function RegistrarTranscripts() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from("transcript_requests")
-        .select("*")
-        .order("requested_date", { ascending: false });
+      const requestsRef = collection(db, "transcript_requests");
+      const q = query(requestsRef, orderBy("requested_date", "desc"));
+      const querySnapshot = await getDocs(q);
 
-      if (error) throw error;
-      setRequests((data as TranscriptRequest[]) || []);
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as TranscriptRequest[];
+
+      setRequests(data || []);
     } catch (error: any) {
+      console.error("Error fetching requests:", error);
       toast({
         title: "Error",
         description: "Failed to fetch transcript requests",
@@ -178,14 +194,19 @@ export default function RegistrarTranscripts() {
 
   const fetchStudents = async () => {
     try {
-      const { data, error } = await (supabase as any)
-        .from("student_records")
-        .select("id, student_number, full_name, email, enrollment_status")
-        .eq("enrollment_status", "active")
-        .order("full_name");
+      const recordsRef = collection(db, "student_records");
+      const q = query(
+        recordsRef,
+        where("enrollment_status", "in", ["active"]), // Firestore 'in' matches Supabase active filter
+        orderBy("full_name")
+      );
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as StudentRecord[];
 
-      if (error) throw error;
-      setStudents((data as StudentRecord[]) || []);
+      setStudents(data || []);
     } catch (error: any) {
       console.error("Failed to fetch students:", error);
     }
@@ -237,52 +258,63 @@ export default function RegistrarTranscripts() {
       const student = students.find((s) => s.id === formData.student_id);
       if (!student) throw new Error("Student not found");
 
-      // Get student academic info
-      const { data: enrollments, error: enrollError } = await (supabase as any)
-        .from("enrollments")
-        .select("grade, course:courses(credits)")
-        .eq("student_id", formData.student_id)
-        .eq("status", "completed");
+      // Get student academic info - process in Firestore equivalent
+      const enrollmentsRef = collection(db, "enrollments");
+      const qEnroll = query(
+        enrollmentsRef,
+        where("student_id", "==", formData.student_id),
+        where("status", "==", "completed")
+      );
+      const enrollSnap = await getDocs(qEnroll);
+      const enrollments = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
       let totalCredits = 0;
       let totalGradePoints = 0;
       let cumulativeGpa = 0;
 
-      if (!enrollError && enrollments) {
-        enrollments.forEach((e: any) => {
-          const credits = e.course?.credits || 0;
-          if (credits) totalCredits += credits;
-          const grade = e.grade;
-          if (grade !== null && grade !== undefined && credits) {
-            const gradePoints = getGradePoints(grade);
-            totalGradePoints += gradePoints * credits;
+      for (const e of enrollments) {
+        // Fetch course details manually if not present (Firestore doesn't have joins)
+        const courseId = (e as any).course_id;
+        if (courseId) {
+          const courseDoc = await getDoc(doc(db, "courses", courseId));
+          if (courseDoc.exists()) {
+            const courseData = courseDoc.data();
+            const credits = courseData.credits || 0;
+            totalCredits += credits;
+            const grade = (e as any).grade;
+            if (grade !== null && grade !== undefined && credits) {
+              const gradePoints = getGradePoints(grade);
+              totalGradePoints += gradePoints * credits;
+            }
           }
-        });
-        if (totalCredits > 0) {
-          cumulativeGpa = totalGradePoints / totalCredits;
         }
       }
 
-      const { error } = await (supabase as any)
-        .from("transcript_requests")
-        .insert({
-          student_id: formData.student_id,
-          student_number: student.student_number,
-          student_name: student.full_name,
-          student_email: student.email,
-          request_type: formData.request_type,
-          purpose: formData.purpose,
-          delivery_method: formData.delivery_method,
-          delivery_address: formData.delivery_address,
-          program: (student as any).program || "",
-          cumulative_gpa: cumulativeGpa,
-          total_credits: totalCredits,
-          fee_amount: formData.fee_amount,
-          fees_paid: false,
-          status: "pending",
-        });
+      if (totalCredits > 0) {
+        cumulativeGpa = totalGradePoints / totalCredits;
+      }
 
-      if (error) throw error;
+      const verificationCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+      await addDoc(collection(db, "transcript_requests"), {
+        student_id: formData.student_id,
+        student_number: student.student_number,
+        student_name: student.full_name,
+        student_email: student.email,
+        request_type: formData.request_type,
+        purpose: formData.purpose,
+        delivery_method: formData.delivery_method,
+        delivery_address: formData.delivery_address,
+        program: (student as any).program || "",
+        cumulative_gpa: cumulativeGpa,
+        total_credits: totalCredits,
+        fee_amount: formData.fee_amount,
+        fees_paid: false,
+        status: "pending",
+        requested_date: new Date().toISOString(),
+        verification_code: verificationCode,
+        created_at: serverTimestamp(),
+      });
 
       toast({
         title: "Success",
@@ -300,6 +332,7 @@ export default function RegistrarTranscripts() {
       });
       fetchRequests();
     } catch (error: any) {
+      console.error("Error adding request:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to create transcript request",
