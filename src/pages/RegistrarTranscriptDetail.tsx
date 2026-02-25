@@ -60,7 +60,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface TranscriptRequest {
   id: string;
@@ -135,19 +145,22 @@ export default function RegistrarTranscriptDetail() {
   const fetchRequest = async () => {
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from("transcript_requests")
-        .select("*")
-        .eq("id", id)
-        .single();
+      if (!id) return;
 
-      if (error) throw error;
-      setRequest((data as TranscriptRequest) || null);
+      const requestDoc = await getDoc(doc(db, "transcript_requests", id));
+
+      if (!requestDoc.exists()) {
+        throw new Error("Transcript request not found");
+      }
+
+      const data = { id: requestDoc.id, ...requestDoc.data() } as TranscriptRequest;
+      setRequest(data);
       setProcessingNotes((data as any)?.notes || "");
     } catch (error: any) {
+      console.error("Error fetching request:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch transcript request",
+        description: error.message || "Failed to fetch transcript request",
         variant: "destructive",
       });
       setTimeout(() => navigate("/registrar/transcripts"), 2000);
@@ -158,34 +171,51 @@ export default function RegistrarTranscriptDetail() {
 
   const fetchEnrollments = async () => {
     try {
-      const { data: requestData } = await (supabase as any)
-        .from("transcript_requests")
-        .select("student_id")
-        .eq("id", id)
-        .single();
+      if (!id) return;
+      const requestDoc = await getDoc(doc(db, "transcript_requests", id));
+      if (!requestDoc.exists()) return;
 
-      if (!requestData) return;
+      const studentId = requestDoc.data().student_id;
+      if (!studentId) return;
 
-      const { data, error } = await (supabase as any)
-        .from("enrollments")
-        .select(
-          "id, grade, enrolled_at, status, course:courses(code, title, credits, semester, academic_year)"
-        )
-        .eq("student_id", requestData.student_id)
-        .eq("status", "completed")
-        .order("enrolled_at", { ascending: true });
+      const enrollmentsRef = collection(db, "enrollments");
+      const q = query(
+        enrollmentsRef,
+        where("student_id", "==", studentId),
+        where("status", "==", "completed"),
+        orderBy("enrolled_at", "asc")
+      );
 
-      if (error) throw error;
-      const mapped = (data || []).map((row: any) => ({
-        id: row.id,
-        course_code: row.course?.code || "",
-        course_title: row.course?.title || "",
-        credits: row.course?.credits || 0,
-        grade: row.grade ?? "",
-        semester: row.course?.semester || "",
-        academic_year: row.course?.academic_year || "",
-        enrollment_date: row.enrolled_at || row.enrollment_date || "",
+      const enrollSnap = await getDocs(q);
+      const enrollData = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      const mapped = await Promise.all(enrollData.map(async (row: any) => {
+        let courseInfo = { code: "", title: "", credits: 0, semester: "", academic_year: "" };
+        if (row.course_id) {
+          const courseDoc = await getDoc(doc(db, "courses", row.course_id));
+          if (courseDoc.exists()) {
+            const cd = courseDoc.data();
+            courseInfo = {
+              code: cd.code || "",
+              title: cd.title || "",
+              credits: cd.credits || 0,
+              semester: cd.semester || "",
+              academic_year: cd.academic_year || "",
+            };
+          }
+        }
+        return {
+          id: row.id,
+          course_code: courseInfo.code,
+          course_title: courseInfo.title,
+          credits: courseInfo.credits,
+          grade: row.grade ?? "",
+          semester: courseInfo.semester,
+          academic_year: courseInfo.academic_year,
+          enrollment_date: row.enrolled_at || row.enrollment_date || "",
+        };
       }));
+
       setEnrollments(mapped);
     } catch (error: any) {
       console.error("Failed to fetch enrollments:", error);
@@ -193,7 +223,7 @@ export default function RegistrarTranscriptDetail() {
   };
 
   const handleUpdateStatus = async (newStatus: string) => {
-    if (!request) return;
+    if (!request || !id) return;
 
     setIsProcessing(true);
     try {
@@ -210,12 +240,7 @@ export default function RegistrarTranscriptDetail() {
         updates.copies_issued = (request.copies_issued || 0) + 1;
       }
 
-      const { error } = await (supabase as any)
-        .from("transcript_requests")
-        .update(updates)
-        .eq("id", request.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "transcript_requests", id), updates);
 
       toast({
         title: "Success",
@@ -224,6 +249,7 @@ export default function RegistrarTranscriptDetail() {
 
       fetchRequest();
     } catch (error: any) {
+      console.error("Error updating status:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to update status",
@@ -235,22 +261,17 @@ export default function RegistrarTranscriptDetail() {
   };
 
   const handleIssueTranscript = async () => {
-    if (!request) return;
+    if (!request || !id) return;
 
     setIsProcessing(true);
     try {
-      const { error } = await (supabase as any)
-        .from("transcript_requests")
-        .update({
-          status: "issued",
-          issued_date: new Date().toISOString(),
-          copies_issued: (request.copies_issued || 0) + 1,
-          notes: processingNotes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "transcript_requests", id), {
+        status: "issued",
+        issued_date: new Date().toISOString(),
+        copies_issued: (request.copies_issued || 0) + 1,
+        notes: processingNotes,
+        updated_at: new Date().toISOString(),
+      });
 
       toast({
         title: "Success",
@@ -260,6 +281,7 @@ export default function RegistrarTranscriptDetail() {
       setShowIssueDialog(false);
       fetchRequest();
     } catch (error: any) {
+      console.error("Error issuing transcript:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to issue transcript",
@@ -271,7 +293,7 @@ export default function RegistrarTranscriptDetail() {
   };
 
   const handleRejectRequest = async () => {
-    if (!request || !rejectionReason.trim()) {
+    if (!request || !id || !rejectionReason.trim()) {
       toast({
         title: "Validation Error",
         description: "Please provide a rejection reason",
@@ -282,17 +304,12 @@ export default function RegistrarTranscriptDetail() {
 
     setIsProcessing(true);
     try {
-      const { error } = await (supabase as any)
-        .from("transcript_requests")
-        .update({
-          status: "rejected",
-          rejection_reason: rejectionReason,
-          notes: processingNotes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "transcript_requests", id), {
+        status: "rejected",
+        rejection_reason: rejectionReason,
+        notes: processingNotes,
+        updated_at: new Date().toISOString(),
+      });
 
       toast({
         title: "Success",
@@ -303,6 +320,7 @@ export default function RegistrarTranscriptDetail() {
       setRejectionReason("");
       fetchRequest();
     } catch (error: any) {
+      console.error("Error rejecting request:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to reject request",
@@ -314,19 +332,14 @@ export default function RegistrarTranscriptDetail() {
   };
 
   const handleMarkFeesPaid = async () => {
-    if (!request) return;
+    if (!request || !id) return;
 
     setIsProcessing(true);
     try {
-      const { error } = await (supabase as any)
-        .from("transcript_requests")
-        .update({
-          fees_paid: !request.fees_paid,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, "transcript_requests", id), {
+        fees_paid: !request.fees_paid,
+        updated_at: new Date().toISOString(),
+      });
 
       toast({
         title: "Success",
@@ -335,6 +348,7 @@ export default function RegistrarTranscriptDetail() {
 
       fetchRequest();
     } catch (error: any) {
+      console.error("Error updating payment status:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to update payment status",
@@ -832,18 +846,24 @@ export default function RegistrarTranscriptDetail() {
                     rows={5}
                   />
                   <Button
-                    onClick={() => {
-                      const client = supabase as any;
-                      return client
-                        .from("transcript_requests")
-                        .update({ notes: processingNotes })
-                        .eq("id", request.id)
-                        .then(() =>
-                          toast({
-                            title: "Success",
-                            description: "Notes saved",
-                          })
-                        );
+                    onClick={async () => {
+                      if (!id) return;
+                      try {
+                        await updateDoc(doc(db, "transcript_requests", id), {
+                          notes: processingNotes,
+                          updated_at: new Date().toISOString(),
+                        });
+                        toast({
+                          title: "Success",
+                          description: "Notes saved",
+                        });
+                      } catch (error: any) {
+                        toast({
+                          title: "Error",
+                          description: error.message || "Failed to save notes",
+                          variant: "destructive",
+                        });
+                      }
                     }}
                     size="sm"
                     className="gap-2"
