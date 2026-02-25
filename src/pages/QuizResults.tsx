@@ -17,7 +17,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDoc,
+  getDocs,
+  doc,
+  orderBy,
+} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
 interface QuizAttempt {
@@ -64,23 +73,17 @@ export default function QuizResults() {
   });
 
   useEffect(() => {
-    if (user?.id && id) {
+    if (id) {
       loadQuiz();
       loadResults();
     }
-  }, [user?.id, id]);
+  }, [id]);
 
   const loadQuiz = async () => {
     try {
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("*")
-        .eq("id", id)
-        .eq("lecturer_id", user?.id)
-        .single();
-
-      if (error) throw error;
-      setQuiz(data);
+      const quizDoc = await getDoc(doc(db, "quizzes", id));
+      if (!quizDoc.exists()) throw new Error("Quiz not found");
+      setQuiz(quizDoc.data());
     } catch (error: any) {
       console.error("Error loading quiz:", error);
       toast({
@@ -93,33 +96,19 @@ export default function QuizResults() {
 
   const loadResults = async () => {
     try {
-      // Load quiz attempts
-      const { data: attemptsData, error: attemptsError } = await supabase
-        .from("quiz_attempts")
-        .select("*")
-        .eq("quiz_id", id)
-        .order("completed_at", { ascending: false });
-
-      if (attemptsError) {
-        // If table doesn't exist or has issues, set empty results
-        console.log(
-          "Quiz attempts table not available:",
-          attemptsError.message
-        );
-        setAttempts([]);
-        setStats({
-          totalAttempts: 0,
-          averageScore: 0,
-          averagePercentage: 0,
-          completionRate: 0,
-          highestScore: 0,
-          lowestScore: 0,
-          averageTime: 0,
-          passRate: 0,
-        });
-        return;
-      }
-
+      // Load quiz attempts from Firestore
+      const attemptsQuery = query(
+        collection(db, "quiz_attempts"),
+        where("quiz_id", "==", id),
+        orderBy("completed_at", "desc"),
+      );
+      const attemptsSnapshot = await getDocs(attemptsQuery);
+      const attemptsData: QuizAttempt[] = attemptsSnapshot.docs.map(
+        (docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<QuizAttempt, "id">),
+        }),
+      );
       if (!attemptsData || attemptsData.length === 0) {
         setAttempts([]);
         setStats({
@@ -134,56 +123,56 @@ export default function QuizResults() {
         });
         return;
       }
-
-      // Load student profiles separately
+      // Load student profiles from Firestore
       const studentIds = attemptsData.map((attempt) => attempt.student_id);
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", studentIds);
-
-      // Create a map of student profiles
-      const profilesMap = new Map();
-      if (!profilesError && profilesData) {
-        profilesData.forEach((profile) => {
-          profilesMap.set(profile.id, profile);
+      let profilesMap = new Map();
+      if (studentIds.length > 0) {
+        const profilesQuery = query(
+          collection(db, "profiles"),
+          where("id", "in", studentIds),
+        );
+        const profilesSnapshot = await getDocs(profilesQuery);
+        profilesSnapshot.docs.forEach((docSnap) => {
+          profilesMap.set(docSnap.id, docSnap.data());
         });
       }
-
-      const formattedAttempts: QuizAttempt[] = attemptsData.map((attempt) => {
-        const profile = profilesMap.get(attempt.student_id);
-        // Calculate time taken from started_at and completed_at if available
-        const timeTaken =
-          attempt.completed_at && attempt.started_at
-            ? Math.round(
-                (new Date(attempt.completed_at).getTime() -
-                  new Date(attempt.started_at).getTime()) /
-                  1000
-              )
-            : 0;
-
-        return {
-          id: attempt.id,
-          student_id: attempt.student_id,
-          student_name: profile?.full_name || "Unknown Student",
-          student_email: profile?.email || "",
-          score: attempt.score || 0,
-          total_points: quiz?.total_points || 0, // Get from quiz data since not stored in attempt
-          percentage:
-            quiz?.total_points && quiz.total_points > 0
-              ? Math.round((attempt.score / quiz.total_points) * 100)
-              : 0,
-          time_taken: timeTaken,
-          completed_at:
-            attempt.completed_at ||
-            attempt.started_at ||
-            new Date().toISOString(),
-          passed: (attempt.score || 0) >= (quiz?.passing_score || 0),
-        };
-      });
-
+      const formattedAttempts: QuizAttempt[] = attemptsData.map(
+        (attemptRaw) => {
+          const attempt = attemptRaw as QuizAttempt & {
+            started_at?: string;
+            completed_at?: string;
+          };
+          const profile = profilesMap.get(attempt.student_id);
+          // Calculate time taken from started_at and completed_at if available
+          const timeTaken =
+            attempt.completed_at && attempt.started_at
+              ? Math.round(
+                  (new Date(attempt.completed_at).getTime() -
+                    new Date(attempt.started_at).getTime()) /
+                    1000,
+                )
+              : 0;
+          return {
+            id: attempt.id,
+            student_id: attempt.student_id,
+            student_name: profile?.full_name || "Unknown Student",
+            student_email: profile?.email || "",
+            score: attempt.score || 0,
+            total_points: quiz?.total_points || 0,
+            percentage:
+              quiz?.total_points && quiz.total_points > 0
+                ? Math.round((attempt.score / quiz.total_points) * 100)
+                : 0,
+            time_taken: timeTaken,
+            completed_at:
+              attempt.completed_at ||
+              attempt.started_at ||
+              new Date().toISOString(),
+            passed: (attempt.score || 0) >= (quiz?.passing_score || 0),
+          };
+        },
+      );
       setAttempts(formattedAttempts);
-
       // Calculate stats
       if (formattedAttempts.length > 0) {
         const totalAttempts = formattedAttempts.length;
@@ -201,12 +190,11 @@ export default function QuizResults() {
         const passRate =
           (formattedAttempts.filter((a) => a.passed).length / totalAttempts) *
           100;
-
         setStats({
           totalAttempts,
           averageScore: Math.round(averageScore * 10) / 10,
           averagePercentage: Math.round(averagePercentage),
-          completionRate: 100, // All loaded attempts are completed
+          completionRate: 100,
           highestScore,
           lowestScore,
           averageTime: Math.round(averageTime),
@@ -406,8 +394,8 @@ export default function QuizResults() {
                                 attempt.percentage >= 70
                                   ? "text-emerald-600"
                                   : attempt.percentage >= 50
-                                  ? "text-amber-600"
-                                  : "text-red-600"
+                                    ? "text-amber-600"
+                                    : "text-red-600"
                               }`}
                             >
                               {attempt.percentage}%
@@ -435,7 +423,7 @@ export default function QuizResults() {
                           <td className="py-3 px-4">
                             <span className="text-sm text-muted-foreground">
                               {new Date(
-                                attempt.completed_at
+                                attempt.completed_at,
                               ).toLocaleDateString()}
                             </span>
                           </td>

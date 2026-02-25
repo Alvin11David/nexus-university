@@ -22,9 +22,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { addDoc, collection } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { db, storage } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/components/ui/use-toast";
 
 interface Assignment {
@@ -95,47 +103,40 @@ export default function LecturerAssignments() {
 
     const loadAssignments = async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("assignments")
-        .select(
-          `id, title, description, due_date, total_points, status, course_id,
-           lecturer_id,
-           assignment_submissions(count),
-           courses:course_id(title, code)
-          `,
-        )
-        .eq("lecturer_id", user.id)
-        .order("due_date", { ascending: true });
-
-      if (error) {
+      try {
+        // Fetch assignments from Firestore
+        const assignmentsQuery = query(
+          collection(db, "Assignments"),
+          where("lecturer_id", "==", user.id),
+        );
+        const snapshot = await getDocs(assignmentsQuery);
+        const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
+          const a = docSnap.data();
+          return {
+            id: docSnap.id,
+            title: a.title,
+            description: a.description || "",
+            dueDate: a.due_date,
+            totalPoints: a.total_points ?? 100,
+            submissions: 0, // TODO: fetch submission count from Firestore
+            totalStudents: 0, // TODO: fetch from enrollments
+            status: a.status || "draft",
+            courseTitle: a.course_title || "",
+            instructionDocumentUrl: a.instruction_document_url,
+            instructionDocumentName: a.instruction_document_name,
+          };
+        });
+        setAssignments(mapped);
+      } catch (error) {
         console.error("Error loading assignments", error);
         toast({
           title: "Could not load assignments",
           description: error.message,
           variant: "destructive",
         });
-        setLoading(false);
-        return;
       }
-
-      const mapped: Assignment[] = (data || []).map((a: any) => ({
-        id: a.id,
-        title: a.title,
-        description: a.description || "",
-        dueDate: a.due_date,
-        totalPoints: a.total_points ?? 100,
-        submissions: a.assignment_submissions?.[0]?.count ?? 0,
-        totalStudents: 0, // Unknown here; could be filled from enrollment later
-        status: (a.status as Assignment["status"]) || "draft",
-        courseTitle: a.courses?.title,
-        instructionDocumentUrl: a.instruction_document_url,
-        instructionDocumentName: a.instruction_document_name,
-      }));
-
-      setAssignments(mapped);
       setLoading(false);
     };
-
     loadAssignments();
   }, [user, toast]);
 
@@ -145,32 +146,31 @@ export default function LecturerAssignments() {
     const loadCourses = async () => {
       const currentAcademicYear = new Date().getFullYear().toString();
       const currentSemester = "1";
-
-      const { data, error } = await supabase
-        .from("lecturer_courses")
-        .select("id, course_id, courses(id, title, code)")
-        .eq("lecturer_id", user.id)
-        .eq("academic_year", currentAcademicYear)
-        .eq("semester", currentSemester);
-
-      if (error) {
+      try {
+        // Fetch lecturer_courses from Firestore
+        const lecturerCoursesQuery = query(
+          collection(db, "lecturer_courses"),
+          where("lecturer_id", "==", user.id),
+          where("academic_year", "==", currentAcademicYear),
+          where("semester", "==", currentSemester),
+        );
+        const snapshot = await getDocs(lecturerCoursesQuery);
+        const mapped = snapshot.docs.map((docSnap) => {
+          const lc = docSnap.data();
+          return {
+            id: lc.course_id,
+            title: lc.course_title || "Untitled Course",
+            code: lc.course_code || "",
+          };
+        });
+        setCourses(mapped);
+        if (mapped.length > 0) {
+          setSelectedCourse(mapped[0].id);
+        }
+      } catch (error) {
         console.error("Error loading courses", error);
-        return;
-      }
-
-      const mapped = (data || []).map((lc: any) => ({
-        id: lc.course_id,
-        title: lc.courses?.title || "Untitled Course",
-        code: lc.courses?.code || "",
-      }));
-      setCourses(mapped);
-
-      // Preselect first course to reduce friction
-      if (mapped.length > 0) {
-        setSelectedCourse(mapped[0].id);
       }
     };
-
     loadCourses();
   }, [user]);
 
@@ -185,13 +185,13 @@ export default function LecturerAssignments() {
     gradedCount: assignments.filter((a) => a.status === "graded").length,
     averageSubmissionRate: assignments.length
       ? (
-        assignments.reduce((acc, a) => {
-          if (!a.totalStudents || a.totalStudents === 0) return acc;
-          return acc + a.submissions / a.totalStudents;
-        }, 0) /
-        assignments.filter((a) => a.totalStudents && a.totalStudents > 0)
-          .length || 0
-      ).toFixed(1)
+          assignments.reduce((acc, a) => {
+            if (!a.totalStudents || a.totalStudents === 0) return acc;
+            return acc + a.submissions / a.totalStudents;
+          }, 0) /
+            assignments.filter((a) => a.totalStudents && a.totalStudents > 0)
+              .length || 0
+        ).toFixed(1)
       : "0.0",
   };
 
@@ -234,34 +234,18 @@ export default function LecturerAssignments() {
     try {
       let instructionDocUrl: string | null = null;
       let instructionDocName: string | null = null;
-
       // Upload instruction document if provided
       if (formData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${formData.instructionDocument.name
-          }`;
-        const { data, error } = await supabase.storage
-          .from("assignment-documents")
-          .upload(fileName, formData.instructionDocument);
-
-        if (error) throw new Error(`Document upload failed: ${error.message}`);
-
-        if (data) {
-          const {
-            data: { publicUrl },
-          } = supabase.storage
-            .from("assignment-documents")
-            .getPublicUrl(fileName);
-          instructionDocUrl = publicUrl;
-          instructionDocName = formData.instructionDocument.name;
-        }
+        const fileName = `${user.id}/${Date.now()}-${formData.instructionDocument.name}`;
+        const fileRef = ref(storage, `assignment-documents/${fileName}`);
+        await uploadBytes(fileRef, formData.instructionDocument);
+        instructionDocUrl = await getDownloadURL(fileRef);
+        instructionDocName = formData.instructionDocument.name;
         setUploadingDocument(false);
       }
-
-      // Create assignment in database
-
-      // Save assignment to Firestore 'Assignments' collection
-      await addDoc(collection(db, "Assignments"), {
+      // Create assignment in Firestore
+      const assignmentDoc = await addDoc(collection(db, "Assignments"), {
         course_id: selectedCourse,
         lecturer_id: user.id,
         title: formData.title,
@@ -273,70 +257,43 @@ export default function LecturerAssignments() {
         instruction_document_name: instructionDocName,
         created_at: new Date().toISOString(),
       });
-
-      const { data: assignmentData, error: assignmentError } = await supabase
-        .from("assignments")
-        .insert({
-          course_id: selectedCourse,
-          lecturer_id: user.id,
-          title: formData.title,
-          description: formData.description,
-          due_date: new Date(formData.dueDate).toISOString(),
-          total_points: formData.totalPoints,
-          status: "draft",
-          instruction_document_url: instructionDocUrl,
-          instruction_document_name: instructionDocName,
-        })
-        .select()
-        .single();
-
-      if (assignmentError) throw assignmentError;
-
       // Get all enrolled students for this course
-      const { data: enrolledStudents, error: enrollError } = await supabase
-        .from("enrollments")
-        .select("student_id")
-        .eq("course_id", selectedCourse);
-
-      if (enrollError) throw enrollError;
-
+      const enrollmentsQuery = query(
+        collection(db, "enrollments"),
+        where("course_id", "==", selectedCourse),
+      );
+      const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
+      const enrolledStudents = enrollmentsSnapshot.docs.map(
+        (docSnap) => docSnap.data().student_id,
+      );
       // Send notifications to all enrolled students
       if (enrolledStudents && enrolledStudents.length > 0) {
-        const notifications = enrolledStudents.map((enrollment) => ({
-          user_id: enrollment.student_id,
-          title: `New Assignment: ${formData.title}`,
-          message: `A new assignment has been added to your course. Due: ${new Date(
-            formData.dueDate,
-          ).toLocaleDateString()}`,
-          type: "assignment",
-          related_id: assignmentData.id,
-          is_read: false,
-        }));
-
-        const { error: notifError } = await supabase
-          .from("notifications")
-          .insert(notifications);
-
-        if (notifError)
-          console.error("Error sending notifications:", notifError);
+        for (const studentId of enrolledStudents) {
+          await addDoc(collection(db, "notifications"), {
+            user_id: studentId,
+            title: `New Assignment: ${formData.title}`,
+            message: `A new assignment has been added to your course. Due: ${new Date(formData.dueDate).toLocaleDateString()}`,
+            type: "assignment",
+            related_id: assignmentDoc.id,
+            is_read: false,
+          });
+        }
       }
-
       // Add to local state
       const course = courses.find((c) => c.id === selectedCourse);
       const newAssignment: Assignment = {
-        id: assignmentData.id,
+        id: assignmentDoc.id,
         title: formData.title,
         description: formData.description,
         dueDate: formData.dueDate,
         totalPoints: formData.totalPoints,
         submissions: 0,
-        totalStudents: enrolledStudents?.length || 0,
+        totalStudents: enrolledStudents.length,
         status: "draft",
         courseTitle: course?.title,
         instructionDocumentUrl: instructionDocUrl || undefined,
         instructionDocumentName: instructionDocName || undefined,
       };
-
       setAssignments((prev) => [...prev, newAssignment]);
       setFormData({
         title: "",
@@ -346,11 +303,9 @@ export default function LecturerAssignments() {
         instructionDocument: null,
       });
       setShowCreateModal(false);
-
       toast({
         title: "Success",
-        description: `Assignment created and notifications sent to ${enrolledStudents?.length || 0
-          } students`,
+        description: `Assignment created and notifications sent to ${enrolledStudents.length} students`,
       });
     } catch (error: any) {
       console.error("Error creating assignment:", error);
@@ -370,23 +325,17 @@ export default function LecturerAssignments() {
     const confirmed = window.confirm("Delete this assignment?");
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("assignments")
-      .delete()
-      .eq("id", assignmentId)
-      .eq("lecturer_id", user.id);
-
-    if (error) {
+    try {
+      await deleteDoc(doc(db, "Assignments", assignmentId));
+      setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
+      toast({ title: "Assignment deleted" });
+    } catch (error) {
       toast({
         title: "Delete failed",
         description: error.message,
         variant: "destructive",
       });
-      return;
     }
-
-    setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
-    toast({ title: "Assignment deleted" });
   };
 
   const handleOpenEdit = (assignment: Assignment) => {
@@ -425,8 +374,9 @@ export default function LecturerAssignments() {
       // Upload new instruction document if provided
       if (editFormData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${editFormData.instructionDocument.name
-          }`;
+        const fileName = `${user.id}/${Date.now()}-${
+          editFormData.instructionDocument.name
+        }`;
         const { data, error } = await supabase.storage
           .from("assignment-documents")
           .upload(fileName, editFormData.instructionDocument);
@@ -679,10 +629,11 @@ export default function LecturerAssignments() {
             <button
               key={filter}
               onClick={() => setSelectedFilter(filter)}
-              className={`px-6 py-2 rounded-full font-semibold transition-all ${selectedFilter === filter
-                ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-                }`}
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${
+                selectedFilter === filter
+                  ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+              }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
             </button>
@@ -817,10 +768,10 @@ export default function LecturerAssignments() {
                           <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
                             {assignment.totalStudents > 0
                               ? (
-                                (assignment.submissions /
-                                  assignment.totalStudents) *
-                                100
-                              ).toFixed(0)
+                                  (assignment.submissions /
+                                    assignment.totalStudents) *
+                                  100
+                                ).toFixed(0)
                               : "0"}
                             %
                           </span>
@@ -829,12 +780,13 @@ export default function LecturerAssignments() {
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{
-                              width: `${assignment.totalStudents > 0
-                                ? (assignment.submissions /
-                                  assignment.totalStudents) *
-                                100
-                                : 0
-                                }%`,
+                              width: `${
+                                assignment.totalStudents > 0
+                                  ? (assignment.submissions /
+                                      assignment.totalStudents) *
+                                    100
+                                  : 0
+                              }%`,
                             }}
                             transition={{ delay: 0.5, duration: 1 }}
                             className="h-full bg-gradient-to-r from-orange-500 to-amber-600"

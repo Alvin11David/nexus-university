@@ -90,25 +90,26 @@ export default function LecturerCourseSelection() {
         collection(db, "lecturer_courses"),
         where("lecturer_id", "==", user.uid),
         where("academic_year", "==", currentAcademicYear),
-        where("semester", "==", currentSemester)
+        where("semester", "==", currentSemester),
       );
       const lecturerCoursesSnapshot = await getDocs(lecturerCoursesQuery);
-      const lecturerCoursesData: LecturerCourse[] = lecturerCoursesSnapshot.docs.map((doc) => {
-        const data = doc.data();
-        const course = coursesData.find((c) => c.id === data.course_id) || {
-          id: data.course_id,
-          code: "Unknown",
-          title: "Course",
-          credits: 0,
-        };
-        return {
-          id: doc.id,
-          course_id: data.course_id,
-          course,
-          semester: data.semester,
-          academic_year: data.academic_year,
-        };
-      });
+      const lecturerCoursesData: LecturerCourse[] =
+        lecturerCoursesSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          const course = coursesData.find((c) => c.id === data.course_id) || {
+            id: data.course_id,
+            code: "Unknown",
+            title: "Course",
+            credits: 0,
+          };
+          return {
+            id: doc.id,
+            course_id: data.course_id,
+            course,
+            semester: data.semester,
+            academic_year: data.academic_year,
+          };
+        });
       setLecturerCourses(lecturerCoursesData);
       setSelectedCourses(lecturerCoursesData.map((lc) => lc.course_id));
     } catch (error) {
@@ -154,13 +155,18 @@ export default function LecturerCourseSelection() {
       if (exists) {
         // Find the lecturer_course document to delete
         const lecturerCourse = lecturerCourses.find(
-          (lc) => lc.course_id === courseId && lc.academic_year === currentAcademicYear && lc.semester === currentSemester
+          (lc) =>
+            lc.course_id === courseId &&
+            lc.academic_year === currentAcademicYear &&
+            lc.semester === currentSemester,
         );
         if (lecturerCourse) {
           await deleteDoc(doc(db, "lecturer_courses", lecturerCourse.id));
         }
         setSelectedCourses((prev) => prev.filter((id) => id !== courseId));
-        setLecturerCourses((prev) => prev.filter((lc) => lc.course_id !== courseId));
+        setLecturerCourses((prev) =>
+          prev.filter((lc) => lc.course_id !== courseId),
+        );
         toast({
           title: "Course removed",
           description: "It is no longer in your teaching list.",
@@ -350,10 +356,11 @@ export default function LecturerCourseSelection() {
                         <Filter className="h-4 w-4 text-muted-foreground" />
                         <button
                           onClick={() => setFilterCredits(null)}
-                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filterCredits === null
+                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                            filterCredits === null
                               ? "bg-primary text-primary-foreground"
                               : "bg-muted/60 text-foreground hover:bg-muted"
-                            }`}
+                          }`}
                         >
                           All Units
                         </button>
@@ -369,10 +376,11 @@ export default function LecturerCourseSelection() {
                                     : credits.toString(),
                                 )
                               }
-                              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filterCredits === credits.toString()
+                              className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
+                                filterCredits === credits.toString()
                                   ? "bg-primary text-primary-foreground"
                                   : "bg-muted/60 text-foreground hover:bg-muted"
-                                }`}
+                              }`}
                             >
                               {credits}u
                             </button>
@@ -417,11 +425,13 @@ export default function LecturerCourseSelection() {
                             whileTap={{ scale: 0.99 }}
                             onClick={() => handleToggleCourse(course.id)}
                             disabled={!!savingCourseId}
-                            className={`w-full p-4 rounded-xl border-2 transition-all text-left group ${selectedCourses.includes(course.id)
+                            className={`w-full p-4 rounded-xl border-2 transition-all text-left group ${
+                              selectedCourses.includes(course.id)
                                 ? "border-primary bg-gradient-to-r from-primary/15 to-primary/5 shadow-md"
                                 : "border-border/60 bg-gradient-to-r from-muted/40 to-muted/20 hover:border-primary/50 hover:bg-gradient-to-r hover:from-muted/60 hover:to-muted/40"
-                              } ${savingCourseId === course.id ? "opacity-70" : ""
-                              }`}
+                            } ${
+                              savingCourseId === course.id ? "opacity-70" : ""
+                            }`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex-1">

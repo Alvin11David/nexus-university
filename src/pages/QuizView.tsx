@@ -25,7 +25,20 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDoc,
+  getDocs,
+  doc,
+  setDoc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  orderBy,
+} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
@@ -89,20 +102,11 @@ export default function QuizView() {
 
   const loadQuiz = async () => {
     try {
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("*")
-        .eq("id", id)
-        .eq("lecturer_id", user?.id)
-        .single();
-
-      if (error) throw error;
-
-      console.log("Quiz data from database:", data);
-      console.log("start_date:", data.start_date, "end_date:", data.end_date);
-
+      const quizDoc = await getDoc(doc(db, "quizzes", id));
+      if (!quizDoc.exists()) throw new Error("Quiz not found");
+      const data = quizDoc.data();
       const quizData: Quiz = {
-        id: data.id,
+        id: quizDoc.id,
         title: data.title,
         description: data.description,
         courseId: data.course_id,
@@ -125,14 +129,11 @@ export default function QuizView() {
         startDate: data.start_date,
         endDate: data.end_date,
       };
-
       // Check if quiz has expired and auto-close if needed
       if (quizData.status === "active" && quizData.endDate) {
-        const expiredIds = await autoCloseExpiredQuizzes(supabase, user?.id);
-
+        const expiredIds = await autoCloseExpiredQuizzes(user?.id);
         if (expiredIds.includes(quizData.id)) {
           quizData.status = "closed";
-
           toast({
             title: "Quiz Auto-closed",
             description:
@@ -140,7 +141,6 @@ export default function QuizView() {
           });
         }
       }
-
       setQuiz(quizData);
     } catch (error: any) {
       console.error("Error loading quiz:", error);
@@ -156,27 +156,29 @@ export default function QuizView() {
 
   const loadQuestions = async () => {
     try {
-      // First try to load from database
-      const { data, error } = await supabase
-        .from("quiz_questions")
-        .select("*")
-        .eq("quiz_id", id)
-        .order("created_at", { ascending: true });
-
-      if (!error && data && data.length > 0) {
-        // Database has questions
-        const questionsData: Question[] = data.map((q) => ({
-          id: q.id,
-          question: q.question,
-          type: q.type,
-          options: q.options,
-          correctAnswer: q.correct_answer,
-          points: q.points,
-          explanation: q.explanation || "", // Handle missing explanation column
-        }));
+      // Fetch questions from Firestore
+      const questionsQuery = query(
+        collection(db, "quiz_questions"),
+        where("quiz_id", "==", id),
+        orderBy("created_at", "asc"),
+      );
+      const snapshot = await getDocs(questionsQuery);
+      if (!snapshot.empty) {
+        const questionsData: Question[] = snapshot.docs.map((q) => {
+          const d = q.data();
+          return {
+            id: q.id,
+            question: d.question,
+            type: d.type,
+            options: d.options,
+            correctAnswer: d.correct_answer,
+            points: d.points,
+            explanation: d.explanation || "",
+          };
+        });
         setQuestions(questionsData);
       } else {
-        // Check localStorage for locally stored questions
+        // Fallback to localStorage
         const storageKey = `quiz_questions_${id}`;
         const storedQuestions = localStorage.getItem(storageKey);
         if (storedQuestions) {
@@ -187,8 +189,7 @@ export default function QuizView() {
         }
       }
     } catch (error: any) {
-      console.error("Error loading questions from database:", error);
-
+      console.error("Error loading questions from Firestore:", error);
       // Fallback to localStorage
       const storageKey = `quiz_questions_${id}`;
       const storedQuestions = localStorage.getItem(storageKey);
@@ -204,10 +205,7 @@ export default function QuizView() {
   const handleDeleteQuiz = async () => {
     if (confirm("Are you sure you want to delete this quiz?")) {
       try {
-        const { error } = await supabase.from("quizzes").delete().eq("id", id);
-
-        if (error) throw error;
-
+        await deleteDoc(doc(db, "quizzes", id));
         toast({
           title: "Success",
           description: "Quiz deleted successfully",
@@ -226,69 +224,50 @@ export default function QuizView() {
 
   const handleDuplicateQuiz = async () => {
     if (!quiz) return;
-
     try {
-      // Create duplicate quiz
-      const { data: newQuiz, error: quizError } = await supabase
-        .from("quizzes")
-        .insert({
-          title: `${quiz.title} (Copy)`,
-          description: quiz.description,
-          course_id: quiz.courseId,
-          lecturer_id: user?.id,
-          total_questions: quiz.totalQuestions,
-          total_points: quiz.totalPoints,
-          time_limit: quiz.timeLimit,
-          passing_score: quiz.passingScore,
-          start_date: quiz.startDate,
-          end_date: quiz.endDate,
-          status: "draft",
-          attempts_allowed: quiz.attemptsAllowed,
-          shuffle_questions: quiz.shuffleQuestions,
-          show_answers: quiz.showAnswers,
-        })
-        .select()
-        .single();
-
-      if (quizError) throw quizError;
-
+      // Create duplicate quiz in Firestore
+      const newQuizRef = await addDoc(collection(db, "quizzes"), {
+        title: `${quiz.title} (Copy)`,
+        description: quiz.description,
+        course_id: quiz.courseId,
+        lecturer_id: user?.id,
+        total_questions: quiz.totalQuestions,
+        total_points: quiz.totalPoints,
+        time_limit: quiz.timeLimit,
+        passing_score: quiz.passingScore,
+        start_date: quiz.startDate,
+        end_date: quiz.endDate,
+        status: "draft",
+        attempts_allowed: quiz.attemptsAllowed,
+        shuffle_questions: quiz.shuffleQuestions,
+        show_answers: quiz.showAnswers,
+        created_at: new Date().toISOString(),
+      });
       // Duplicate questions if they exist
       if (questions.length > 0) {
         try {
-          const questionInserts = questions.map((q) => ({
-            quiz_id: newQuiz.id,
-            question: q.question,
-            type: q.type,
-            options: q.options,
-            correct_answer: q.correctAnswer,
-            points: q.points,
-            explanation: q.explanation,
-          }));
-
-          const { error: questionsError } = await supabase
-            .from("quiz_questions")
-            .insert(questionInserts);
-
-          if (questionsError) {
-            // If database insertion fails, store questions in localStorage for the new quiz
-            console.log(
-              "Database question duplication failed, storing locally:",
-              questionsError.message
-            );
-            const storageKey = `quiz_questions_${newQuiz.id}`;
-            localStorage.setItem(storageKey, JSON.stringify(questions));
+          for (const q of questions) {
+            await addDoc(collection(db, "quiz_questions"), {
+              quiz_id: newQuizRef.id,
+              question: q.question,
+              type: q.type,
+              options: q.options,
+              correct_answer: q.correctAnswer,
+              points: q.points,
+              explanation: q.explanation,
+              created_at: new Date().toISOString(),
+            });
           }
         } catch (dbError) {
           // If database operations fail, store questions in localStorage for the new quiz
           console.log(
             "Database question duplication failed, storing locally:",
-            dbError
+            dbError,
           );
-          const storageKey = `quiz_questions_${newQuiz.id}`;
+          const storageKey = `quiz_questions_${newQuizRef.id}`;
           localStorage.setItem(storageKey, JSON.stringify(questions));
         }
       }
-
       toast({
         title: "Success",
         description: "Quiz duplicated successfully",
@@ -383,17 +362,8 @@ export default function QuizView() {
     const newStatus = quiz.status === "active" ? "draft" : "active";
 
     try {
-      const { error } = await supabase
-        .from("quizzes")
-        .update({ status: newStatus })
-        .eq("id", id)
-        .eq("lecturer_id", user?.id);
-
-      if (error) throw error;
-
-      // Update local state
+      await updateDoc(doc(db, "quizzes", id), { status: newStatus });
       setQuiz({ ...quiz, status: newStatus });
-
       toast({
         title: "Success",
         description: `Quiz ${
@@ -554,7 +524,7 @@ export default function QuizView() {
                     <Badge
                       variant="outline"
                       className={`${getStatusColor(
-                        quiz.status
+                        quiz.status,
                       )} flex items-center gap-1`}
                     >
                       {getStatusIcon(quiz.status)}
@@ -687,7 +657,7 @@ export default function QuizView() {
                                             <CheckCircle2 className="h-4 w-4 inline ml-2 text-emerald-600" />
                                           )}
                                         </div>
-                                      )
+                                      ),
                                     )}
                                   </div>
                                 )}
