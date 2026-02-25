@@ -185,13 +185,13 @@ export default function LecturerAssignments() {
     gradedCount: assignments.filter((a) => a.status === "graded").length,
     averageSubmissionRate: assignments.length
       ? (
-          assignments.reduce((acc, a) => {
-            if (!a.totalStudents || a.totalStudents === 0) return acc;
-            return acc + a.submissions / a.totalStudents;
-          }, 0) /
-            assignments.filter((a) => a.totalStudents && a.totalStudents > 0)
-              .length || 0
-        ).toFixed(1)
+        assignments.reduce((acc, a) => {
+          if (!a.totalStudents || a.totalStudents === 0) return acc;
+          return acc + a.submissions / a.totalStudents;
+        }, 0) /
+        assignments.filter((a) => a.totalStudents && a.totalStudents > 0)
+          .length || 0
+      ).toFixed(1)
       : "0.0",
   };
 
@@ -238,9 +238,8 @@ export default function LecturerAssignments() {
       // Upload instruction document if provided
       if (formData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${
-          formData.instructionDocument.name
-        }`;
+        const fileName = `${user.id}/${Date.now()}-${formData.instructionDocument.name
+          }`;
         const { data, error } = await supabase.storage
           .from("assignment-documents")
           .upload(fileName, formData.instructionDocument);
@@ -350,9 +349,8 @@ export default function LecturerAssignments() {
 
       toast({
         title: "Success",
-        description: `Assignment created and notifications sent to ${
-          enrolledStudents?.length || 0
-        } students`,
+        description: `Assignment created and notifications sent to ${enrolledStudents?.length || 0
+          } students`,
       });
     } catch (error: any) {
       console.error("Error creating assignment:", error);
@@ -427,9 +425,8 @@ export default function LecturerAssignments() {
       // Upload new instruction document if provided
       if (editFormData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${
-          editFormData.instructionDocument.name
-        }`;
+        const fileName = `${user.id}/${Date.now()}-${editFormData.instructionDocument.name
+          }`;
         const { data, error } = await supabase.storage
           .from("assignment-documents")
           .upload(fileName, editFormData.instructionDocument);
@@ -682,11 +679,10 @@ export default function LecturerAssignments() {
             <button
               key={filter}
               onClick={() => setSelectedFilter(filter)}
-              className={`px-6 py-2 rounded-full font-semibold transition-all ${
-                selectedFilter === filter
+              className={`px-6 py-2 rounded-full font-semibold transition-all ${selectedFilter === filter
                   ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-              }`}
+                }`}
             >
               {filter.charAt(0).toUpperCase() + filter.slice(1)}
             </button>
@@ -821,10 +817,10 @@ export default function LecturerAssignments() {
                           <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
                             {assignment.totalStudents > 0
                               ? (
-                                  (assignment.submissions /
-                                    assignment.totalStudents) *
-                                  100
-                                ).toFixed(0)
+                                (assignment.submissions /
+                                  assignment.totalStudents) *
+                                100
+                              ).toFixed(0)
                               : "0"}
                             %
                           </span>
@@ -833,13 +829,12 @@ export default function LecturerAssignments() {
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{
-                              width: `${
-                                assignment.totalStudents > 0
+                              width: `${assignment.totalStudents > 0
                                   ? (assignment.submissions /
-                                      assignment.totalStudents) *
-                                    100
+                                    assignment.totalStudents) *
+                                  100
                                   : 0
-                              }%`,
+                                }%`,
                             }}
                             transition={{ delay: 0.5, duration: 1 }}
                             className="h-full bg-gradient-to-r from-orange-500 to-amber-600"

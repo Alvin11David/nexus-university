@@ -732,22 +732,22 @@ export default function RegistrarTranscripts() {
 
               {(formData.delivery_method === "courier" ||
                 formData.delivery_method === "postal") && (
-                <div className="space-y-2">
-                  <Label htmlFor="delivery_address">Delivery Address</Label>
-                  <Textarea
-                    id="delivery_address"
-                    placeholder="Enter full delivery address..."
-                    value={formData.delivery_address}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        delivery_address: e.target.value,
-                      })
-                    }
-                    rows={3}
-                  />
-                </div>
-              )}
+                  <div className="space-y-2">
+                    <Label htmlFor="delivery_address">Delivery Address</Label>
+                    <Textarea
+                      id="delivery_address"
+                      placeholder="Enter full delivery address..."
+                      value={formData.delivery_address}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          delivery_address: e.target.value,
+                        })
+                      }
+                      rows={3}
+                    />
+                  </div>
+                )}
 
               <div className="space-y-2">
                 <Label htmlFor="fee_amount">Fee Amount (UGX)</Label>

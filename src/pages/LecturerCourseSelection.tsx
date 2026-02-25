@@ -46,7 +46,7 @@ export default function LecturerCourseSelection() {
 
   const currentAcademicYear = useMemo(
     () => new Date().getFullYear().toString(),
-    []
+    [],
   );
   const currentSemester = useMemo(() => "1", []);
 
@@ -85,7 +85,8 @@ export default function LecturerCourseSelection() {
       setCourses(coursesData || []);
 
       // Load lecturer's selected courses for this semester
-      if (!user?.id) {
+      // Use the correct unique identifier property, e.g., 'user.id'
+      if (!user?.user_id) {
         console.warn("No user ID available");
         return;
       }
@@ -94,9 +95,9 @@ export default function LecturerCourseSelection() {
         await supabase
           .from("lecturer_courses")
           .select(
-            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`
+            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`,
           )
-          .eq("lecturer_id", user.id)
+          .eq("lecturer_id", user.user_id)
           .eq("academic_year", currentAcademicYear)
           .eq("semester", currentSemester);
 
@@ -126,7 +127,7 @@ export default function LecturerCourseSelection() {
             semester: row.semester,
             academic_year: row.academic_year,
           };
-        }
+        },
       );
 
       setLecturerCourses(mappedCourses);
@@ -178,14 +179,14 @@ export default function LecturerCourseSelection() {
         await supabase
           .from("lecturer_courses")
           .delete()
-          .eq("lecturer_id", user.id)
+          .eq("lecturer_id", user.user_id)
           .eq("course_id", courseId)
           .eq("academic_year", currentAcademicYear)
           .eq("semester", currentSemester);
 
         setSelectedCourses((prev) => prev.filter((id) => id !== courseId));
         setLecturerCourses((prev) =>
-          prev.filter((lc) => lc.course_id !== courseId)
+          prev.filter((lc) => lc.course_id !== courseId),
         );
         toast({
           title: "Course removed",
@@ -199,13 +200,13 @@ export default function LecturerCourseSelection() {
         const { data, error } = await supabase
           .from("lecturer_courses")
           .insert({
-            lecturer_id: user.id,
+            lecturer_id: user.user_id,
             course_id: courseId,
             semester: currentSemester,
             academic_year: currentAcademicYear,
           })
           .select(
-            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`
+            `id, course_id, semester, academic_year, courses ( id, code, title, credits )`,
           )
           .single();
 
@@ -404,7 +405,7 @@ export default function LecturerCourseSelection() {
                                 setFilterCredits(
                                   filterCredits === credits.toString()
                                     ? null
-                                    : credits.toString()
+                                    : credits.toString(),
                                 )
                               }
                               className={`px-3 py-1.5 rounded-lg text-sm transition-all ${
@@ -490,8 +491,8 @@ export default function LecturerCourseSelection() {
                                     ? "Saving..."
                                     : "✓ Added"
                                   : savingCourseId === course.id
-                                  ? "Saving..."
-                                  : "+ Add"}
+                                    ? "Saving..."
+                                    : "+ Add"}
                               </Badge>
                             </div>
                           </motion.button>

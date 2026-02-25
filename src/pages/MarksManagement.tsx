@@ -225,11 +225,10 @@ export default function MarksManagement() {
                   setSelectedCourse(course);
                   loadStudents(course);
                 }}
-                className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                  selectedCourse?.id === course.id
+                className={`px-4 py-2 rounded-lg whitespace-nowrap ${selectedCourse?.id === course.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/60 hover:bg-muted"
-                }`}
+                  }`}
               >
                 {course.code}
               </button>

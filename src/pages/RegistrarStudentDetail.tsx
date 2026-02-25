@@ -35,7 +35,17 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  limit,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface StudentRecord {
   id: string;
@@ -101,36 +111,45 @@ export default function RegistrarStudentDetail() {
   const fetchStudent = async () => {
     try {
       setLoading(true);
-      const { data: studentData, error: studentError } = await supabase
-        .from("student_records")
-        .select("*")
-        .eq("id", id)
-        .single();
+      if (!id) return;
 
-      if (studentError) throw studentError;
+      const studentDoc = await getDoc(doc(db, "student_records", id));
+
+      if (!studentDoc.exists()) {
+        throw new Error("Student record not found");
+      }
+
+      const studentData = { id: studentDoc.id, ...studentDoc.data() } as StudentRecord;
 
       // Fetch profile for avatar URL
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("avatar_url")
-        .eq("student_record_id", id)
-        .single();
-
-      if (profileError) {
+      let avatar_url = null;
+      try {
+        const profilesRef = collection(db, "profiles");
+        const q = query(
+          profilesRef,
+          where("student_record_id", "==", id),
+          limit(1)
+        );
+        const profileSnap = await getDocs(q);
+        if (!profileSnap.empty) {
+          avatar_url = profileSnap.docs[0].data().avatar_url;
+        }
+      } catch (profileError) {
         console.warn("Could not fetch profile:", profileError);
       }
 
       const studentWithAvatar = {
         ...studentData,
-        avatar_url: profileData?.avatar_url,
+        avatar_url,
       };
 
       setStudent(studentWithAvatar);
       setFormData(studentWithAvatar);
     } catch (error: any) {
+      console.error("Error fetching student:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch student record",
+        description: error.message || "Failed to fetch student record",
         variant: "destructive",
       });
       setTimeout(() => navigate("/registrar/students"), 2000);
@@ -140,19 +159,24 @@ export default function RegistrarStudentDetail() {
   };
 
   const handleSave = async () => {
-    if (!formData) return;
+    if (!formData || !id) return;
 
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from("student_records")
-        .update({
-          ...formData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", formData.id);
+      const studentRef = doc(db, "student_records", id);
+      const updateData = { ...formData };
 
-      if (error) throw error;
+      // Remove ID from data to be saved to avoid overwriting or errors
+      // @ts-ignore
+      delete updateData.id;
+      // Also remove avatar_url if it's not part of the student_record table in DB
+      // @ts-ignore
+      delete updateData.avatar_url;
+
+      await updateDoc(studentRef, {
+        ...updateData,
+        updated_at: new Date().toISOString(),
+      });
 
       setStudent(formData);
       setIsEditing(false);
@@ -161,6 +185,7 @@ export default function RegistrarStudentDetail() {
         description: "Student record updated successfully",
       });
     } catch (error: any) {
+      console.error("Error updating student:", error);
       toast({
         title: "Error",
         description: error.message || "Failed to update student record",
