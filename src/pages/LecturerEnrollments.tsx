@@ -71,41 +71,49 @@ export default function LecturerEnrollments() {
     try {
       if (!user?.uid) return;
 
-      const lecturerCoursesRef = collection(db, "lecturer_courses");
-      const lcQuery = query(
-        lecturerCoursesRef,
-        where("lecturer_id", "==", user.uid),
-      );
-
-      const coursesRef = collection(db, "courses");
-      const cQuery = query(coursesRef, where("instructor_id", "==", user.uid));
-
-      const [lcSnapshot, cSnapshot] = await Promise.all([
-        getDocs(lcQuery),
-        getDocs(cQuery),
-      ]);
-
-      const courseMap = new Map<string, EnrollmentRow["course"]>();
-
-      // Fetch course details for lecturer_courses
-      const lecturerCourseIds = lcSnapshot.docs.map(
-        (doc) => doc.data().course_id,
-      );
-      if (lecturerCourseIds.length > 0) {
-        await Promise.all(
-          lecturerCourseIds.map(async (cid) => {
-            const cDoc = await getDoc(doc(db, "courses", cid));
-            if (cDoc.exists()) {
-              courseMap.set(cid, { id: cDoc.id, ...cDoc.data() } as any);
-            }
-          }),
-        );
+      // Get lecturer's profile to get assigned_course_units
+      const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+      if (!profileDoc.exists()) {
+        setEnrollments([]);
+        return;
       }
 
-      // Add direct instructor courses
-      cSnapshot.docs.forEach((d) => {
-        courseMap.set(d.id, { id: d.id, ...d.data() } as any);
-      });
+      const profileData = profileDoc.data();
+      const assignedCourseUnits = profileData.assigned_course_units || [];
+
+      if (assignedCourseUnits.length === 0) {
+        setEnrollments([]);
+        return;
+      }
+
+      // Fetch course details from course_units collection
+      const courseMap = new Map<string, EnrollmentRow["course"]>();
+      const chunks = [];
+      for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+        chunks.push(assignedCourseUnits.slice(i, i + 30));
+      }
+
+      for (const chunk of chunks) {
+        const courseUnitsQuery = query(
+          collection(db, "course_units"),
+          where("__name__", "in", chunk),
+        );
+        const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+        courseUnitsSnapshot.docs.forEach((doc) => {
+          const courseData = doc.data();
+          courseMap.set(doc.id, {
+            id: doc.id,
+            title:
+              courseData.name ||
+              courseData.course_unit_name ||
+              "Unknown Course",
+            code: courseData.code || courseData.course_unit_code || "Unknown",
+            credits: courseData.credits || 3,
+            semester: null, // Not available in course_units
+            year: null, // Not available in course_units
+          });
+        });
+      }
 
       const courseIds = Array.from(courseMap.keys());
 
