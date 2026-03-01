@@ -150,9 +150,7 @@ export function LecturerHeader() {
                   >
                     <Avatar className="h-10 w-10">
                       <AvatarImage
-                        src={
-                          profile?.avatar_url || user.user_metadata?.avatar_url
-                        }
+                        src={profile?.avatar_url || ""}
                         alt={profile?.full_name || user.email || ""}
                       />
                       <AvatarFallback className="bg-primary text-primary-foreground">
@@ -174,7 +172,7 @@ export function LecturerHeader() {
                     </Avatar>
                     <div className="flex flex-col space-y-0.5">
                       <p className="text-sm font-medium">
-                        {user.user_metadata?.full_name || "Lecturer"}
+                        {profile?.full_name || "Lecturer"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {user.email}
