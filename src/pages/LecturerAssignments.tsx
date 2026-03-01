@@ -99,13 +99,17 @@ export default function LecturerAssignments() {
   });
   const [uploadingDocument, setUploadingDocument] = useState(false);
 
-  // Load assignments created by this lecturer from Supabase
+  // Load assignments created by this lecturer from Firebase
   useEffect(() => {
     const loadAssignments = async () => {
+      if (!user) return;
       setLoading(true);
       try {
-        // Fetch assignments from Firestore (no lecturer_id filter)
-        const assignmentsQuery = query(collection(db, "Assignments"));
+        // Fetch assignments from Firestore
+        const assignmentsQuery = query(
+          collection(db, "Assignments"),
+          where("lecturer_id", "==", user.uid)
+        );
         const snapshot = await getDocs(assignmentsQuery);
         const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
           const a = docSnap.data();
@@ -124,7 +128,7 @@ export default function LecturerAssignments() {
           };
         });
         setAssignments(mapped);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error loading assignments", error);
         toast({
           title: "Could not load assignments",
@@ -135,17 +139,19 @@ export default function LecturerAssignments() {
       setLoading(false);
     };
     loadAssignments();
-  }, [toast]);
+  }, [toast, user]);
 
-  // Load lecturer courses from Supabase so we use real UUIDs, not placeholders
+  // Load lecturer courses from Firebase
   useEffect(() => {
     const loadCourses = async () => {
+      if (!user) return;
       const currentAcademicYear = new Date().getFullYear().toString();
       const currentSemester = "1";
       try {
-        // Fetch lecturer_courses from Firestore (no lecturer_id filter)
+        // Fetch lecturer_courses from Firestore
         const lecturerCoursesQuery = query(
           collection(db, "lecturer_courses"),
+          where("lecturer_id", "==", user.uid),
           where("academic_year", "==", currentAcademicYear),
           where("semester", "==", currentSemester),
         );
@@ -167,7 +173,7 @@ export default function LecturerAssignments() {
       }
     };
     loadCourses();
-  }, []);
+  }, [user]);
 
   const filteredAssignments =
     selectedFilter === "all"
@@ -206,7 +212,7 @@ export default function LecturerAssignments() {
   };
 
   const handleCreateAssignment = async () => {
-    if (!formData.title || !formData.dueDate || !selectedCourse) {
+    if (!user || !formData.title || !formData.dueDate || !selectedCourse) {
       toast({
         title: "Missing information",
         description: "Please fill in all fields and select a course",
@@ -232,25 +238,30 @@ export default function LecturerAssignments() {
       // Upload instruction document if provided
       if (formData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${Date.now()}-${formData.instructionDocument.name}`;
+        const fileName = `${user.uid}/${Date.now()}-${formData.instructionDocument.name}`;
         const fileRef = ref(storage, `assignment-documents/${fileName}`);
         await uploadBytes(fileRef, formData.instructionDocument);
         instructionDocUrl = await getDownloadURL(fileRef);
         instructionDocName = formData.instructionDocument.name;
         setUploadingDocument(false);
       }
+
+      const course = courses.find((c) => c.id === selectedCourse);
+
       // Create assignment in Firestore
       const assignmentDoc = await addDoc(collection(db, "Assignments"), {
         course_id: selectedCourse,
+        course_title: course?.title || "",
+        lecturer_id: user.uid,
         title: formData.title,
         description: formData.description,
         due_date: new Date(formData.dueDate).toISOString(),
         total_points: formData.totalPoints,
         status: "draft",
         instruction_document_url: instructionDocUrl,
-        instruction_document_name: instructionDocName,
-        created_at: new Date().toISOString(),
+        created_at: serverTimestamp(),
       });
+
       // Get all enrolled students for this course
       const enrollmentsQuery = query(
         collection(db, "enrollments"),
@@ -266,15 +277,17 @@ export default function LecturerAssignments() {
           await addDoc(collection(db, "notifications"), {
             user_id: studentId,
             title: `New Assignment: ${formData.title}`,
-            message: `A new assignment has been added to your course. Due: ${new Date(formData.dueDate).toLocaleDateString()}`,
+            message: `A new assignment has been added to your course. Due: ${new Date(
+              formData.dueDate
+            ).toLocaleDateString()}`,
             type: "assignment",
             related_id: assignmentDoc.id,
             is_read: false,
+            created_at: serverTimestamp(),
           });
         }
       }
       // Add to local state
-      const course = courses.find((c) => c.id === selectedCourse);
       const newAssignment: Assignment = {
         id: assignmentDoc.id,
         title: formData.title,
