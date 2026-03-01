@@ -33,46 +33,23 @@ export function Header() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) {
-      fetchUnreadCount();
+    if (user?.uid) {
       // Set up real-time listener for notifications
-      const subscription = supabase
-        .channel("notifications")
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${user.id}`,
-          },
-          () => {
-            fetchUnreadCount();
-          }
-        )
-        .subscribe();
+      const q = query(
+        collection(db, "notifications"),
+        where("user_id", "==", user.uid),
+        where("is_read", "==", false)
+      );
 
-      return () => {
-        subscription.unsubscribe();
-      };
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setUnreadCount(snapshot.size);
+      }, (error) => {
+        console.error("Error with notifications snapshot:", error);
+      });
+
+      return () => unsubscribe();
     }
   }, [user]);
-
-  const fetchUnreadCount = async () => {
-    if (!user) return;
-    try {
-      const { count, error } = await supabase
-        .from("notifications")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("is_read", false);
-
-      if (error) throw error;
-      setUnreadCount(count || 0);
-    } catch (error) {
-      console.error("Error fetching unread count:", error);
-    }
-  };
 
   const handleSignOut = async () => {
     await signOut();
