@@ -127,7 +127,7 @@ export default function Portal() {
       const resultsQuery = query(
         collection(db, "exam_results"),
         where("student_id", "==", user.uid),
-        orderBy("academic_year", "desc")
+        orderBy("academic_year", "desc"),
       );
       const resultsSnap = await getDocs(resultsQuery);
       const resultsData = await Promise.all(
@@ -140,14 +140,14 @@ export default function Portal() {
             ...res,
             course: courseSnap.exists() ? courseSnap.data() : null,
           } as ExamResult;
-        })
+        }),
       );
       setResults(resultsData);
 
       // 2. Fetch Schedules
       const schedulesQuery = query(
         collection(db, "schedules"),
-        orderBy("day_of_week")
+        orderBy("day_of_week"),
       );
       const schedulesSnap = await getDocs(schedulesQuery);
       const schedulesData = await Promise.all(
@@ -160,7 +160,7 @@ export default function Portal() {
             ...sch,
             course: courseSnap.exists() ? courseSnap.data() : null,
           } as Schedule;
-        })
+        }),
       );
       setSchedules(schedulesData);
 
@@ -168,64 +168,81 @@ export default function Portal() {
       const feesQuery = query(
         collection(db, "fees"),
         where("student_id", "==", user.uid),
-        orderBy("due_date", "desc")
+        orderBy("due_date", "desc"),
       );
       const feesSnap = await getDocs(feesQuery);
-      setFees(
-        feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Fee)
-      );
+      setFees(feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Fee));
 
       // 4. Fetch Enrollments & Assignments
       const enrollmentsQuery = query(
         collection(db, "enrollments"),
         where("student_id", "==", user.uid),
-        where("status", "in", ["approved", "pending"])
+        where("status", "in", ["approved", "pending"]),
       );
       const enrollmentsSnap = await getDocs(enrollmentsQuery);
       const courseIds = enrollmentsSnap.docs.map((d) => d.data().course_id);
 
       if (courseIds.length > 0) {
-        // Firestore 'in' queries are limited to 10 elements. 
+        // Firestore 'in' queries are limited to 10 elements.
         // We'll fetch assignments for these course IDs.
         const assignmentsQuery = query(
           collection(db, "Assignments"),
-          where("course_id", "in", courseIds.slice(0, 10))
+          where("course_id", "in", courseIds.slice(0, 10)),
         );
         const assignmentsSnap = await getDocs(assignmentsQuery);
-        const assignmentsRaw = assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const assignmentsRaw = assignmentsSnap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
 
         // 5. Fetch Submissions for these assignments
         const submissionsQuery = query(
           collection(db, "submissions"),
           where("student_id", "==", user.uid),
-          where("assignment_id", "in", assignmentsRaw.map(a => a.id).slice(0, 10))
+          where(
+            "assignment_id",
+            "in",
+            assignmentsRaw.map((a) => a.id).slice(0, 10),
+          ),
         );
         const submissionsSnap = await getDocs(submissionsQuery);
-        const submissionsData = submissionsSnap.docs.map(d => d.data());
+        const submissionsData = submissionsSnap.docs.map((d) => d.data());
 
-        const mappedAssignments: Assignment[] = assignmentsRaw.map((assignment: any) => {
-          const submission = submissionsData.find(s => s.assignment_id === assignment.id);
-          let status: "pending" | "submitted" | "graded" = "pending";
-          if (submission?.status === "submitted" || submission?.status === "graded") {
-            status = submission.score !== undefined ? "graded" : "submitted";
-          }
+        const mappedAssignments: Assignment[] = assignmentsRaw.map(
+          (assignment: any) => {
+            const submission = submissionsData.find(
+              (s) => s.assignment_id === assignment.id,
+            );
+            let status: "pending" | "submitted" | "graded" = "pending";
+            if (
+              submission?.status === "submitted" ||
+              submission?.status === "graded"
+            ) {
+              status = submission.score !== undefined ? "graded" : "submitted";
+            }
 
-          return {
-            id: assignment.id,
-            title: assignment.title,
-            description: assignment.description || "",
-            dueDate: assignment.due_date,
-            totalPoints: assignment.total_points ?? 100,
-            courseTitle: assignment.course_title || "Course",
-            courseCode: assignment.course_code || "",
-            status,
-            instructionDocumentUrl: assignment.instruction_document_url,
-            instructionDocumentName: assignment.instruction_document_name,
-            score: submission?.score,
-            feedback: submission?.feedback,
-          };
-        });
-        setAssignments(mappedAssignments.sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()));
+            return {
+              id: assignment.id,
+              title: assignment.title,
+              description: assignment.description || "",
+              dueDate: assignment.due_date,
+              totalPoints: assignment.total_points ?? 100,
+              courseTitle: assignment.course_title || "Course",
+              courseCode: assignment.course_code || "",
+              status,
+              instructionDocumentUrl: assignment.instruction_document_url,
+              instructionDocumentName: assignment.instruction_document_name,
+              score: submission?.score,
+              feedback: submission?.feedback,
+            };
+          },
+        );
+        setAssignments(
+          mappedAssignments.sort(
+            (a, b) =>
+              new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+          ),
+        );
       }
     } catch (error) {
       console.error("Error fetching portal data:", error);
@@ -266,11 +283,11 @@ export default function Portal() {
     if (results.length === 0) return 0;
     const totalPoints = results.reduce(
       (acc, r) => acc + (r.grade_point || 0) * (r.course?.credits || 0),
-      0
+      0,
     );
     const totalCredits = results.reduce(
       (acc, r) => acc + (r.course?.credits || 0),
-      0
+      0,
     );
     return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : "0.00";
   };
@@ -330,7 +347,7 @@ export default function Portal() {
                 label: "Total Credits",
                 value: results.reduce(
                   (acc, r) => acc + (r.course?.credits || 0),
-                  0
+                  0,
                 ),
                 icon: FileText,
                 color: "text-accent",
@@ -447,8 +464,8 @@ export default function Portal() {
                                       assignment.status === "pending"
                                         ? "bg-amber-500/20 text-amber-700"
                                         : assignment.status === "submitted"
-                                        ? "bg-blue-500/20 text-blue-700"
-                                        : "bg-emerald-500/20 text-emerald-700"
+                                          ? "bg-blue-500/20 text-blue-700"
+                                          : "bg-emerald-500/20 text-emerald-700"
                                     }`}
                                   >
                                     {assignment.status.charAt(0).toUpperCase() +
@@ -466,7 +483,7 @@ export default function Portal() {
                                     <Clock className="h-4 w-4" />
                                     Due{" "}
                                     {new Date(
-                                      assignment.dueDate
+                                      assignment.dueDate,
                                     ).toLocaleDateString()}
                                     {isOverdue && (
                                       <AlertCircle className="h-4 w-4 text-red-600" />
@@ -497,7 +514,7 @@ export default function Portal() {
                                   handleDownloadDocument(
                                     assignment.instructionDocumentUrl!,
                                     assignment.instructionDocumentName ||
-                                      "assignment-document.pdf"
+                                      "assignment-document.pdf",
                                   )
                                 }
                                 disabled={downloadingDocument}
@@ -614,10 +631,10 @@ export default function Portal() {
                                     result.grade?.startsWith("A")
                                       ? "bg-emerald-500/10 text-emerald-600"
                                       : result.grade?.startsWith("B")
-                                      ? "bg-accent/10 text-accent"
-                                      : result.grade?.startsWith("C")
-                                      ? "bg-amber-500/10 text-amber-600"
-                                      : "bg-destructive/10 text-destructive"
+                                        ? "bg-accent/10 text-accent"
+                                        : result.grade?.startsWith("C")
+                                          ? "bg-amber-500/10 text-amber-600"
+                                          : "bg-destructive/10 text-destructive"
                                   }`}
                                 >
                                   {result.grade}
@@ -672,7 +689,7 @@ export default function Portal() {
                     <div className="grid gap-4">
                       {DAYS.slice(1, 6).map((day, dayIndex) => {
                         const daySchedules = schedules.filter(
-                          (s) => s.day_of_week === dayIndex + 1
+                          (s) => s.day_of_week === dayIndex + 1,
                         );
                         if (daySchedules.length === 0) return null;
 
@@ -776,15 +793,15 @@ export default function Portal() {
                                           isPaid
                                             ? "bg-emerald-500/10 text-emerald-600"
                                             : isPartial
-                                            ? "bg-amber-500/10 text-amber-600"
-                                            : "bg-destructive/10 text-destructive"
+                                              ? "bg-amber-500/10 text-amber-600"
+                                              : "bg-destructive/10 text-destructive"
                                         }`}
                                       >
                                         {isPaid
                                           ? "Paid"
                                           : isPartial
-                                          ? "Partial"
-                                          : "Unpaid"}
+                                            ? "Partial"
+                                            : "Unpaid"}
                                       </Badge>
                                     </div>
                                     <p className="font-medium">
@@ -793,7 +810,7 @@ export default function Portal() {
                                     <p className="text-sm text-muted-foreground">
                                       Due:{" "}
                                       {new Date(
-                                        fee.due_date
+                                        fee.due_date,
                                       ).toLocaleDateString()}
                                     </p>
                                   </div>
@@ -861,7 +878,7 @@ export default function Portal() {
                           onClick={() => {
                             const prn = generatePRN();
                             alert(
-                              `Your PRN: ${prn}\n\nUse this reference when making payment at any bank.`
+                              `Your PRN: ${prn}\n\nUse this reference when making payment at any bank.`,
                             );
                           }}
                         >
