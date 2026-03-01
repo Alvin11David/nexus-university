@@ -211,7 +211,7 @@ export default function LecturerSettings() {
       // Re-authenticate user before updating password
       const credential = EmailAuthProvider.credential(
         auth.currentUser.email,
-        currentPassword
+        currentPassword,
       );
 
       await reauthenticateWithCredential(auth.currentUser, credential);
