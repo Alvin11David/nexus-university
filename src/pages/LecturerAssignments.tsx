@@ -22,7 +22,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -108,7 +114,9 @@ export default function LecturerAssignments() {
   );
   const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [editing, setEditing] = useState<Assignment | null>(null);
-  const [editingSubmission, setEditingSubmission] = useState<Submission | null>(null);
+  const [editingSubmission, setEditingSubmission] = useState<Submission | null>(
+    null,
+  );
   const [activeTab, setActiveTab] = useState<"assignments" | "submissions">(
     "assignments",
   );
@@ -517,7 +525,10 @@ export default function LecturerAssignments() {
     setLoadingSubmissions(false);
   };
 
-  const updateSubmission = async (submissionId: string, updates: { status?: string; score?: number; feedback?: string }) => {
+  const updateSubmission = async (
+    submissionId: string,
+    updates: { status?: string; score?: number; feedback?: string },
+  ) => {
     try {
       await updateDoc(doc(db, "submissions", submissionId), {
         ...updates,
@@ -525,12 +536,10 @@ export default function LecturerAssignments() {
       });
 
       // Update local state
-      setViewingSubmissions(prev => 
-        prev.map(sub => 
-          sub.id === submissionId 
-            ? { ...sub, ...updates }
-            : sub
-        )
+      setViewingSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === submissionId ? { ...sub, ...updates } : sub,
+        ),
       );
 
       toast({
@@ -1530,35 +1539,55 @@ export default function LecturerAssignments() {
                             <div className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <Label className="text-sm font-medium">Status</Label>
+                                  <Label className="text-sm font-medium">
+                                    Status
+                                  </Label>
                                   <Select
                                     value={editingSubmission.status}
-                                    onValueChange={(value) => 
-                                      setEditingSubmission(prev => prev ? {...prev, status: value} : null)
+                                    onValueChange={(value) =>
+                                      setEditingSubmission((prev) =>
+                                        prev
+                                          ? { ...prev, status: value }
+                                          : null,
+                                      )
                                     }
                                   >
                                     <SelectTrigger className="mt-1">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="submitted">Submitted</SelectItem>
-                                      <SelectItem value="reviewed">Reviewed</SelectItem>
-                                      <SelectItem value="graded">Graded</SelectItem>
+                                      <SelectItem value="submitted">
+                                        Submitted
+                                      </SelectItem>
+                                      <SelectItem value="reviewed">
+                                        Reviewed
+                                      </SelectItem>
+                                      <SelectItem value="graded">
+                                        Graded
+                                      </SelectItem>
                                     </SelectContent>
                                   </Select>
                                 </div>
                                 <div>
-                                  <Label className="text-sm font-medium">Score (out of {viewing.totalPoints})</Label>
+                                  <Label className="text-sm font-medium">
+                                    Score (out of {viewing.totalPoints})
+                                  </Label>
                                   <Input
                                     type="number"
                                     min="0"
                                     max={viewing.totalPoints}
                                     value={editingSubmission.score || ""}
-                                    onChange={(e) => 
-                                      setEditingSubmission(prev => prev ? {
-                                        ...prev, 
-                                        score: e.target.value ? parseInt(e.target.value) : undefined
-                                      } : null)
+                                    onChange={(e) =>
+                                      setEditingSubmission((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              score: e.target.value
+                                                ? parseInt(e.target.value)
+                                                : undefined,
+                                            }
+                                          : null,
+                                      )
                                     }
                                     className="mt-1"
                                     placeholder="Enter score"
@@ -1566,11 +1595,17 @@ export default function LecturerAssignments() {
                                 </div>
                               </div>
                               <div>
-                                <Label className="text-sm font-medium">Feedback</Label>
+                                <Label className="text-sm font-medium">
+                                  Feedback
+                                </Label>
                                 <Textarea
                                   value={editingSubmission.feedback || ""}
-                                  onChange={(e) => 
-                                    setEditingSubmission(prev => prev ? {...prev, feedback: e.target.value} : null)
+                                  onChange={(e) =>
+                                    setEditingSubmission((prev) =>
+                                      prev
+                                        ? { ...prev, feedback: e.target.value }
+                                        : null,
+                                    )
                                   }
                                   className="mt-1"
                                   placeholder="Enter feedback for the student..."
@@ -1582,11 +1617,14 @@ export default function LecturerAssignments() {
                                   size="sm"
                                   onClick={async () => {
                                     if (editingSubmission) {
-                                      await updateSubmission(editingSubmission.id, {
-                                        status: editingSubmission.status,
-                                        score: editingSubmission.score,
-                                        feedback: editingSubmission.feedback,
-                                      });
+                                      await updateSubmission(
+                                        editingSubmission.id,
+                                        {
+                                          status: editingSubmission.status,
+                                          score: editingSubmission.score,
+                                          feedback: editingSubmission.feedback,
+                                        },
+                                      );
                                       setEditingSubmission(null);
                                     }
                                   }}
@@ -1606,15 +1644,21 @@ export default function LecturerAssignments() {
                           ) : (
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-4">
-                                {submission.score !== null && submission.score !== undefined ? (
+                                {submission.score !== null &&
+                                submission.score !== undefined ? (
                                   <span className="text-sm font-medium text-gray-600">
-                                    Score: {submission.score}/{viewing.totalPoints}
+                                    Score: {submission.score}/
+                                    {viewing.totalPoints}
                                   </span>
                                 ) : (
-                                  <span className="text-sm text-gray-500">Not graded yet</span>
+                                  <span className="text-sm text-gray-500">
+                                    Not graded yet
+                                  </span>
                                 )}
                                 {submission.feedback && (
-                                  <span className="text-sm text-gray-600">Feedback provided</span>
+                                  <span className="text-sm text-gray-600">
+                                    Feedback provided
+                                  </span>
                                 )}
                               </div>
                               <Button
