@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   Printer,
+  BookMarked,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { Link } from "react-router-dom";
 
@@ -43,10 +53,22 @@ interface Enrollment {
   };
 }
 
+interface CourseUnit {
+  title: ReactNode;
+  id: string;
+  code: string;
+  name: string;
+  credits: number;
+  semester: number;
+  year: number;
+}
+
 export function EnrollmentRegistrationTab() {
   const { user, profile } = useAuth();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [courseUnits, setCourseUnits] = useState<CourseUnit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUnits, setLoadingUnits] = useState(false);
   const [fees, setFees] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentPercentage, setPaymentPercentage] = useState(0);
@@ -59,29 +81,82 @@ export function EnrollmentRegistrationTab() {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (profile?.programme) {
+      fetchCourseUnits(profile.programme);
+    }
+  }, [profile?.programme]);
+
+  const fetchCourseUnits = async (programTitle: string) => {
+    try {
+      setLoadingUnits(true);
+      // First, find the course (program) ID by its title
+      const courseQ = query(
+        collection(db, "courses"),
+        where("title", "==", programTitle),
+        limit(1),
+      );
+      const courseSnap = await getDocs(courseQ);
+
+      if (courseSnap.empty) {
+        console.warn("No course found matching program title:", programTitle);
+        setCourseUnits([]);
+        return;
+      }
+
+      const courseId = courseSnap.docs[0].id;
+
+      // Now fetch course units for this course_id
+      const unitsQ = query(
+        collection(db, "course_units"),
+        where("course_id", "==", courseId),
+      );
+      const unitsSnap = await getDocs(unitsQ);
+      const unitsData = unitsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as CourseUnit[];
+
+      setCourseUnits(unitsData);
+    } catch (error) {
+      console.error("Error fetching course units:", error);
+    } finally {
+      setLoadingUnits(false);
+    }
+  };
+
   const fetchPaymentData = async () => {
     try {
       if (!user) return;
-      const feesQ = query(collection(db, "fees"), where("student_id", "==", user.uid));
-      const paymentsQ = query(collection(db, "payments"), where("student_id", "==", user.uid));
+      const feesQ = query(
+        collection(db, "fees"),
+        where("student_id", "==", user.uid),
+      );
+      const paymentsQ = query(
+        collection(db, "payments"),
+        where("student_id", "==", user.uid),
+      );
 
       const [feesSnap, paymentsSnap] = await Promise.all([
         getDocs(feesQ),
-        getDocs(paymentsQ)
+        getDocs(paymentsQ),
       ]);
 
-      const feesData = feesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const paymentsData = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const feesData = feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const paymentsData = paymentsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
       if (feesData.length > 0) {
         setFees(feesData);
         const totalFees = feesData.reduce(
           (sum: number, fee: any) => sum + (fee.amount || 0),
-          0
+          0,
         );
         const totalPaid = feesData.reduce(
           (sum: number, fee: any) => sum + (fee.paid_amount || 0),
-          0
+          0,
         );
         const percentage = totalFees > 0 ? (totalPaid / totalFees) * 100 : 0;
         setPaymentPercentage(percentage);
@@ -99,33 +174,44 @@ export function EnrollmentRegistrationTab() {
       const q = query(
         collection(db, "enrollments"),
         where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc")
+        orderBy("enrolled_at", "desc"),
       );
 
       const snap = await getDocs(q);
-      const enrollmentDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const enrollmentDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
       if (enrollmentDocs.length === 0) {
         setEnrollments([]);
         return;
       }
 
-      const courseIds = [...new Set(enrollmentDocs.map((e: any) => e.course_id))];
+      const courseIds = [
+        ...new Set(enrollmentDocs.map((e: any) => e.course_id)),
+      ];
       const courseMap: Record<string, any> = {};
 
       // Fetch courses in chunks of 10
       for (let i = 0; i < courseIds.length; i += 10) {
         const chunk = courseIds.slice(i, i + 10);
-        const courseQ = query(collection(db, "courses"), where("__name__", "in", chunk));
+        const courseQ = query(
+          collection(db, "courses"),
+          where("__name__", "in", chunk),
+        );
         const courseSnap = await getDocs(courseQ);
-        courseSnap.docs.forEach(d => {
+        courseSnap.docs.forEach((d) => {
           courseMap[d.id] = d.data();
         });
       }
 
       const enrollmentData = enrollmentDocs.map((e: any) => ({
         ...e,
-        course: courseMap[e.course_id] || { code: "N/A", title: "N/A", credits: 0, semester: "N/A", year: 0 }
+        course: courseMap[e.course_id] || {
+          code: "N/A",
+          title: "N/A",
+          credits: 0,
+          semester: "N/A",
+          year: 0,
+        },
       }));
 
       setEnrollments(enrollmentData as Enrollment[]);
@@ -137,14 +223,14 @@ export function EnrollmentRegistrationTab() {
   };
 
   const currentSemester = enrollments.filter(
-    (e) => e.course?.semester === "Semester 1" && e.course?.year === 2025
+    (e) => e.course?.semester === "Semester 1" && e.course?.year === 2026,
   );
   const totalCredits = currentSemester.reduce(
     (sum, e) => sum + (e.course?.credits || 0),
-    0
+    0,
   );
   const approvedCount = enrollments.filter(
-    (e) => e.status === "approved"
+    (e) => e.status === "approved",
   ).length;
   const pendingCount = enrollments.filter((e) => e.status === "pending").length;
 
@@ -168,7 +254,7 @@ export function EnrollmentRegistrationTab() {
         {[
           {
             label: "Current Semester",
-            value: "Semester 1, 2025",
+            value: "Semester 1, 2026",
             icon: Calendar,
             color: "from-primary to-primary/50",
             bg: "bg-primary/10",
@@ -245,7 +331,7 @@ export function EnrollmentRegistrationTab() {
                   const printWindow = window.open(
                     "",
                     "",
-                    "width=800,height=600"
+                    "width=800,height=600",
                   );
                   if (printWindow) {
                     const courseRows = enrollments
@@ -264,7 +350,7 @@ export function EnrollmentRegistrationTab() {
                           "<td><strong>" +
                           e.status +
                           "</strong></td>" +
-                          "</tr>"
+                          "</tr>",
                       )
                       .join("");
 
@@ -273,7 +359,7 @@ export function EnrollmentRegistrationTab() {
                     qrContainer.style.display = "none";
                     document.body.appendChild(qrContainer);
 
-                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.uid}&semester=1-2025`;
+                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.uid}&semester=1-2026`;
 
                     const html = `
                       <html>
@@ -317,30 +403,34 @@ export function EnrollmentRegistrationTab() {
                             <div class="info-grid">
                               <div class="info-box">
                                 <div class="label">Student Name</div>
-                                <div class="value">${profile?.full_name || "N/A"
-                      }</div>
+                                <div class="value">${
+                                  profile?.full_name || "N/A"
+                                }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Student Number</div>
-                                <div class="value">${profile?.student_number || "N/A"
-                      }</div>
+                                <div class="value">${
+                                  profile?.student_number || "N/A"
+                                }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Programme</div>
-                                <div class="value">${profile?.programme || "N/A"
-                      }</div>
+                                <div class="value">${
+                                  profile?.programme || "N/A"
+                                }</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Department</div>
-                                <div class="value">${profile?.department || "N/A"
-                      }</div>
+                                <div class="value">${
+                                  profile?.department || "N/A"
+                                }</div>
                               </div>
                             </div>
                             
                             <div class="info-grid">
                               <div class="info-box">
                                 <div class="label">Academic Year</div>
-                                <div class="value">2025</div>
+                                <div class="value">2026</div>
                               </div>
                               <div class="info-box">
                                 <div class="label">Semester</div>
@@ -383,8 +473,9 @@ export function EnrollmentRegistrationTab() {
                           </div>
                           
                           <div class="footer">
-                            <p>Document ID: ${user?.uid
-                      } | This is an official document from Nexus University. Issued on ${new Date().toLocaleDateString()}</p>
+                            <p>Document ID: ${
+                              user?.uid
+                            } | This is an official document from Nexus University. Issued on ${new Date().toLocaleDateString()}</p>
                             <p>To verify this document, scan the QR code in the top right corner.</p>
                           </div>
                         </body>
@@ -422,14 +513,14 @@ export function EnrollmentRegistrationTab() {
                     const printWindow = window.open(
                       "",
                       "",
-                      "width=900,height=700"
+                      "width=900,height=700",
                     );
                     if (printWindow) {
                       const coursesList = enrollments
                         .filter(
                           (e) =>
                             e.course?.semester === "Semester 1" &&
-                            e.course?.year === 2025
+                            e.course?.year === 2026,
                         )
                         .map(
                           (e) =>
@@ -440,7 +531,7 @@ export function EnrollmentRegistrationTab() {
                             "<td>" +
                             (e.course?.title || "N/A") +
                             "</td>" +
-                            "</tr>"
+                            "</tr>",
                         )
                         .join("");
 
@@ -482,30 +573,35 @@ export function EnrollmentRegistrationTab() {
                               </div>
 
                               <div class="permit-number">
-                                Permit ID: ${user?.uid
-                        }-${new Date().getFullYear()}
+                                Permit ID: ${
+                                  user?.uid
+                                }-${new Date().getFullYear()}
                               </div>
 
                               <div class="student-info">
                                 <div class="info-row">
                                   <div class="label">Student Name:</div>
-                                  <div class="value">${profile?.full_name || "N/A"
-                        }</div>
+                                  <div class="value">${
+                                    profile?.full_name || "N/A"
+                                  }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Student Number:</div>
-                                  <div class="value">${profile?.student_number || "N/A"
-                        }</div>
+                                  <div class="value">${
+                                    profile?.student_number || "N/A"
+                                  }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Programme:</div>
-                                  <div class="value">${profile?.programme || "N/A"
-                        }</div>
+                                  <div class="value">${
+                                    profile?.programme || "N/A"
+                                  }</div>
                                 </div>
                                 <div class="info-row">
                                   <div class="label">Department:</div>
-                                  <div class="value">${profile?.department || "N/A"
-                        }</div>
+                                  <div class="value">${
+                                    profile?.department || "N/A"
+                                  }</div>
                                 </div>
                               </div>
 
@@ -514,8 +610,8 @@ export function EnrollmentRegistrationTab() {
                                 <div class="notice-text">
                                   This student has met all academic and financial requirements for examination eligibility.
                                   Payment Status: ${paymentPercentage.toFixed(
-                          1
-                        )}% of tuition fees paid.
+                                    1,
+                                  )}% of tuition fees paid.
                                 </div>
                               </div>
 
@@ -546,7 +642,7 @@ export function EnrollmentRegistrationTab() {
 
                               <div class="footer">
                                 <p>This permit authorizes the above student to sit for examinations in the registered courses.</p>
-                                <p>Valid for Academic Year 2025 • Semester 1</p>
+                                <p>Valid for Academic Year 2026 • Semester 1</p>
                               </div>
                             </div>
                           </body>
@@ -664,6 +760,73 @@ export function EnrollmentRegistrationTab() {
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Course Units of Selected Program */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Program Course Units</CardTitle>
+              <CardDescription>
+                Units available for {profile?.programme || "your program"}
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-sm">
+              {courseUnits.length} Units
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingUnits ? (
+            <div className="grid gap-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-xl bg-muted animate-pulse"
+                />
+              ))}
+            </div>
+          ) : courseUnits.length === 0 ? (
+            <div className="text-center py-12">
+              <BookMarked className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2">No units found</h3>
+              <p className="text-muted-foreground mb-4">
+                No course units are available for the selected program
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {courseUnits.map((unit, i) => (
+                <motion.div
+                  key={unit.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+                      <GraduationCap className="h-6 w-6 text-secondary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {unit.code}
+                        </Badge>
+                      </div>
+                      <p className="font-medium">{unit.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {unit.credits} Credits • Semester {unit.semester} Year{" "}
+                        {unit.year}
+                      </p>
+                    </div>
+                  </div>
                 </motion.div>
               ))}
             </div>
