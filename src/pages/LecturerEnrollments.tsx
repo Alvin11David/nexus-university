@@ -16,7 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, getDoc, orderBy, Timestamp } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 

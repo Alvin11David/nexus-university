@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Edit2, Save, X, Calculator, Download, Upload } from "lucide-react";
 import { db } from "@/firebase";
-import { collection, query, limit, getDocs, where, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  limit,
+  getDocs,
+  where,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,11 +89,11 @@ export default function MarksManagement() {
       const coursesRef = collection(db, "courses");
       const q = query(coursesRef, limit(10));
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({
+      const data = querySnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       })) as Course[];
-      
+
       setCourses(data);
       if (data && data.length > 0) {
         loadStudents(data[0]);
@@ -103,7 +111,7 @@ export default function MarksManagement() {
       const enrollmentsRef = collection(db, "enrollments");
       const q = query(enrollmentsRef, where("course_id", "==", course.id));
       const querySnapshot = await getDocs(q);
-      const studentIds = querySnapshot.docs.map(doc => doc.data().student_id);
+      const studentIds = querySnapshot.docs.map((doc) => doc.data().student_id);
 
       if (studentIds.length === 0) {
         setStudents([]);
@@ -118,10 +126,10 @@ export default function MarksManagement() {
             return { id: docSnap.id, ...docSnap.data() };
           }
           return null;
-        })
+        }),
       );
 
-      const validProfiles = profiles.filter(p => p !== null) as any[];
+      const validProfiles = profiles.filter((p) => p !== null) as any[];
 
       const marks =
         validProfiles.map((p) => {
@@ -152,7 +160,7 @@ export default function MarksManagement() {
         }) || [];
 
       setStudents(
-        marks.sort((a, b) => a.student_name.localeCompare(b.student_name))
+        marks.sort((a, b) => a.student_name.localeCompare(b.student_name)),
       );
     } catch (error) {
       console.error("Error loading students:", error);
@@ -191,7 +199,7 @@ export default function MarksManagement() {
     setEditing(null);
     setEditValues({});
     alert(
-      "Marks updated successfully! (Persistence requires database migration)"
+      "Marks updated successfully! (Persistence requires database migration)",
     );
   };
 
@@ -238,10 +246,11 @@ export default function MarksManagement() {
                   setSelectedCourse(course);
                   loadStudents(course);
                 }}
-                className={`px-4 py-2 rounded-lg whitespace-nowrap ${selectedCourse?.id === course.id
+                className={`px-4 py-2 rounded-lg whitespace-nowrap ${
+                  selectedCourse?.id === course.id
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/60 hover:bg-muted"
-                  }`}
+                }`}
               >
                 {course.code}
               </button>
