@@ -53,14 +53,18 @@ export function LecturerHeader() {
       const q = query(
         collection(db, "notifications"),
         where("user_id", "==", user.uid),
-        where("is_read", "==", false)
+        where("is_read", "==", false),
       );
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        setUnreadCount(snapshot.size);
-      }, (error) => {
-        console.error("Error with notifications snapshot:", error);
-      });
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          setUnreadCount(snapshot.size);
+        },
+        (error) => {
+          console.error("Error with notifications snapshot:", error);
+        },
+      );
 
       return () => unsubscribe();
     }

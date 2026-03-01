@@ -35,7 +35,7 @@ import {
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -127,7 +127,7 @@ export function Header() {
                   >
                     <Avatar className="h-10 w-10">
                       <AvatarImage
-                        src={user.user_metadata?.avatar_url}
+                        src={profile?.avatar_url || ""}
                         alt={user.email || ""}
                       />
                       <AvatarFallback className="bg-primary text-primary-foreground">
@@ -145,7 +145,7 @@ export function Header() {
                     </Avatar>
                     <div className="flex flex-col space-y-0.5">
                       <p className="text-sm font-medium">
-                        {user.user_metadata?.full_name || "User"}
+                        {profile?.full_name || "User"}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {user.email}
