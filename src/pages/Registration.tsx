@@ -44,7 +44,20 @@ import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 interface Course {
@@ -67,7 +80,7 @@ interface Department {
   code: string;
 }
 
-const CURRENT_YEAR = 2025;
+const CURRENT_YEAR = 2026;
 const SEMESTERS = ["Semester 1", "Semester 2"];
 const MAX_CREDITS = 24;
 const MIN_CREDITS = 12;
@@ -110,7 +123,10 @@ export default function Registration() {
       // Fetch departments
       const deptsRef = collection(db, "departments");
       const deptsSnapshot = await getDocs(deptsRef);
-      const deptsData = deptsSnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Department[];
+      const deptsData = deptsSnapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Department[];
       setDepartments(deptsData);
 
       // Fetch courses (published, for current semester/year)
@@ -119,27 +135,34 @@ export default function Registration() {
         coursesRef,
         where("status", "==", "published"),
         where("semester", "==", selectedSemester),
-        where("year", "==", selectedYear)
+        where("year", "==", selectedYear),
       );
       const coursesSnapshot = await getDocs(qCourses);
 
-      const coursesData = await Promise.all(coursesSnapshot.docs.map(async d => {
-        const c = d.data() as Course;
-        const dept = deptsData.find(dept => dept.id === c.department_id);
-        return {
-          ...c,
-          id: d.id,
-          department: dept ? { name: dept.name, code: dept.code } : undefined
-        } as Course;
-      }));
+      const coursesData = await Promise.all(
+        coursesSnapshot.docs.map(async (d) => {
+          const c = d.data() as Course;
+          const dept = deptsData.find((dept) => dept.id === c.department_id);
+          return {
+            ...c,
+            id: d.id,
+            department: dept ? { name: dept.name, code: dept.code } : undefined,
+          } as Course;
+        }),
+      );
       setCourses(coursesData);
 
       // Fetch existing enrollments
       if (user) {
         const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(enrollmentsRef, where("student_id", "==", user.uid));
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+        );
         const enrollSnapshot = await getDocs(qEnroll);
-        setExistingEnrollments(enrollSnapshot.docs.map(d => (d.data() as any).course_id));
+        setExistingEnrollments(
+          enrollSnapshot.docs.map((d) => (d.data() as any).course_id),
+        );
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -175,7 +198,7 @@ export default function Registration() {
     setSelectedCourses((prev) =>
       prev.includes(courseId)
         ? prev.filter((id) => id !== courseId)
-        : [...prev, courseId]
+        : [...prev, courseId],
     );
   };
 
@@ -512,10 +535,10 @@ export default function Registration() {
                             <div className="grid gap-4">
                               {dept.courses.map((course, i) => {
                                 const isSelected = selectedCourses.includes(
-                                  course.id
+                                  course.id,
                                 );
                                 const isEnrolled = existingEnrollments.includes(
-                                  course.id
+                                  course.id,
                                 );
 
                                 return (
@@ -526,12 +549,13 @@ export default function Registration() {
                                     transition={{ delay: i * 0.03 }}
                                   >
                                     <Card
-                                      className={`cursor-pointer transition-all duration-300 hover:shadow-lg group ${isEnrolled
-                                        ? "opacity-60 cursor-not-allowed bg-muted/50"
-                                        : isSelected
-                                          ? "ring-2 ring-secondary shadow-lg shadow-secondary/10 bg-secondary/5"
-                                          : "hover:border-secondary/50"
-                                        }`}
+                                      className={`cursor-pointer transition-all duration-300 hover:shadow-lg group ${
+                                        isEnrolled
+                                          ? "opacity-60 cursor-not-allowed bg-muted/50"
+                                          : isSelected
+                                            ? "ring-2 ring-secondary shadow-lg shadow-secondary/10 bg-secondary/5"
+                                            : "hover:border-secondary/50"
+                                      }`}
                                       onClick={() =>
                                         !isEnrolled && toggleCourse(course.id)
                                       }
@@ -539,10 +563,11 @@ export default function Registration() {
                                       <CardContent className="p-5">
                                         <div className="flex items-start gap-4">
                                           <div
-                                            className={`h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
-                                              ? "bg-secondary text-secondary-foreground"
-                                              : "bg-muted group-hover:bg-secondary/10"
-                                              }`}
+                                            className={`h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                                              isSelected
+                                                ? "bg-secondary text-secondary-foreground"
+                                                : "bg-muted group-hover:bg-secondary/10"
+                                            }`}
                                           >
                                             {isEnrolled ? (
                                               <CheckCircle2 className="h-6 w-6 text-emerald-500" />
@@ -580,12 +605,13 @@ export default function Registration() {
                                           </div>
 
                                           <div
-                                            className={`h-12 w-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${isEnrolled
-                                              ? "bg-emerald-500/10"
-                                              : isSelected
-                                                ? "bg-secondary text-secondary-foreground scale-110"
-                                                : "bg-muted text-muted-foreground group-hover:bg-secondary/20 group-hover:text-secondary"
-                                              }`}
+                                            className={`h-12 w-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                                              isEnrolled
+                                                ? "bg-emerald-500/10"
+                                                : isSelected
+                                                  ? "bg-secondary text-secondary-foreground scale-110"
+                                                  : "bg-muted text-muted-foreground group-hover:bg-secondary/20 group-hover:text-secondary"
+                                            }`}
                                           >
                                             {isEnrolled ? (
                                               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
@@ -615,12 +641,13 @@ export default function Registration() {
                       <Card className="overflow-hidden">
                         <div className="h-2 bg-muted">
                           <motion.div
-                            className={`h-full transition-colors ${creditProgress > 100
-                              ? "bg-destructive"
-                              : creditProgress >= 50
-                                ? "bg-secondary"
-                                : "bg-accent"
-                              }`}
+                            className={`h-full transition-colors ${
+                              creditProgress > 100
+                                ? "bg-destructive"
+                                : creditProgress >= 50
+                                  ? "bg-secondary"
+                                  : "bg-accent"
+                            }`}
                             initial={{ width: 0 }}
                             animate={{
                               width: `${Math.min(creditProgress, 100)}%`,
@@ -634,12 +661,13 @@ export default function Registration() {
                               Credit Load
                             </span>
                             <span
-                              className={`text-lg font-bold ${totalCredits > MAX_CREDITS
-                                ? "text-destructive"
-                                : totalCredits >= MIN_CREDITS
-                                  ? "text-emerald-500"
-                                  : ""
-                                }`}
+                              className={`text-lg font-bold ${
+                                totalCredits > MAX_CREDITS
+                                  ? "text-destructive"
+                                  : totalCredits >= MIN_CREDITS
+                                    ? "text-emerald-500"
+                                    : ""
+                              }`}
                             >
                               {totalCredits}/{MAX_CREDITS}
                             </span>
@@ -686,7 +714,7 @@ export default function Registration() {
                                 <AnimatePresence mode="popLayout">
                                   {selectedCourses.map((id) => {
                                     const course = courses.find(
-                                      (c) => c.id === id
+                                      (c) => c.id === id,
                                     );
                                     if (!course) return null;
                                     return (
