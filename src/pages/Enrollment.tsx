@@ -82,24 +82,48 @@ export default function Enrollment() {
   const [selectedSemester, setSelectedSemester] = useState<string>("all");
 
   useEffect(() => {
-    if (user) fetchEnrollments();
+    if (user?.uid) fetchEnrollments();
   }, [user]);
 
   const fetchEnrollments = async () => {
+    if (!user?.uid) return;
     try {
-      const { data, error } = await supabase
-        .from("enrollments")
-        .select(
-          `
-          *,
-          course:courses(id, code, title, credits, semester)
-        `
-        )
-        .eq("student_id", user?.id)
-        .order("enrolled_at", { ascending: false });
+      const q = query(
+        collection(db, "enrollments"),
+        where("student_id", "==", user.uid),
+        orderBy("enrolled_at", "desc")
+      );
 
-      if (error) throw error;
-      setEnrollments(data || []);
+      const querySnapshot = await getDocs(q);
+      const enrollmentData = querySnapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      })) as any[];
+
+      // Manual join: Fetch course details for each enrollment
+      const fullEnrollments = await Promise.all(
+        enrollmentData.map(async (e) => {
+          if (e.course_id) {
+            const courseDoc = await getDoc(doc(db, "courses", e.course_id));
+            if (courseDoc.exists()) {
+              const c = courseDoc.data();
+              return {
+                ...e,
+                course: {
+                  id: courseDoc.id,
+                  code: c.code,
+                  title: c.title,
+                  credits: Number(c.credits) || 0,
+                  semester: c.semester,
+                },
+              };
+            }
+          }
+          return e;
+        })
+      );
+
+      setEnrollments(fullEnrollments);
     } catch (error) {
       console.error("Error fetching enrollments:", error);
     } finally {
