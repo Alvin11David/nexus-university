@@ -44,15 +44,12 @@ import {
   doc,
   orderBy,
   or,
+  and,
   serverTimestamp,
   getDoc,
   limit,
 } from "firebase/firestore";
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface Message {
   id: string;
@@ -115,7 +112,7 @@ export default function LecturerMessages() {
 
   const downloadAttachment = async (
     attachmentPath: string,
-    attachmentName: string
+    attachmentName: string,
   ) => {
     try {
       const storageRef = ref(storage, attachmentPath);
@@ -148,12 +145,12 @@ export default function LecturerMessages() {
       const q = query(
         collection(db, "profiles"),
         where("role", "==", "student"),
-        orderBy("full_name")
+        orderBy("full_name"),
       );
       const querySnapshot = await getDocs(q);
       const data = querySnapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter(p => p.id !== user.uid);
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((p) => p.id !== user.uid);
 
       setStudents(data);
     } catch (error) {
@@ -173,35 +170,44 @@ export default function LecturerMessages() {
           collection(db, "messages"),
           where("to_user_id", "==", user.uid),
           where("is_deleted_by_recipient", "==", false),
-          orderBy("created_at", "desc")
         );
       } else if (selectedView === "sent") {
         q = query(
           collection(db, "messages"),
           where("from_user_id", "==", user.uid),
           where("is_deleted_by_sender", "==", false),
-          orderBy("created_at", "desc")
         );
       } else if (selectedView === "starred") {
         q = query(
           collection(db, "messages"),
-          where("is_starred", "==", true),
-          or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid)),
-          orderBy("created_at", "desc")
+          and(
+            where("is_starred", "==", true),
+            or(
+              where("to_user_id", "==", user.uid),
+              where("from_user_id", "==", user.uid),
+            ),
+          ),
         );
       } else {
         return;
       }
 
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(d => {
+      const data = querySnapshot.docs.map((d) => {
         const docData = d.data() as any;
         return {
           id: d.id,
           ...docData,
-          created_at: docData.created_at?.toDate?.()?.toISOString() || docData.created_at
+          created_at:
+            docData.created_at?.toDate?.()?.toISOString() || docData.created_at,
         };
       }) as Message[];
+
+      // Sort messages locally since compound queries with 'or' and 'where' might require indexes
+      data.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
 
       if (data.length === 0) {
         setMessages([]);
@@ -222,10 +228,10 @@ export default function LecturerMessages() {
         const chunk = idsArray.slice(i, i + 30);
         const profilesQuery = query(
           collection(db, "profiles"),
-          where("__name__", "in", chunk)
+          where("__name__", "in", chunk),
         );
         const profilesSnap = await getDocs(profilesQuery);
-        profilesSnap.forEach(doc => {
+        profilesSnap.forEach((doc) => {
           profileMap.set(doc.id, doc.data());
         });
       }
@@ -300,7 +306,7 @@ export default function LecturerMessages() {
 
       // Notify the student recipient
       const senderName = profile?.full_name || "Lecturer";
-      
+
       await addDoc(collection(db, "notifications"), {
         user_id: composeToId,
         title: `New message from ${senderName}`,
@@ -308,7 +314,7 @@ export default function LecturerMessages() {
         type: "info",
         link: "/webmail",
         created_at: serverTimestamp(),
-        is_read: false
+        is_read: false,
       });
 
       // Emit event to update notification counts
@@ -349,8 +355,8 @@ export default function LecturerMessages() {
 
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === messageId ? { ...m, is_starred: !currentValue } : m
-        )
+          m.id === messageId ? { ...m, is_starred: !currentValue } : m,
+        ),
       );
     } catch (error) {
       console.error("Error toggling star:", error);
@@ -385,7 +391,7 @@ export default function LecturerMessages() {
       await updateDoc(messageRef, { is_read: true });
 
       setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m))
+        prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m)),
       );
     } catch (error) {
       console.error("Error marking as read:", error);
@@ -412,7 +418,7 @@ export default function LecturerMessages() {
   });
 
   const unreadCount = messages.filter(
-    (m) => !m.is_read && m.to_user_id === user?.uid
+    (m) => !m.is_read && m.to_user_id === user?.uid,
   ).length;
 
   const getInitials = (name: string) => {
@@ -497,10 +503,11 @@ export default function LecturerMessages() {
               <button
                 key={view}
                 onClick={() => setSelectedView(view)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedView === view
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted/60 text-foreground hover:bg-muted"
-                  }`}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  selectedView === view
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/60 text-foreground hover:bg-muted"
+                }`}
               >
                 {view === "inbox" && <Inbox className="inline h-4 w-4 mr-1" />}
                 {view === "sent" && <Send className="inline h-4 w-4 mr-1" />}
@@ -546,13 +553,15 @@ export default function LecturerMessages() {
                   custom={i}
                 >
                   <Card
-                    className={`border-border/60 cursor-pointer transition-all hover:shadow-md ${!message.is_read && message.to_user_id === user?.id
-                      ? "bg-primary/5 border-primary/30"
-                      : "bg-card/70 backdrop-blur-lg"
-                      } ${selectedMessage?.id === message.id
+                    className={`border-border/60 cursor-pointer transition-all hover:shadow-md ${
+                      !message.is_read && message.to_user_id === user?.uid
+                        ? "bg-primary/5 border-primary/30"
+                        : "bg-card/70 backdrop-blur-lg"
+                    } ${
+                      selectedMessage?.id === message.id
                         ? "ring-2 ring-primary"
                         : ""
-                      }`}
+                    }`}
                     onClick={() => handleMessageClick(message)}
                   >
                     <CardContent className="pt-4">
@@ -569,16 +578,17 @@ export default function LecturerMessages() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p
-                                className={`font-semibold truncate ${!message.is_read &&
-                                  message.to_user_id === user?.id
-                                  ? "font-bold text-foreground"
-                                  : "text-foreground"
-                                  }`}
+                                className={`font-semibold truncate ${
+                                  !message.is_read &&
+                                  message.to_user_id === user?.uid
+                                    ? "font-bold text-foreground"
+                                    : "text-foreground"
+                                }`}
                               >
                                 {displayProfile?.full_name || "Unknown User"}
                               </p>
                               {!message.is_read &&
-                                message.to_user_id === user?.id && (
+                                message.to_user_id === user?.uid && (
                                   <div className="h-2 w-2 rounded-full bg-primary" />
                                 )}
                             </div>
@@ -593,7 +603,7 @@ export default function LecturerMessages() {
                                 new Date(message.created_at),
                                 {
                                   addSuffix: true,
-                                }
+                                },
                               )}
                             </p>
                           </div>
@@ -608,10 +618,11 @@ export default function LecturerMessages() {
                             title={message.is_starred ? "Unstar" : "Star"}
                           >
                             <Star
-                              className={`h-4 w-4 ${message.is_starred
-                                ? "fill-primary text-primary"
-                                : "text-muted-foreground"
-                                }`}
+                              className={`h-4 w-4 ${
+                                message.is_starred
+                                  ? "fill-primary text-primary"
+                                  : "text-muted-foreground"
+                              }`}
                             />
                           </button>
                           <button
@@ -650,7 +661,7 @@ export default function LecturerMessages() {
                   value={composeToId || ""}
                   onChange={(e) => {
                     const selectedStudent = students.find(
-                      (s) => s.id === e.target.value
+                      (s) => s.id === e.target.value,
                     );
                     setComposeToId(e.target.value);
                     setComposeTo(selectedStudent?.email || "");
@@ -786,7 +797,9 @@ export default function LecturerMessages() {
                             ? getInitials(selectedMessage.to_profile.full_name)
                             : "?"
                           : selectedMessage.from_profile?.full_name
-                            ? getInitials(selectedMessage.from_profile.full_name)
+                            ? getInitials(
+                                selectedMessage.from_profile.full_name,
+                              )
                             : "?"}
                       </AvatarFallback>
                     </Avatar>
@@ -805,7 +818,7 @@ export default function LecturerMessages() {
                     <p className="text-xs text-muted-foreground">
                       {formatDistanceToNow(
                         new Date(selectedMessage.created_at),
-                        { addSuffix: true }
+                        { addSuffix: true },
                       )}
                     </p>
                   </div>
@@ -822,7 +835,7 @@ export default function LecturerMessages() {
                         onClick={() =>
                           downloadAttachment(
                             selectedMessage.attachment_url!,
-                            selectedMessage.attachment_name || "attachment"
+                            selectedMessage.attachment_name || "attachment",
                           )
                         }
                         className="gap-2"
@@ -831,7 +844,7 @@ export default function LecturerMessages() {
                         {selectedMessage.attachment_name}{" "}
                         {selectedMessage.attachment_size &&
                           `(${(selectedMessage.attachment_size / 1024).toFixed(
-                            1
+                            1,
                           )} KB)`}
                       </Button>
                     </div>
