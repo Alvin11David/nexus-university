@@ -108,7 +108,7 @@ export default function LecturerAssignments() {
         // Fetch assignments from Firestore
         const assignmentsQuery = query(
           collection(db, "Assignments"),
-          where("lecturer_id", "==", user.uid)
+          where("lecturer_id", "==", user.uid),
         );
         const snapshot = await getDocs(assignmentsQuery);
         const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
@@ -278,7 +278,7 @@ export default function LecturerAssignments() {
             user_id: studentId,
             title: `New Assignment: ${formData.title}`,
             message: `A new assignment has been added to your course. Due: ${new Date(
-              formData.dueDate
+              formData.dueDate,
             ).toLocaleDateString()}`,
             type: "assignment",
             related_id: assignmentDoc.id,
