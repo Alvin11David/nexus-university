@@ -180,81 +180,55 @@ export default function EditQuiz() {
 
     try {
       setSaving(true);
+      if (!id) return;
 
       // Update quiz data
-      const { error: quizError } = await supabase
-        .from("quizzes")
-        .update({
-          title: quizData.title,
-          description: quizData.description,
-          course_id: quizData.courseId,
-          course_title: quizData.courseTitle,
-          course_code: quizData.courseCode,
-          time_limit: quizData.timeLimit,
-          passing_score: quizData.passingScore,
-          start_date: quizData.startDate
-            ? new Date(quizData.startDate).toISOString()
-            : null,
-          end_date: quizData.endDate
-            ? new Date(quizData.endDate).toISOString()
-            : null,
-          status: quizData.status,
-          attempts_allowed: quizData.attemptsAllowed,
-          shuffle_questions: quizData.shuffleQuestions,
-          show_answers: quizData.showAnswers,
-        })
-        .eq("id", id)
-        .eq("lecturer_id", user.id);
+      const quizRef = doc(db, "quizzes", id);
+      await updateDoc(quizRef, {
+        title: quizData.title,
+        description: quizData.description,
+        course_id: quizData.courseId,
+        course_title: quizData.courseTitle,
+        course_code: quizData.courseCode,
+        time_limit: quizData.timeLimit,
+        passing_score: quizData.passingScore,
+        start_date: quizData.startDate,
+        end_date: quizData.endDate,
+        status: quizData.status,
+        attempts_allowed: quizData.attemptsAllowed,
+        shuffle_questions: quizData.shuffleQuestions,
+        show_answers: quizData.showAnswers,
+        updated_at: Timestamp.now()
+      });
 
-      if (quizError) throw quizError;
+      // Handle questions
+      const questionsRef = collection(db, "quiz_questions");
+      const existingQsQuery = query(questionsRef, where("quiz_id", "==", id));
+      const existingQsSnap = await getDocs(existingQsQuery);
+      
+      const batch = writeBatch(db);
+      
+      // Delete existing
+      existingQsSnap.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      // Add new ones
+      questions.forEach(q => {
+        const newQRef = doc(collection(db, "quiz_questions"));
+        batch.set(newQRef, {
+          quiz_id: id,
+          question: q.question,
+          type: q.type,
+          options: q.options || [],
+          correct_answer: q.correct_answer,
+          points: q.points,
+          explanation: q.explanation || "",
+          created_at: Timestamp.now()
+        });
+      });
 
-      // Handle questions - delete existing and insert new ones
-      try {
-        // Delete existing questions
-        const { error: deleteError } = await supabase
-          .from("quiz_questions")
-          .delete()
-          .eq("quiz_id", id);
-
-        if (deleteError) {
-          console.log(
-            "Error deleting existing questions:",
-            deleteError.message,
-          );
-        }
-
-        // Insert new questions
-        if (questions.length > 0) {
-          const questionInserts = questions.map((q) => ({
-            quiz_id: id,
-            question: q.question,
-            type: q.type,
-            options: q.options,
-            correct_answer: q.correct_answer,
-            points: q.points,
-            explanation: q.explanation,
-          }));
-
-          const { error: questionsError } = await supabase
-            .from("quiz_questions")
-            .insert(questionInserts as any);
-
-          if (questionsError) {
-            console.log(
-              "Database question save failed, storing locally:",
-              questionsError.message,
-            );
-            // Store in localStorage as fallback
-            const storageKey = `quiz_questions_${id}`;
-            localStorage.setItem(storageKey, JSON.stringify(questions));
-          }
-        }
-      } catch (questionsError) {
-        console.log("Question save failed, storing locally:", questionsError);
-        // Store in localStorage as fallback
-        const storageKey = `quiz_questions_${id}`;
-        localStorage.setItem(storageKey, JSON.stringify(questions));
-      }
+      await batch.commit();
 
       toast({
         title: "Success",
