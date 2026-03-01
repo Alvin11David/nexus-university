@@ -18,9 +18,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { addDoc, collection } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  setDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
 
 interface StudentGrade {
   id: string;
@@ -98,7 +106,7 @@ export default function LecturerGradeBook() {
 
   useEffect(() => {
     if (user) {
-      console.log("Fetching courses for user:", user.id);
+      console.log("Fetching courses for user:", user.uid);
       fetchLecturerCourses();
     }
   }, [user]);
@@ -111,57 +119,43 @@ export default function LecturerGradeBook() {
 
   const fetchLecturerCourses = async () => {
     try {
-      if (!user?.id) {
-        console.error("User ID not available");
-        return;
-      }
+      if (!user?.uid) return;
 
-      console.log("Fetching courses for lecturer:", user.id);
+      const q = query(
+        collection(db, "lecturer_courses"),
+        where("lecturer_id", "==", user.uid)
+      );
+      const querySnapshot = await getDocs(q);
 
-      // First, try to fetch just the lecturer_courses records
-      const { data: lecturerCourses, error: lcError } = await supabase
-        .from("lecturer_courses")
-        .select("course_id")
-        .eq("lecturer_id", user.id);
-
-      if (lcError) {
-        console.error("Error fetching lecturer_courses:", lcError);
-        throw lcError;
-      }
-
-      console.log("Lecturer courses:", lecturerCourses);
-
-      if (!lecturerCourses || lecturerCourses.length === 0) {
-        console.warn("No courses found for this lecturer");
+      if (querySnapshot.empty) {
         setCourses([]);
-        alert("No courses assigned. Please contact administrator.");
         return;
       }
 
-      // Now fetch the course details for each course_id
-      const courseIds = lecturerCourses.map((lc: any) => lc.course_id);
+      const lecturerCoursesData = querySnapshot.docs.map(doc => doc.data());
+      const courseIds = lecturerCoursesData.map(lc => lc.course_id);
 
-      const { data: coursesData, error: coursesError } = await supabase
-        .from("courses")
-        .select("id, code, title")
-        .in("id", courseIds);
-
-      if (coursesError) {
-        console.error("Error fetching courses:", coursesError);
-        throw coursesError;
+      // Fetch course details chunked (max 30 ids per 'in' query)
+      const coursesData: any[] = [];
+      for (let i = 0; i < courseIds.length; i += 30) {
+        const chunk = courseIds.slice(i, i + 30);
+        const coursesQuery = query(
+          collection(db, "courses"),
+          where("__name__", "in", chunk)
+        );
+        const coursesSnap = await getDocs(coursesQuery);
+        coursesSnap.forEach(doc => {
+          coursesData.push({ id: doc.id, ...doc.data() });
+        });
       }
 
-      const coursesList = (coursesData as any) || [];
-      console.log("Courses data:", coursesList);
-      setCourses(coursesList);
+      setCourses(coursesData);
 
-      if (coursesList && coursesList.length > 0 && !selectedCourse) {
-        console.log("Auto-selecting first course:", coursesList[0].id);
-        setSelectedCourse(coursesList[0].id);
+      if (coursesData.length > 0 && !selectedCourse) {
+        setSelectedCourse(coursesData[0].id);
       }
     } catch (error) {
       console.error("Error fetching courses:", error);
-      alert("Failed to load courses. Check console for details.");
     }
   };
 
@@ -171,106 +165,88 @@ export default function LecturerGradeBook() {
     try {
       setLoading(true);
 
-      // Fetch enrolled students (just the enrollment records)
-      const { data: enrollments, error: enrollError } = await supabase
-        .from("enrollments")
-        .select("student_id")
-        .eq("course_id", selectedCourse)
-        .eq("status", "approved");
+      // Fetch enrolled students
+      const enrollQuery = query(
+        collection(db, "enrollments"),
+        where("course_id", "==", selectedCourse),
+        where("status", "==", "approved")
+      );
+      const enrollSnap = await getDocs(enrollQuery);
 
-      if (enrollError) throw enrollError;
-
-      if (!enrollments || enrollments.length === 0) {
+      if (enrollSnap.empty) {
         setStudents([]);
         return;
       }
 
-      const studentIds = enrollments.map((e: any) => e.student_id);
+      const studentIds = enrollSnap.docs.map(doc => doc.data().student_id);
 
-      // Fetch student profiles
-      const { data: profilesData, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", studentIds);
-
-      if (profilesError) {
-        console.warn("Could not fetch profiles:", profilesError);
-        // Continue without profiles - we'll use student IDs instead
+      // Fetch student profiles chunked
+      const profilesMap: Record<string, any> = {};
+      for (let i = 0; i < studentIds.length; i += 30) {
+        const chunk = studentIds.slice(i, i + 30);
+        const profilesQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk)
+        );
+        const profilesSnap = await getDocs(profilesQuery);
+        profilesSnap.forEach(doc => {
+          profilesMap[doc.id] = doc.data();
+        });
       }
 
-      const profilesMap =
-        (profilesData as any)?.reduce((acc: any, p: any) => {
-          acc[p.id] = p;
-          return acc;
-        }, {}) || {};
-
-      // Fetch existing grades
-      let grades: any[] = [];
-      try {
-        // @ts-ignore - student_grades table will be added in migration
-        const response = await (supabase as any)
-          .from("student_grades")
-          .select("*")
-          .eq("course_id", selectedCourse)
-          .in("student_id", studentIds);
-
-        if (!response.error) {
-          grades = response.data || [];
-        } else {
-          console.warn("Could not fetch grades:", response.error);
-        }
-      } catch (e) {
-        console.warn("Grades table not yet available");
-      }
-
-      // Merge enrollments with profiles and grades
-      const studentsWithGrades: StudentGrade[] = enrollments.map(
-        (enrollment: any) => {
-          const profile = profilesMap[enrollment.student_id];
-          const existingGrade: any = grades?.find(
-            (g: any) => g.student_id === enrollment.student_id,
-          );
-
-          const assignment1 = existingGrade?.assignment1 || 0;
-          const assignment2 = existingGrade?.assignment2 || 0;
-          const midterm = existingGrade?.midterm || 0;
-          const participation = existingGrade?.participation || 0;
-          const finalExam = existingGrade?.final_exam || 0;
-
-          // Calculate total (weighted average)
-          const total = existingGrade?.total || 0;
-          const { grade, gp } = calculateGrade(total);
-
-          let status: StudentGrade["status"] = "average";
-          if (total >= 90) status = "excellent";
-          else if (total >= 80) status = "good";
-          else if (total >= 60) status = "average";
-          else if (total >= 50) status = "warning";
-          else status = "failing";
-
-          return {
-            id: enrollment.student_id,
-            student_id: enrollment.student_id,
-            name: profile?.full_name || "Unknown",
-            email: profile?.email || "",
-            assignment1,
-            assignment2,
-            midterm,
-            participation,
-            finalExam,
-            total,
-            grade: existingGrade?.grade || grade,
-            gp: existingGrade?.gp || gp,
-            status,
-            grade_id: existingGrade?.id,
-          };
-        },
+      // Fetch existing grades for this course
+      const gradesQuery = query(
+        collection(db, "student_grades"),
+        where("course_id", "==", selectedCourse)
       );
+      const gradesSnap = await getDocs(gradesQuery);
+      const gradesMap: Record<string, any> = {};
+      gradesSnap.forEach(doc => {
+        gradesMap[doc.data().student_id] = { ...doc.data(), id: doc.id };
+      });
+
+      // Merge data
+      const studentsWithGrades: StudentGrade[] = studentIds.map(sid => {
+        const profile = profilesMap[sid];
+        const existingGrade = gradesMap[sid];
+
+        const assignment1 = existingGrade?.assignment1 || 0;
+        const assignment2 = existingGrade?.assignment2 || 0;
+        const midterm = existingGrade?.midterm || 0;
+        const participation = existingGrade?.participation || 0;
+        const finalExam = existingGrade?.final_exam || 0;
+        const total = existingGrade?.total || 0;
+
+        const { grade, gp } = calculateGrade(total);
+
+        let status: StudentGrade["status"] = "average";
+        if (total >= 90) status = "excellent";
+        else if (total >= 80) status = "good";
+        else if (total >= 60) status = "average";
+        else if (total >= 50) status = "warning";
+        else status = "failing";
+
+        return {
+          id: sid,
+          student_id: sid,
+          name: profile?.full_name || "Unknown",
+          email: profile?.email || "",
+          assignment1,
+          assignment2,
+          midterm,
+          participation,
+          finalExam,
+          total,
+          grade: existingGrade?.grade || grade,
+          gp: existingGrade?.gp || gp,
+          status,
+          grade_id: existingGrade?.id,
+        };
+      });
 
       setStudents(studentsWithGrades);
     } catch (error) {
       console.error("Error fetching students and grades:", error);
-      alert("Failed to load students and grades");
     } finally {
       setLoading(false);
     }
@@ -325,7 +301,7 @@ export default function LecturerGradeBook() {
       const gradeData = {
         student_id: student.student_id,
         course_id: selectedCourse,
-        lecturer_id: user.id,
+        lecturer_id: user.uid,
         assignment1: student.assignment1,
         assignment2: student.assignment2,
         midterm: student.midterm,
@@ -337,35 +313,22 @@ export default function LecturerGradeBook() {
         semester: "Spring",
         academic_year: "2025-2026",
         saved_at: new Date().toISOString(),
+        updated_at: serverTimestamp(),
       };
 
-      // Save to Firestore 'StudentGrades' collection
-      await addDoc(collection(db, "StudentGrades"), gradeData);
+      // Use sid_cid as the doc ID for upsert behavior
+      const gradeRef = doc(db, "student_grades", `${student.student_id}_${selectedCourse}`);
+      await setDoc(gradeRef, gradeData, { merge: true });
 
-      try {
-        // @ts-ignore - student_grades table will be added in migration
-        const response = await (supabase as any)
-          .from("student_grades")
-          .upsert([gradeData], {
-            onConflict: "student_id,course_id,semester,academic_year",
-          });
+      await sendGradeUpdateNotification(student);
 
-        if (response.error) throw response.error;
+      setChangedGrades((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(studentId);
+        return newSet;
+      });
 
-        // Send notification to student
-        await sendGradeUpdateNotification(student);
-
-        // Mark as no longer changed
-        setChangedGrades((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(studentId);
-          return newSet;
-        });
-
-        console.log(`Grade saved for student ${student.name}`);
-      } catch (e) {
-        console.warn("Could not save grade to database", e);
-      }
+      console.log(`Grade saved for student ${student.name}`);
     } catch (error) {
       console.error("Error saving grade:", error);
     }
@@ -378,25 +341,18 @@ export default function LecturerGradeBook() {
       const courseData = courses.find((c) => c.id === selectedCourse);
       const courseName = courseData?.title || courseData?.code || "Course";
 
-      // Create notification in database
-      const { error } = await supabase.from("notifications").insert([
-        {
-          user_id: student.student_id,
-          type: "grade_update",
-          title: "Grade Updated",
-          message: `Your grades for ${courseName} have been updated. Total: ${student.total.toFixed(
-            1,
-          )}%, Grade: ${student.grade}`,
-          related_id: selectedCourse,
-          is_read: false,
-        },
-      ]);
-
-      if (error) {
-        console.warn("Could not send notification:", error);
-      } else {
-        console.log(`Notification sent to ${student.name}`);
-      }
+      await addDoc(collection(db, "notifications"), {
+        user_id: student.student_id,
+        type: "grade_update",
+        title: "Grade Updated",
+        message: `Your grades for ${courseName} have been updated. Total: ${student.total.toFixed(
+          1,
+        )}%, Grade: ${student.grade}`,
+        related_id: selectedCourse,
+        is_read: false,
+        created_at: serverTimestamp(),
+      });
+      console.log(`Notification sent to ${student.name}`);
     } catch (error) {
       console.error("Error sending notification:", error);
     }
@@ -408,59 +364,16 @@ export default function LecturerGradeBook() {
     try {
       setSaving(true);
 
-      const upsertData = students.map((student) => ({
-        student_id: student.student_id,
-        course_id: selectedCourse,
-        lecturer_id: user.id,
-        assignment1: student.assignment1,
-        assignment2: student.assignment2,
-        midterm: student.midterm,
-        participation: student.participation,
-        final_exam: student.finalExam,
-        total: student.total,
-        grade: student.grade,
-        gp: student.gp,
-        semester: "Spring",
-        academic_year: "2025-2026",
-        saved_at: new Date().toISOString(),
-      }));
-
-      // Save all grades to Firestore 'StudentGrades' collection
-      for (const grade of upsertData) {
-        await addDoc(collection(db, "StudentGrades"), grade);
+      for (const studentId of Array.from(changedGrades)) {
+        await saveSingleStudentGrade(studentId);
       }
 
-      try {
-        // @ts-ignore - student_grades table will be added in migration
-        const response = await (supabase as any)
-          .from("student_grades")
-          .upsert(upsertData, {
-            onConflict: "student_id,course_id,semester,academic_year",
-          });
-
-        if (response.error) throw response.error;
-
-        // Send notifications to all changed students
-        for (const student of students) {
-          if (changedGrades.has(student.id)) {
-            await sendGradeUpdateNotification(student);
-          }
-        }
-
-        // Clear changed grades
-        setChangedGrades(new Set());
-
-        alert("Grades saved successfully!");
-        fetchStudentsAndGrades();
-      } catch (e) {
-        console.warn(
-          "Could not save to database - student_grades table not yet available",
-        );
-        alert("Local changes saved. Database table will be available soon.");
-      }
+      setChangedGrades(new Set());
+      alert("Grades saved successfully!");
+      fetchStudentsAndGrades();
     } catch (error) {
       console.error("Error saving grades:", error);
-      alert("Failed to save grades. Please try again.");
+      alert("Failed to save some grades. Please try again.");
     } finally {
       setSaving(false);
     }

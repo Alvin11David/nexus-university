@@ -667,7 +667,6 @@ export default function RegistrarStudentDetail() {
                       </p>
                     </div>
                   </div>
-
                   <div className="border-t pt-6">
                     <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex gap-3">
                       <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-shrink-0" />

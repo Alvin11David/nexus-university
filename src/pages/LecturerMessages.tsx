@@ -31,9 +31,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+import { useAuth } from "@/contexts/AuthContext";
+import { db, storage } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  updateDoc,
+  doc,
+  orderBy,
+  or,
+  serverTimestamp,
+  getDoc,
+  limit,
+} from "firebase/firestore";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
 
 interface Message {
   id: string;
@@ -95,25 +114,20 @@ export default function LecturerMessages() {
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const downloadAttachment = async (
-    attachmentUrl: string,
+    attachmentPath: string,
     attachmentName: string
   ) => {
     try {
-      const { data, error } = await supabase.storage
-        .from("message-attachments")
-        .download(attachmentUrl);
+      const storageRef = ref(storage, attachmentPath);
+      const url = await getDownloadURL(storageRef);
 
-      if (error) throw error;
-
-      // Create a download link
-      const url = URL.createObjectURL(data);
       const a = document.createElement("a");
       a.href = url;
       a.download = attachmentName;
+      a.target = "_blank"; // Open in new tab if download is not forced by browser
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
     } catch (error) {
       console.error("Error downloading attachment:", error);
       alert("Failed to download attachment");
@@ -129,76 +143,94 @@ export default function LecturerMessages() {
 
   const fetchStudents = async () => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url, role")
-        .neq("id", user?.id)
-        .eq("role", "student")
-        .order("full_name");
+      if (!user?.uid) return;
 
-      if (error) throw error;
-      setStudents(data || []);
+      const q = query(
+        collection(db, "profiles"),
+        where("role", "==", "student"),
+        orderBy("full_name")
+      );
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(p => p.id !== user.uid);
+
+      setStudents(data);
     } catch (error) {
       console.error("Error fetching students:", error);
     }
   };
 
   const fetchMessages = async () => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     try {
       setLoading(true);
-      let query = supabase
-        .from("messages")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let q;
 
       if (selectedView === "inbox") {
-        query = query
-          .eq("to_user_id", user.id)
-          .eq("is_deleted_by_recipient", false);
+        q = query(
+          collection(db, "messages"),
+          where("to_user_id", "==", user.uid),
+          where("is_deleted_by_recipient", "==", false),
+          orderBy("created_at", "desc")
+        );
       } else if (selectedView === "sent") {
-        query = query
-          .eq("from_user_id", user.id)
-          .eq("is_deleted_by_sender", false);
+        q = query(
+          collection(db, "messages"),
+          where("from_user_id", "==", user.uid),
+          where("is_deleted_by_sender", "==", false),
+          orderBy("created_at", "desc")
+        );
       } else if (selectedView === "starred") {
-        query = query
-          .eq("is_starred", true)
-          .or(`to_user_id.eq.${user.id},from_user_id.eq.${user.id}`);
+        q = query(
+          collection(db, "messages"),
+          where("is_starred", "==", true),
+          or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid)),
+          orderBy("created_at", "desc")
+        );
+      } else {
+        return;
       }
 
-      const { data, error } = await query;
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(d => {
+        const docData = d.data() as any;
+        return {
+          id: d.id,
+          ...docData,
+          created_at: docData.created_at?.toDate?.()?.toISOString() || docData.created_at
+        };
+      }) as Message[];
 
-      if (error) throw error;
-
-      if (!data || data.length === 0) {
+      if (data.length === 0) {
         setMessages([]);
         return;
       }
 
-      // Get unique user IDs from messages
+      // Get unique user IDs
       const userIds = new Set<string>();
       data.forEach((msg) => {
         userIds.add(msg.from_user_id);
         userIds.add(msg.to_user_id);
       });
 
-      // Fetch profiles for all users
-      const { data: profiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .in("id", Array.from(userIds));
-
-      if (profilesError) {
-        console.error("Error fetching profiles:", profilesError);
-        setMessages(data);
-        return;
+      // Fetch profiles chunked
+      const profileMap = new Map<string, any>();
+      const idsArray = Array.from(userIds);
+      for (let i = 0; i < idsArray.length; i += 30) {
+        const chunk = idsArray.slice(i, i + 30);
+        const profilesQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk)
+        );
+        const profilesSnap = await getDocs(profilesQuery);
+        profilesSnap.forEach(doc => {
+          profileMap.set(doc.id, doc.data());
+        });
       }
 
-      // Create a map for quick lookup
-      const profileMap = new Map(profiles?.map((p) => [p.id, p]) || []);
-
-      // Attach profiles to messages
+      // Attach profiles
       const messagesWithProfiles = data.map((msg) => ({
         ...msg,
         from_profile: profileMap.get(msg.from_user_id) || null,
@@ -235,16 +267,11 @@ export default function LecturerMessages() {
       if (attachmentFile) {
         setUploadingAttachment(true);
         const fileExt = attachmentFile.name.split(".").pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+        const fileName = `message-attachments/${user.uid}/${Date.now()}.${fileExt}`;
+        const storageRef = ref(storage, fileName);
 
-        const { error: uploadError } = await supabase.storage
-          .from("message-attachments")
-          .upload(fileName, attachmentFile);
-
-        if (uploadError) {
-          console.error("Upload error:", uploadError);
-          throw new Error("Failed to upload attachment");
-        }
+        await uploadBytes(storageRef, attachmentFile);
+        const downloadUrl = await getDownloadURL(storageRef);
 
         attachmentUrl = fileName;
         attachmentName = attachmentFile.name;
@@ -252,8 +279,8 @@ export default function LecturerMessages() {
         setUploadingAttachment(false);
       }
 
-      const { error } = await supabase.from("messages").insert({
-        from_user_id: user.id,
+      const messageData = {
+        from_user_id: user.uid,
         to_user_id: composeToId,
         subject: composeSubject,
         body: composeBody,
@@ -266,28 +293,26 @@ export default function LecturerMessages() {
         attachment_url: attachmentUrl,
         attachment_name: attachmentName,
         attachment_size: attachmentSize,
-      });
+        created_at: serverTimestamp(),
+      };
 
-      if (error) throw error;
+      await addDoc(collection(db, "messages"), messageData);
 
       // Notify the student recipient
       const senderName = profile?.full_name || "Lecturer";
-      const { error: notifError } = await supabase
-        .from("notifications")
-        .insert({
-          user_id: composeToId,
-          title: `New message from ${senderName}`,
-          message: composeSubject || "You have a new message",
-          type: "info",
-          link: "/webmail",
-        });
+      
+      await addDoc(collection(db, "notifications"), {
+        user_id: composeToId,
+        title: `New message from ${senderName}`,
+        message: composeSubject || "You have a new message",
+        type: "info",
+        link: "/webmail",
+        created_at: serverTimestamp(),
+        is_read: false
+      });
 
-      if (notifError) {
-        console.error("Error creating notification:", notifError);
-      } else {
-        // Emit event to update notification counts
-        window.dispatchEvent(new Event("notifications-updated"));
-      }
+      // Emit event to update notification counts
+      window.dispatchEvent(new Event("notifications-updated"));
 
       // Reset compose form
       setComposeTo("");
@@ -319,12 +344,8 @@ export default function LecturerMessages() {
 
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
     try {
-      const { error } = await supabase
-        .from("messages")
-        .update({ is_starred: !currentValue })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      const messageRef = doc(db, "messages", messageId);
+      await updateDoc(messageRef, { is_starred: !currentValue });
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -337,23 +358,19 @@ export default function LecturerMessages() {
   };
 
   const handleDelete = async (messageId: string) => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     try {
       const message = messages.find((m) => m.id === messageId);
       if (!message) return;
 
-      const isSent = message.from_user_id === user.id;
+      const isSent = message.from_user_id === user.uid;
       const updateField = isSent
         ? "is_deleted_by_sender"
         : "is_deleted_by_recipient";
 
-      const { error } = await supabase
-        .from("messages")
-        .update({ [updateField]: true })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      const messageRef = doc(db, "messages", messageId);
+      await updateDoc(messageRef, { [updateField]: true });
 
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
       setSelectedMessage(null);
@@ -364,12 +381,8 @@ export default function LecturerMessages() {
 
   const markAsRead = async (messageId: string) => {
     try {
-      const { error } = await supabase
-        .from("messages")
-        .update({ is_read: true })
-        .eq("id", messageId);
-
-      if (error) throw error;
+      const messageRef = doc(db, "messages", messageId);
+      await updateDoc(messageRef, { is_read: true });
 
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m))
@@ -381,7 +394,7 @@ export default function LecturerMessages() {
 
   const handleMessageClick = (message: Message) => {
     setSelectedMessage(message);
-    if (!message.is_read && message.to_user_id === user?.id) {
+    if (!message.is_read && message.to_user_id === user?.uid) {
       markAsRead(message.id);
     }
   };
@@ -399,7 +412,7 @@ export default function LecturerMessages() {
   });
 
   const unreadCount = messages.filter(
-    (m) => !m.is_read && m.to_user_id === user?.id
+    (m) => !m.is_read && m.to_user_id === user?.uid
   ).length;
 
   const getInitials = (name: string) => {
@@ -485,8 +498,8 @@ export default function LecturerMessages() {
                 key={view}
                 onClick={() => setSelectedView(view)}
                 className={`px-4 py-2 rounded-lg font-medium transition-all ${selectedView === view
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted/60 text-foreground hover:bg-muted"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/60 text-foreground hover:bg-muted"
                   }`}
               >
                 {view === "inbox" && <Inbox className="inline h-4 w-4 mr-1" />}
@@ -534,8 +547,8 @@ export default function LecturerMessages() {
                 >
                   <Card
                     className={`border-border/60 cursor-pointer transition-all hover:shadow-md ${!message.is_read && message.to_user_id === user?.id
-                        ? "bg-primary/5 border-primary/30"
-                        : "bg-card/70 backdrop-blur-lg"
+                      ? "bg-primary/5 border-primary/30"
+                      : "bg-card/70 backdrop-blur-lg"
                       } ${selectedMessage?.id === message.id
                         ? "ring-2 ring-primary"
                         : ""
@@ -557,9 +570,9 @@ export default function LecturerMessages() {
                             <div className="flex items-center gap-2 mb-1">
                               <p
                                 className={`font-semibold truncate ${!message.is_read &&
-                                    message.to_user_id === user?.id
-                                    ? "font-bold text-foreground"
-                                    : "text-foreground"
+                                  message.to_user_id === user?.id
+                                  ? "font-bold text-foreground"
+                                  : "text-foreground"
                                   }`}
                               >
                                 {displayProfile?.full_name || "Unknown User"}
@@ -596,8 +609,8 @@ export default function LecturerMessages() {
                           >
                             <Star
                               className={`h-4 w-4 ${message.is_starred
-                                  ? "fill-primary text-primary"
-                                  : "text-muted-foreground"
+                                ? "fill-primary text-primary"
+                                : "text-muted-foreground"
                                 }`}
                             />
                           </button>
