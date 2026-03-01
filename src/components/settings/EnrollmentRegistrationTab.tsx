@@ -12,6 +12,7 @@ import {
   Download,
   Eye,
   Printer,
+  BookMarked,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui/button";
@@ -43,10 +44,21 @@ interface Enrollment {
   };
 }
 
+interface CourseUnit {
+  id: string;
+  code: string;
+  title: string;
+  credits: number;
+  semester: string;
+  year: number;
+}
+
 export function EnrollmentRegistrationTab() {
   const { user, profile } = useAuth();
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [courseUnits, setCourseUnits] = useState<CourseUnit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUnits, setLoadingUnits] = useState(false);
   const [fees, setFees] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [paymentPercentage, setPaymentPercentage] = useState(0);
@@ -58,6 +70,50 @@ export function EnrollmentRegistrationTab() {
       fetchPaymentData();
     }
   }, [user]);
+
+  useEffect(() => {
+    if (profile?.programme) {
+      fetchCourseUnits(profile.programme);
+    }
+  }, [profile?.programme]);
+
+  const fetchCourseUnits = async (programTitle: string) => {
+    try {
+      setLoadingUnits(true);
+      // First, find the course (program) ID by its title
+      const courseQ = query(
+        collection(db, "courses"),
+        where("title", "==", programTitle),
+        limit(1)
+      );
+      const courseSnap = await getDocs(courseQ);
+
+      if (courseSnap.empty) {
+        console.warn("No course found matching program title:", programTitle);
+        setCourseUnits([]);
+        return;
+      }
+
+      const courseId = courseSnap.docs[0].id;
+
+      // Now fetch course units for this course_id
+      const unitsQ = query(
+        collection(db, "course_units"),
+        where("course_id", "==", courseId)
+      );
+      const unitsSnap = await getDocs(unitsQ);
+      const unitsData = unitsSnap.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      })) as CourseUnit[];
+
+      setCourseUnits(unitsData);
+    } catch (error) {
+      console.error("Error fetching course units:", error);
+    } finally {
+      setLoadingUnits(false);
+    }
+  };
 
   const fetchPaymentData = async () => {
     try {
@@ -664,6 +720,72 @@ export function EnrollmentRegistrationTab() {
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Course Units of Selected Program */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Program Course Units</CardTitle>
+              <CardDescription>
+                Units available for {profile?.programme || "your program"}
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-sm">
+              {courseUnits.length} Units
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingUnits ? (
+            <div className="grid gap-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-20 rounded-xl bg-muted animate-pulse"
+                />
+              ))}
+            </div>
+          ) : courseUnits.length === 0 ? (
+            <div className="text-center py-12">
+              <BookMarked className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="font-semibold text-lg mb-2">No units found</h3>
+              <p className="text-muted-foreground mb-4">
+                No course units are available for the selected program
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {courseUnits.map((unit, i) => (
+                <motion.div
+                  key={unit.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  className="flex items-center justify-between p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-secondary/10 flex items-center justify-center">
+                      <GraduationCap className="h-6 w-6 text-secondary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="font-mono text-xs">
+                          {unit.code}
+                        </Badge>
+                      </div>
+                      <p className="font-medium">{unit.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {unit.credits} Credits • {unit.semester} {unit.year}
+                      </p>
+                    </div>
+                  </div>
                 </motion.div>
               ))}
             </div>
