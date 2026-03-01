@@ -35,7 +35,8 @@ import {
   addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { db, storage } from "@/integrations/firebase/client";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/components/ui/use-toast";
 
 interface StudentAssignment {
@@ -308,10 +309,30 @@ export default function StudentAssignments() {
         feedback: null,
       };
 
-      // If there's a file, upload it first (simplified - in real app you'd use Firebase Storage)
+      // If there's a file, upload it to Firebase Storage
       if (submissionFile) {
-        // For now, just store the file name. In a real app, upload to Firebase Storage
-        submissionData.file_url = `uploaded/${submissionFile.name}`;
+        try {
+          // Create a unique filename to avoid conflicts
+          const timestamp = Date.now();
+          const fileExtension = submissionFile.name.split(".").pop();
+          const uniqueFileName = `${user.uid}_${timestamp}_${selectedAssignment.id}.${fileExtension}`;
+
+          // Upload file to Firebase Storage
+          const storageRef = ref(storage, `submissions/${uniqueFileName}`);
+          await uploadBytes(storageRef, submissionFile);
+
+          // Get the download URL
+          const downloadURL = await getDownloadURL(storageRef);
+          submissionData.file_url = downloadURL;
+        } catch (error) {
+          console.error("Error uploading file:", error);
+          toast({
+            title: "Upload failed",
+            description: "Failed to upload file. Please try again.",
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
       // Save submission to database
