@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import { collection, getDocs, query, orderBy, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface Program {

@@ -127,7 +127,7 @@ export default function EditQuiz() {
         toast({
           title: "Error",
           description: "Quiz not found",
-          variant: "destructive"
+          variant: "destructive",
         });
         navigate("/lecturer/quiz");
         return;
@@ -155,10 +155,10 @@ export default function EditQuiz() {
       const questionsRef = collection(db, "quiz_questions");
       const q = query(questionsRef, where("quiz_id", "==", id));
       const questionsSnap = await getDocs(q);
-      
-      const formattedQuestions = questionsSnap.docs.map(doc => ({
+
+      const formattedQuestions = questionsSnap.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       })) as any[];
 
       setQuestions(formattedQuestions);
@@ -198,23 +198,23 @@ export default function EditQuiz() {
         attempts_allowed: quizData.attemptsAllowed,
         shuffle_questions: quizData.shuffleQuestions,
         show_answers: quizData.showAnswers,
-        updated_at: Timestamp.now()
+        updated_at: Timestamp.now(),
       });
 
       // Handle questions
       const questionsRef = collection(db, "quiz_questions");
       const existingQsQuery = query(questionsRef, where("quiz_id", "==", id));
       const existingQsSnap = await getDocs(existingQsQuery);
-      
+
       const batch = writeBatch(db);
-      
+
       // Delete existing
-      existingQsSnap.docs.forEach(doc => {
+      existingQsSnap.docs.forEach((doc) => {
         batch.delete(doc.ref);
       });
-      
+
       // Add new ones
-      questions.forEach(q => {
+      questions.forEach((q) => {
         const newQRef = doc(collection(db, "quiz_questions"));
         batch.set(newQRef, {
           quiz_id: id,
@@ -224,7 +224,7 @@ export default function EditQuiz() {
           correct_answer: q.correct_answer,
           points: q.points,
           explanation: q.explanation || "",
-          created_at: Timestamp.now()
+          created_at: Timestamp.now(),
         });
       });
 
