@@ -29,8 +29,10 @@ import {
   where,
   getDocs,
   addDoc,
+  updateDoc,
   deleteDoc,
   doc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/components/ui/use-toast";
@@ -366,69 +368,42 @@ export default function LecturerAssignments() {
       // Upload new instruction document if provided
       if (editFormData.instructionDocument) {
         setUploadingDocument(true);
-        const fileName = `${user.id}/${Date.now()}-${
+        const fileName = `${user.uid}/${Date.now()}-${
           editFormData.instructionDocument.name
         }`;
-        const { data, error } = await supabase.storage
-          .from("assignment-documents")
-          .upload(fileName, editFormData.instructionDocument);
-
-        if (error) throw new Error(`Document upload failed: ${error.message}`);
-
-        if (data) {
-          const {
-            data: { publicUrl },
-          } = supabase.storage
-            .from("assignment-documents")
-            .getPublicUrl(fileName);
-          instructionDocUrl = publicUrl;
-          instructionDocName = editFormData.instructionDocument.name;
-        }
+        const fileRef = ref(storage, `assignment-documents/${fileName}`);
+        await uploadBytes(fileRef, editFormData.instructionDocument);
+        instructionDocUrl = await getDownloadURL(fileRef);
+        instructionDocName = editFormData.instructionDocument.name;
         setUploadingDocument(false);
       }
 
-      const { error, data } = await supabase
-        .from("assignments")
-        .update({
-          title: editFormData.title,
-          description: editFormData.description,
-          due_date: new Date(editFormData.dueDate).toISOString(),
-          total_points: editFormData.totalPoints,
-          course_id: editFormData.courseId,
-          instruction_document_url: instructionDocUrl,
-          instruction_document_name: instructionDocName,
-        })
-        .eq("id", editing.id)
-        .eq("lecturer_id", user.id)
-        .select(
-          `id, title, description, due_date, total_points, status, course_id,
-           instruction_document_url, instruction_document_name,
-           assignment_submissions(count),
-           courses:course_id(title, code)`,
-        )
-        .single();
+      const assignmentUpdate = {
+        title: editFormData.title,
+        description: editFormData.description,
+        due_date: new Date(editFormData.dueDate).toISOString(),
+        total_points: editFormData.totalPoints,
+        course_id: editFormData.courseId,
+        instruction_document_url: instructionDocUrl,
+        instruction_document_name: instructionDocName,
+        updated_at: serverTimestamp(),
+      };
 
-      if (error) {
-        toast({
-          title: "Update failed",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
+      await updateDoc(doc(db, "Assignments", editing.id), assignmentUpdate);
 
+      const course = courses.find((c) => c.id === editFormData.courseId);
       const updated: Assignment = {
-        id: (data as any).id,
-        title: (data as any).title,
-        description: (data as any).description || "",
-        dueDate: (data as any).due_date,
-        totalPoints: (data as any).total_points ?? 100,
-        submissions: (data as any).assignment_submissions?.[0]?.count ?? 0,
+        id: editing.id,
+        title: editFormData.title,
+        description: editFormData.description || "",
+        dueDate: new Date(editFormData.dueDate).toISOString(),
+        totalPoints: editFormData.totalPoints,
+        submissions: editing.submissions,
         totalStudents: editing.totalStudents,
-        status: ((data as any).status as Assignment["status"]) || "draft",
-        courseTitle: (data as any).courses?.title,
-        instructionDocumentUrl: instructionDocUrl,
-        instructionDocumentName: instructionDocName,
+        status: editing.status,
+        courseTitle: course?.title,
+        instructionDocumentUrl: instructionDocUrl || undefined,
+        instructionDocumentName: instructionDocName || undefined,
       };
 
       setAssignments((prev) =>
