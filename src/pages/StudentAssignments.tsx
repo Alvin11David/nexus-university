@@ -11,14 +11,30 @@ import {
   Filter,
   BookOpen,
   ClipboardList,
+  Upload,
+  X,
 } from "lucide-react";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -58,6 +74,10 @@ export default function StudentAssignments() {
   const [selectedAssignment, setSelectedAssignment] =
     useState<StudentAssignment | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [showSubmissionForm, setShowSubmissionForm] = useState(false);
+  const [submissionText, setSubmissionText] = useState("");
+  const [submissionFile, setSubmissionFile] = useState<File | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   // Load assignments for enrolled courses
   useEffect(() => {
@@ -72,11 +92,15 @@ export default function StudentAssignments() {
         const qEnroll = query(
           enrollmentsRef,
           where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"])
+          where("status", "in", ["approved", "pending"]),
         );
         const enrollSnap = await getDocs(qEnroll);
 
-        const courseIds = enrollSnap.docs.map(d => d.data().course_id).filter(Boolean);
+        const courseIds = enrollSnap.docs
+          .map((d) => d.data().course_id)
+          .filter(Boolean);
+        console.log("Enrolled course IDs:", courseIds);
+        console.log("Enrollment docs:", enrollSnap.docs.length);
 
         if (courseIds.length === 0) {
           setAssignments([]);
@@ -85,79 +109,123 @@ export default function StudentAssignments() {
         }
 
         // Get all assignments for these courses
-        const assignmentsRef = collection(db, "assignments");
+        const assignmentsRef = collection(db, "Assignments");
         const assignmentsData: any[] = [];
         for (let i = 0; i < courseIds.length; i += 10) {
           const chunk = courseIds.slice(i, i + 10);
-          const qAssign = query(assignmentsRef, where("course_id", "in", chunk), orderBy("due_date", "asc"));
+          const qAssign = query(
+            assignmentsRef,
+            where("course_id", "in", chunk),
+          );
           const assignSnap = await getDocs(qAssign);
-          assignmentsData.push(...assignSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          console.log(
+            `Assignments found for courses ${chunk}:`,
+            assignSnap.docs.length,
+          );
+          assignmentsData.push(
+            ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          );
         }
 
-        if (assignmentsData.length === 0) {
+        console.log("Total assignments found:", assignmentsData.length);
+        console.log("Assignments data:", assignmentsData);
+
+        // Filter to show assignments that are visible to students (not closed or graded)
+        const publishedAssignments = assignmentsData
+          .filter((a) => a.status !== "closed" && a.status !== "graded")
+          .sort(
+            (a, b) =>
+              new Date(a.due_date).getTime() - new Date(b.due_date).getTime(),
+          );
+        console.log("Published assignments:", publishedAssignments.length);
+        console.log(
+          "Assignment statuses found:",
+          assignmentsData.map((a) => ({ title: a.title, status: a.status })),
+        );
+        console.log(
+          "Visible assignments:",
+          publishedAssignments.map((a) => ({
+            title: a.title,
+            status: a.status,
+          })),
+        );
+
+        if (publishedAssignments.length === 0) {
           setAssignments([]);
           setLoading(false);
           return;
         }
 
-        const assignmentIds = assignmentsData.map(a => a.id);
+        const assignmentIds = publishedAssignments.map((a) => a.id);
 
         // Get student's submissions for these assignments
         const submissionsRef = collection(db, "submissions");
         const submissionsData: any[] = [];
         for (let i = 0; i < assignmentIds.length; i += 10) {
           const chunk = assignmentIds.slice(i, i + 10);
-          const qSubs = query(submissionsRef, where("student_id", "==", user.uid), where("assignment_id", "in", chunk));
+          const qSubs = query(
+            submissionsRef,
+            where("student_id", "==", user.uid),
+            where("assignment_id", "in", chunk),
+          );
           const subSnap = await getDocs(qSubs);
-          submissionsData.push(...subSnap.docs.map(d => d.data()));
+          submissionsData.push(...subSnap.docs.map((d) => d.data()));
         }
 
         // Fetch course details for these assignments
-        const uniqueCourseIds = Array.from(new Set(assignmentsData.map(a => a.course_id)));
+        const uniqueCourseIds = Array.from(
+          new Set(publishedAssignments.map((a) => a.course_id)),
+        );
         const courseMap = new Map();
         for (let i = 0; i < uniqueCourseIds.length; i += 10) {
           const chunk = uniqueCourseIds.slice(i, i + 10);
-          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const qCourse = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
           const courseSnap = await getDocs(qCourse);
-          courseSnap.docs.forEach(d => courseMap.set(d.id, d.data()));
+          courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
         }
 
         // Map assignments with submission status
-        const mapped: StudentAssignment[] = assignmentsData.map((assignment: any) => {
-          const submission = submissionsData.find(
-            (s) => s.assignment_id === assignment.id
-          );
+        const mapped: StudentAssignment[] = publishedAssignments.map(
+          (assignment: any) => {
+            const submission = submissionsData.find(
+              (s) => s.assignment_id === assignment.id,
+            );
 
-          let status: "pending" | "submitted" | "graded" = "pending";
-          if (submission?.status === "submitted") {
-            status = submission.score !== undefined ? "graded" : "submitted";
-          }
+            let status: "pending" | "submitted" | "graded" = "pending";
+            if (submission?.status === "submitted") {
+              status = submission.score !== undefined ? "graded" : "submitted";
+            }
 
-          const course = courseMap.get(assignment.course_id);
+            const course = courseMap.get(assignment.course_id);
 
-          return {
-            id: assignment.id,
-            title: assignment.title,
-            description: assignment.description || "",
-            dueDate: assignment.due_date,
-            totalPoints: assignment.total_points ?? 100,
-            courseTitle: course?.title || "Course",
-            courseCode: course?.code || "",
-            status,
-            instructionDocumentUrl: assignment.instruction_document_url,
-            instructionDocumentName: assignment.instruction_document_name,
-            submissionStatus: submission?.status,
-            score: submission?.score,
-            feedback: submission?.feedback,
-          };
-        });
+            return {
+              id: assignment.id,
+              title: assignment.title,
+              description: assignment.description || "",
+              dueDate: assignment.due_date,
+              totalPoints: assignment.total_points ?? 100,
+              courseTitle: course?.name || "Course", // Changed from title to name
+              courseCode: course?.code || "",
+              status,
+              instructionDocumentUrl: assignment.instruction_document_url,
+              instructionDocumentName: assignment.instruction_document_name,
+              submissionStatus: submission?.status,
+              score: submission?.score,
+              feedback: submission?.feedback,
+            };
+          },
+        );
 
         setAssignments(mapped);
       } catch (error: any) {
         console.error("Error loading assignments:", error);
         toast({
           title: "Could not load assignments",
-          description: error.message || "There was an error loading your assignments.",
+          description:
+            error.message || "There was an error loading your assignments.",
           variant: "destructive",
         });
       } finally {
@@ -209,6 +277,258 @@ export default function StudentAssignments() {
       });
     } finally {
       setDownloading(false);
+    }
+  };
+
+  const handleSubmitAssignment = async () => {
+    if (!user || !selectedAssignment) return;
+
+    if (!submissionText.trim() && !submissionFile) {
+      toast({
+        title: "Submission required",
+        description: "Please provide either text content or upload a file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      // Create submission data
+      const submissionData = {
+        student_id: user.uid,
+        assignment_id: selectedAssignment.id,
+        content: submissionText.trim(),
+        file_url: null, // Will be updated if file is uploaded
+        file_name: submissionFile?.name || null,
+        status: "submitted",
+        submitted_at: serverTimestamp(),
+        score: null,
+        feedback: null,
+      };
+
+      // If there's a file, upload it first (simplified - in real app you'd use Firebase Storage)
+      if (submissionFile) {
+        // For now, just store the file name. In a real app, upload to Firebase Storage
+        submissionData.file_url = `uploaded/${submissionFile.name}`;
+      }
+
+      // Save submission to database
+      await addDoc(collection(db, "submissions"), submissionData);
+
+      toast({
+        title: "Assignment submitted! 🎉",
+        description: "Your assignment has been submitted successfully.",
+      });
+
+      // Reset form and close modal
+      setSubmissionText("");
+      setSubmissionFile(null);
+      setShowSubmissionForm(false);
+      setSelectedAssignment(null);
+
+      // Refresh assignments to update status
+      if (user) {
+        const loadAssignments = async () => {
+          try {
+            setLoading(true);
+
+            // Get all courses the student is enrolled in
+            const enrollmentsRef = collection(db, "enrollments");
+            const qEnroll = query(
+              enrollmentsRef,
+              where("student_id", "==", user.uid),
+              where("status", "in", ["approved", "pending"]),
+            );
+            const enrollSnap = await getDocs(qEnroll);
+
+            const courseIds = enrollSnap.docs
+              .map((d) => d.data().course_id)
+              .filter(Boolean);
+
+            if (courseIds.length === 0) {
+              setAssignments([]);
+              setLoading(false);
+              return;
+            }
+
+            // Get all assignments for these courses
+            const assignmentsRef = collection(db, "Assignments");
+            const assignmentsData: any[] = [];
+            for (let i = 0; i < courseIds.length; i += 10) {
+              const chunk = courseIds.slice(i, i + 10);
+              const qAssign = query(
+                assignmentsRef,
+                where("course_id", "in", chunk),
+              );
+              const assignSnap = await getDocs(qAssign);
+              assignmentsData.push(
+                ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+              );
+            }
+
+            if (assignmentsData.length === 0) {
+              setAssignments([]);
+              setLoading(false);
+              return;
+            }
+
+            const assignmentIds = assignmentsData.map((a) => a.id);
+
+            // Get student's submissions for these assignments
+            const submissionsRef = collection(db, "submissions");
+            const submissionsData: any[] = [];
+            for (let i = 0; i < assignmentIds.length; i += 10) {
+              const chunk = assignmentIds.slice(i, i + 10);
+              const qSubs = query(
+                submissionsRef,
+                where("student_id", "==", user.uid),
+                where("assignment_id", "in", chunk),
+              );
+              const subSnap = await getDocs(qSubs);
+              submissionsData.push(...subSnap.docs.map((d) => d.data()));
+            }
+
+            // Fetch course details for these assignments
+            const uniqueCourseIds = Array.from(
+              new Set(assignmentsData.map((a) => a.course_id)),
+            );
+            const courseMap = new Map();
+            for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+              const chunk = uniqueCourseIds.slice(i, i + 10);
+              const qCourse = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseSnap = await getDocs(qCourse);
+              courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+            }
+
+            // Filter to show assignments that are visible to students (not closed or graded)
+            const publishedAssignments = assignmentsData
+              .filter((a) => a.status !== "closed" && a.status !== "graded")
+              .sort(
+                (a, b) =>
+                  new Date(a.due_date).getTime() -
+                  new Date(b.due_date).getTime(),
+              );
+
+            console.log("Published assignments:", publishedAssignments.length);
+            console.log(
+              "Assignment statuses found:",
+              assignmentsData.map((a) => ({
+                title: a.title,
+                status: a.status,
+              })),
+            );
+            console.log(
+              "Visible assignments:",
+              publishedAssignments.map((a) => ({
+                title: a.title,
+                status: a.status,
+              })),
+            );
+
+            if (publishedAssignments.length === 0) {
+              setAssignments([]);
+              setLoading(false);
+              return;
+            }
+
+            // Map assignments with submission status
+            const mapped: StudentAssignment[] = publishedAssignments.map(
+              (assignment: any) => {
+                const submission = submissionsData.find(
+                  (s) => s.assignment_id === assignment.id,
+                );
+
+                let status: "pending" | "submitted" | "graded" = "pending";
+                if (submission?.status === "submitted") {
+                  status =
+                    submission.score !== undefined ? "graded" : "submitted";
+                }
+
+                const course = courseMap.get(assignment.course_id);
+
+                return {
+                  id: assignment.id,
+                  title: assignment.title,
+                  description: assignment.description || "",
+                  dueDate: assignment.due_date,
+                  totalPoints: assignment.total_points ?? 100,
+                  courseTitle: course?.name || "Course",
+                  courseCode: course?.code || "",
+                  status,
+                  instructionDocumentUrl: assignment.instruction_document_url,
+                  instructionDocumentName: assignment.instruction_document_name,
+                  submissionStatus: submission?.status,
+                  score: submission?.score,
+                  feedback: submission?.feedback,
+                };
+              },
+            );
+
+            setAssignments(mapped);
+          } catch (error) {
+            console.error("Error loading assignments:", error);
+            toast({
+              title: "Error loading assignments",
+              description: "Could not load assignments. Please try again.",
+              variant: "destructive",
+            });
+          } finally {
+            setLoading(false);
+          }
+        };
+        loadAssignments();
+      }
+    } catch (error) {
+      console.error("Submission error:", error);
+      toast({
+        title: "Submission failed",
+        description: "Could not submit assignment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Basic file validation
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      const allowedTypes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain",
+        "image/jpeg",
+        "image/png",
+      ];
+
+      if (file.size > maxSize) {
+        toast({
+          title: "File too large",
+          description: "Please select a file smaller than 10MB.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!allowedTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description:
+            "Please select a PDF, Word document, text file, or image.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setSubmissionFile(file);
     }
   };
 
@@ -410,7 +730,7 @@ export default function StudentAssignments() {
                         <Badge
                           variant="outline"
                           className={`${getStatusColor(
-                            assignment.status
+                            assignment.status,
                           )} flex items-center gap-1 whitespace-nowrap`}
                         >
                           {getStatusIcon(assignment.status)}
@@ -427,7 +747,7 @@ export default function StudentAssignments() {
                           <span
                             className={
                               isOverdue(assignment.dueDate) &&
-                                assignment.status === "pending"
+                              assignment.status === "pending"
                                 ? "text-red-600 font-semibold"
                                 : "text-muted-foreground"
                             }
@@ -478,7 +798,7 @@ export default function StudentAssignments() {
                               handleDownloadDocument(
                                 assignment.instructionDocumentUrl!,
                                 assignment.instructionDocumentName ||
-                                "assignment-document.pdf"
+                                  "assignment-document.pdf",
                               );
                             }}
                             disabled={downloading}
@@ -541,7 +861,7 @@ export default function StudentAssignments() {
                 <Badge
                   variant="outline"
                   className={`${getStatusColor(
-                    selectedAssignment.status
+                    selectedAssignment.status,
                   )} flex items-center gap-1 w-fit`}
                 >
                   {getStatusIcon(selectedAssignment.status)}
@@ -609,7 +929,7 @@ export default function StudentAssignments() {
                     handleDownloadDocument(
                       selectedAssignment.instructionDocumentUrl!,
                       selectedAssignment.instructionDocumentName ||
-                      "assignment-document.pdf"
+                        "assignment-document.pdf",
                     )
                   }
                   disabled={downloading}
@@ -630,11 +950,125 @@ export default function StudentAssignments() {
                 Close
               </Button>
               {selectedAssignment.status === "pending" && (
-                <Button className="flex-1 gap-2">
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => setShowSubmissionForm(true)}
+                >
                   <FileText className="h-4 w-4" />
                   Submit Assignment
                 </Button>
               )}
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Submission Form Modal */}
+      {showSubmissionForm && selectedAssignment && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setShowSubmissionForm(false)}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-card border border-border/60 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-4"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-2 flex-1">
+                <h2 className="text-2xl font-bold">Submit Assignment</h2>
+                <p className="text-muted-foreground">
+                  {selectedAssignment.title}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSubmissionForm(false)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Text Submission */}
+              <div className="space-y-2">
+                <Label htmlFor="submission-text">Assignment Content</Label>
+                <Textarea
+                  id="submission-text"
+                  placeholder="Type your assignment submission here..."
+                  value={submissionText}
+                  onChange={(e) => setSubmissionText(e.target.value)}
+                  rows={6}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* File Upload */}
+              <div className="space-y-2">
+                <Label htmlFor="file-upload">Upload Document (Optional)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="file-upload"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png"
+                    onChange={handleFileChange}
+                    className="flex-1"
+                  />
+                  {submissionFile && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSubmissionFile(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {submissionFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {submissionFile.name} (
+                    {(submissionFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Supported formats: PDF, Word documents, text files, images.
+                  Max size: 10MB
+                </p>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-4">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowSubmissionForm(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={handleSubmitAssignment}
+                disabled={
+                  submitting || (!submissionText.trim() && !submissionFile)
+                }
+              >
+                {submitting ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Submit Assignment
+                  </>
+                )}
+              </Button>
             </div>
           </motion.div>
         </motion.div>
