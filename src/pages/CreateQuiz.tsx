@@ -18,9 +18,8 @@ import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { addDoc, collection } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { db } from "@/firebase";
+import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CourseOption {

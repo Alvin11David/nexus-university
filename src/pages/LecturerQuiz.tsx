@@ -145,8 +145,7 @@ export default function LecturerQuiz() {
       });
 
       // Check for expired quizzes and auto-close them
-      // NOTE: We'll need to update autoCloseExpiredQuizzes utility to use Firebase
-      const expiredQuizIds = await autoCloseExpiredQuizzes(db, user.uid);
+      const expiredQuizIds = await autoCloseExpiredQuizzes(user.uid);
 
       // Update local quiz data for expired quizzes
       if (
