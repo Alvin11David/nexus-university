@@ -346,25 +346,25 @@ export default function Index() {
 
             <div className="flex flex-wrap justify-center gap-8 md:gap-12 text-sm text-zinc-500 font-bold tracking-tight">
               <Link
-                to="/about"
+                to="/"
                 className="hover:text-violet-600 transition-colors"
               >
                 Institute
               </Link>
               <Link
-                to="/features"
+                to="/"
                 className="hover:text-violet-600 transition-colors"
               >
                 Governance
               </Link>
               <Link
-                to="/support"
+                to="/"
                 className="hover:text-violet-600 transition-colors"
               >
                 Resources
               </Link>
               <Link
-                to="/privacy"
+                to="/"
                 className="hover:text-violet-600 transition-colors"
               >
                 Terms
