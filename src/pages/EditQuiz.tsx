@@ -109,86 +109,59 @@ export default function EditQuiz() {
 
   // Load quiz data
   useEffect(() => {
-    if (id && user?.id) {
+    if (id && user?.uid) {
       loadQuiz();
     }
-  }, [id, user?.id]);
+  }, [id, user?.uid]);
 
   const loadQuiz = async () => {
     try {
       setLoading(true);
+      if (!id) return;
 
       // Load quiz data
-      // @ts-ignore - Supabase type instantiation issue
-      const { data: quiz, error: quizError } = await supabase
-        .from("quizzes")
-        .select("*")
-        .eq("id", id)
-        .eq("lecturer_id", user?.id)
-        .single();
+      const quizRef = doc(db, "quizzes", id);
+      const quizSnap = await getDoc(quizRef);
 
-      if (quizError) throw quizError;
+      if (!quizSnap.exists()) {
+        toast({
+          title: "Error",
+          description: "Quiz not found",
+          variant: "destructive"
+        });
+        navigate("/lecturer/quiz");
+        return;
+      }
 
-      // Type assertion to handle schema differences
-      const quizData = quiz as any;
+      const qData = quizSnap.data();
 
       setQuizData({
-        title: quizData.title || "",
-        description: quizData.description || "",
-        courseId: quizData.course_id || "",
-        courseTitle: quizData.course_title || "",
-        courseCode: quizData.course_code || "",
-        timeLimit: quizData.time_limit || quizData.time_limit_minutes || 30,
-        passingScore: quizData.passing_score || 70,
-        startDate: quizData.start_date
-          ? new Date(quizData.start_date).toISOString().split("T")[0]
-          : "",
-        endDate: quizData.end_date
-          ? new Date(quizData.end_date).toISOString().split("T")[0]
-          : "",
-        status: quizData.status || "draft",
-        attemptsAllowed:
-          quizData.attempts_allowed || quizData.max_attempts || 1,
-        shuffleQuestions: quizData.shuffle_questions || false,
-        showAnswers: quizData.show_answers || false,
+        title: qData.title || "",
+        description: qData.description || "",
+        courseId: qData.course_id || "",
+        courseTitle: qData.course_title || "",
+        courseCode: qData.course_code || "",
+        timeLimit: qData.time_limit || 30,
+        passingScore: qData.passing_score || 70,
+        startDate: qData.start_date || "",
+        endDate: qData.end_date || "",
+        status: (qData.status as any) || "draft",
+        attemptsAllowed: qData.attempts_allowed || 1,
+        shuffleQuestions: qData.shuffle_questions || false,
+        showAnswers: qData.show_answers || false,
       });
 
       // Load questions
-      try {
-        const { data: questionsData, error: questionsError } = await supabase
-          .from("quiz_questions")
-          .select("*")
-          .eq("quiz_id", id)
-          .order("created_at", { ascending: true });
+      const questionsRef = collection(db, "quiz_questions");
+      const q = query(questionsRef, where("quiz_id", "==", id));
+      const questionsSnap = await getDocs(q);
+      
+      const formattedQuestions = questionsSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as any[];
 
-        if (!questionsError && questionsData) {
-          const formattedQuestions = questionsData.map((q: any) => ({
-            id: q.id,
-            question: q.question,
-            type: q.type,
-            options: q.options ? JSON.parse(JSON.stringify(q.options)) : [],
-            correct_answer: String(q.correct_answer), // Ensure it's a string
-            points: q.points,
-            explanation: q.explanation || "",
-          }));
-          setQuestions(formattedQuestions);
-        } else {
-          // Try to load from localStorage as fallback
-          const storageKey = `quiz_questions_${id}`;
-          const storedQuestions = localStorage.getItem(storageKey);
-          if (storedQuestions) {
-            setQuestions(JSON.parse(storedQuestions));
-          }
-        }
-      } catch (questionsError) {
-        console.log("Error loading questions:", questionsError);
-        // Try localStorage fallback
-        const storageKey = `quiz_questions_${id}`;
-        const storedQuestions = localStorage.getItem(storageKey);
-        if (storedQuestions) {
-          setQuestions(JSON.parse(storedQuestions));
-        }
-      }
+      setQuestions(formattedQuestions);
     } catch (error: any) {
       console.error("Error loading quiz:", error);
       toast({
