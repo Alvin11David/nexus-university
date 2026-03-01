@@ -174,11 +174,11 @@ export function EnrollmentRegistrationTab() {
       const q = query(
         collection(db, "enrollments"),
         where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc"),
       );
 
       const snap = await getDocs(q);
       const enrollmentDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      console.log("Enrollment data:", enrollmentDocs);
 
       if (enrollmentDocs.length === 0) {
         setEnrollments([]);
@@ -194,7 +194,7 @@ export function EnrollmentRegistrationTab() {
       for (let i = 0; i < courseIds.length; i += 10) {
         const chunk = courseIds.slice(i, i + 10);
         const courseQ = query(
-          collection(db, "courses"),
+          collection(db, "course_units"),
           where("__name__", "in", chunk),
         );
         const courseSnap = await getDocs(courseQ);
@@ -203,16 +203,27 @@ export function EnrollmentRegistrationTab() {
         });
       }
 
-      const enrollmentData = enrollmentDocs.map((e: any) => ({
-        ...e,
-        course: courseMap[e.course_id] || {
-          code: "N/A",
-          title: "N/A",
-          credits: 0,
-          semester: "N/A",
-          year: 0,
-        },
-      }));
+      const enrollmentData = enrollmentDocs.map((e: any) => {
+        const courseData = courseMap[e.course_id];
+        return {
+          ...e,
+          course: courseData
+            ? {
+                code: courseData.code,
+                title: courseData.name, // Map 'name' to 'title'
+                credits: courseData.credits,
+                semester: courseData.semester,
+                year: courseData.year,
+              }
+            : {
+                code: "N/A",
+                title: "N/A",
+                credits: 0,
+                semester: "N/A",
+                year: 0,
+              },
+        };
+      });
 
       setEnrollments(enrollmentData as Enrollment[]);
     } catch (error) {

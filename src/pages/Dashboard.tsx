@@ -28,7 +28,20 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -78,8 +91,7 @@ type DashboardAssignment = {
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
-  const displayName =
-    profile?.full_name || user?.displayName || "Student";
+  const displayName = profile?.full_name || user?.displayName || "Student";
   const firstName = displayName.split(" ")[0];
   const [stats, setStats] = useState({
     enrolled: 0,
@@ -205,20 +217,27 @@ export default function Dashboard() {
         setLoadingStats(true);
 
         const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(enrollmentsRef, where("student_id", "==", user.uid));
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+        );
         const enrollSnapshot = await getDocs(qEnroll);
-        const enrollments = enrollSnapshot.docs.map(d => d.data());
+        const enrollments = enrollSnapshot.docs.map((d) => d.data());
 
         const enrolledCoursesCount = enrollments.length;
-        const completedCoursesCount = enrollments.filter((e: any) => e.status === "completed").length;
+        const completedCoursesCount = enrollments.filter(
+          (e: any) => e.status === "completed",
+        ).length;
 
-        const courseIds = enrollments.map((e: any) => e.course_id).filter(Boolean);
+        const courseIds = enrollments
+          .map((e: any) => e.course_id)
+          .filter(Boolean);
 
         let pendingAssignmentsCount = 0;
         if (courseIds.length > 0) {
-          // Note: Firestore 'in' queries are limited to 10 items. 
+          // Note: Firestore 'in' queries are limited to 10 items.
           // For more, we'd need to chunk the request.
-          const assignmentsRef = collection(db, "assignments");
+          const assignmentsRef = collection(db, "Assignments");
           const qAssign = query(
             assignmentsRef,
             where("course_id", "in", courseIds.slice(0, 10)),
@@ -226,10 +245,12 @@ export default function Dashboard() {
           );
           const assignSnapshot = await getDocs(qAssign);
           const assignments = assignSnapshot.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter((a: any) => a.due_date && new Date(a.due_date) >= new Date());
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter(
+              (a: any) => a.due_date && new Date(a.due_date) >= new Date(),
+            );
 
-          const assignmentIds = assignments.map(a => a.id);
+          const assignmentIds = assignments.map((a) => a.id);
           let submissions: any[] = [];
 
           if (assignmentIds.length > 0) {
@@ -237,15 +258,15 @@ export default function Dashboard() {
             const qSubs = query(
               subsRef,
               where("student_id", "==", user.uid),
-              where("assignment_id", "in", assignmentIds.slice(0, 10))
+              where("assignment_id", "in", assignmentIds.slice(0, 10)),
             );
             const subsSnapshot = await getDocs(qSubs);
-            submissions = subsSnapshot.docs.map(d => d.data());
+            submissions = subsSnapshot.docs.map((d) => d.data());
           }
 
           pendingAssignmentsCount = assignments.filter((a: any) => {
             const submission = submissions.find(
-              (s) => s.assignment_id === a.id
+              (s) => s.assignment_id === a.id,
             );
             return !submission || submission.status !== "submitted";
           }).length;
@@ -281,10 +302,10 @@ export default function Dashboard() {
         const qEnroll = query(
           enrollmentsRef,
           where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"])
+          where("status", "in", ["approved", "pending"]),
         );
         const enrollSnapshot = await getDocs(qEnroll);
-        const enrollmentsData = enrollSnapshot.docs.map(d => d.data());
+        const enrollmentsData = enrollSnapshot.docs.map((d) => d.data());
 
         const courseIds = enrollmentsData
           .map((enrollment: any) => enrollment.course_id)
@@ -298,16 +319,19 @@ export default function Dashboard() {
           return;
         }
 
-        const assignmentsRef = collection(db, "assignments");
+        const assignmentsRef = collection(db, "Assignments");
         const qAssign = query(
           assignmentsRef,
           where("course_id", "in", courseIds.slice(0, 10)),
-          orderBy("due_date", "asc")
+          orderBy("due_date", "asc"),
         );
         const assignSnapshot = await getDocs(qAssign);
-        const assignmentsData = assignSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const assignmentsData = assignSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
 
-        const assignmentIds = assignmentsData.map(a => a.id);
+        const assignmentIds = assignmentsData.map((a) => a.id);
         let submissions: any[] = [];
 
         if (assignmentIds.length > 0) {
@@ -315,32 +339,38 @@ export default function Dashboard() {
           const qSubs = query(
             subsRef,
             where("student_id", "==", user.uid),
-            where("assignment_id", "in", assignmentIds.slice(0, 10))
+            where("assignment_id", "in", assignmentIds.slice(0, 10)),
           );
           const subsSnapshot = await getDocs(qSubs);
-          submissions = subsSnapshot.docs.map(d => d.data());
+          submissions = subsSnapshot.docs.map((d) => d.data());
         }
 
-        const mappedAssignments = await Promise.all(assignmentsData.map(async (assignment: any) => {
-          const submission = submissions.find(
-            (s) => s.assignment_id === assignment.id
-          );
+        const mappedAssignments = await Promise.all(
+          assignmentsData.map(async (assignment: any) => {
+            const submission = submissions.find(
+              (s) => s.assignment_id === assignment.id,
+            );
 
-          const courseDoc = await getDoc(doc(db, "courses", assignment.course_id));
-          const courseInfo = courseDoc.exists() ? courseDoc.data() : { title: "Course", code: "" };
+            const courseDoc = await getDoc(
+              doc(db, "courses", assignment.course_id),
+            );
+            const courseInfo = courseDoc.exists()
+              ? courseDoc.data()
+              : { title: "Course", code: "" };
 
-          return {
-            id: assignment.id,
-            title: assignment.title,
-            dueDate: assignment.due_date,
-            courseTitle: courseInfo.title || "Course",
-            courseCode: courseInfo.code || "",
-            totalPoints: assignment.total_points,
-            status:
-              submission?.status === "submitted" ? "submitted" : "pending",
-            rawStatus: assignment.status,
-          } as DashboardAssignment;
-        }));
+            return {
+              id: assignment.id,
+              title: assignment.title,
+              dueDate: assignment.due_date,
+              courseTitle: courseInfo.title || "Course",
+              courseCode: courseInfo.code || "",
+              totalPoints: assignment.total_points,
+              status:
+                submission?.status === "submitted" ? "submitted" : "pending",
+              rawStatus: assignment.status,
+            } as DashboardAssignment;
+          }),
+        );
 
         if (isActive) setAssignments(mappedAssignments);
       } catch (error) {
@@ -375,17 +405,21 @@ export default function Dashboard() {
             gradesRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
-            orderBy("semester", "desc")
+            orderBy("semester", "desc"),
           );
           const gradesSnapshot = await getDocs(qGrades);
 
           if (!gradesSnapshot.empty) {
-            data = await Promise.all(gradesSnapshot.docs.map(async d => {
-              const gradeData = d.data();
-              const courseDoc = await getDoc(doc(db, "courses", gradeData.course_id));
-              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-              return { id: d.id, ...gradeData, courses: courseInfo };
-            }));
+            data = await Promise.all(
+              gradesSnapshot.docs.map(async (d) => {
+                const gradeData = d.data();
+                const courseDoc = await getDoc(
+                  doc(db, "courses", gradeData.course_id),
+                );
+                const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+                return { id: d.id, ...gradeData, courses: courseInfo };
+              }),
+            );
           } else {
             throw new Error("No student_grades rows");
           }
@@ -396,15 +430,19 @@ export default function Dashboard() {
             resultsRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
-            orderBy("semester", "desc")
+            orderBy("semester", "desc"),
           );
           const resultsSnapshot = await getDocs(qResults);
-          data = await Promise.all(resultsSnapshot.docs.map(async d => {
-            const resultData = d.data();
-            const courseDoc = await getDoc(doc(db, "courses", resultData.course_id));
-            const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-            return { id: d.id, ...resultData, courses: courseInfo };
-          }));
+          data = await Promise.all(
+            resultsSnapshot.docs.map(async (d) => {
+              const resultData = d.data();
+              const courseDoc = await getDoc(
+                doc(db, "courses", resultData.course_id),
+              );
+              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+              return { id: d.id, ...resultData, courses: courseInfo };
+            }),
+          );
         }
 
         const normalized = (data as any[] | null)?.map((row) => ({
@@ -446,7 +484,7 @@ export default function Dashboard() {
         const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
         const totalPoints = terms.reduce(
           (sum, t) => sum + t.gpa * t.totalCredits,
-          0
+          0,
         );
         const computedCgpa = totalCredits
           ? Number((totalPoints / totalCredits).toFixed(2))
@@ -479,7 +517,11 @@ export default function Dashboard() {
     try {
       // First, find the classroom by join code
       const classroomsRef = collection(db, "classrooms");
-      const q = query(classroomsRef, where("join_code", "==", joinCode.trim()), limit(1));
+      const q = query(
+        classroomsRef,
+        where("join_code", "==", joinCode.trim()),
+        limit(1),
+      );
       const qSnapshot = await getDocs(q);
 
       if (qSnapshot.empty) {
@@ -496,7 +538,7 @@ export default function Dashboard() {
         enrollmentRef,
         where("classroom_id", "==", classroom.id),
         where("student_id", "==", user.uid),
-        limit(1)
+        limit(1),
       );
       const enrollSnapshot = await getDocs(qEnroll);
 
@@ -543,7 +585,10 @@ export default function Dashboard() {
     setIsSubmitting(true);
     try {
       // Generate a unique join code
-      const joinCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const joinCodeGenerated = Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase();
 
       // Create the classroom
       const newClassroomData = {
@@ -553,7 +598,10 @@ export default function Dashboard() {
         created_at: new Date().toISOString(),
       };
 
-      const classroomRef = await addDoc(collection(db, "classrooms"), newClassroomData);
+      const classroomRef = await addDoc(
+        collection(db, "classrooms"),
+        newClassroomData,
+      );
 
       // Add the creator as instructor
       await addDoc(collection(db, "classroom_enrollments"), {
@@ -564,7 +612,7 @@ export default function Dashboard() {
       });
 
       alert(
-        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`
+        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`,
       );
       setShowClassDialog(false);
       setClassName("");
@@ -978,10 +1026,11 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right space-y-1 flex-shrink-0">
                             <span
-                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${isSubmitted
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}
+                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${
+                                isSubmitted
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}
                             >
                               {isSubmitted ? "Submitted" : "Pending"}
                             </span>
@@ -1147,10 +1196,11 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "join"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground"
-                  }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "join"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
               >
                 Join Class
               </button>
@@ -1160,10 +1210,11 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "create"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground"
-                  }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "create"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
               >
                 Create Class
               </button>

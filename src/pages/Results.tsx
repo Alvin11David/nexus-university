@@ -7,7 +7,16 @@ import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 interface ResultCourse {
@@ -86,12 +95,12 @@ export default function Results() {
           sgRef,
           where("student_id", "==", studentId),
           orderBy("academic_year", "desc"),
-          orderBy("semester", "desc")
+          orderBy("semester", "desc"),
         );
         const sgSnap = await getDocs(qSg);
 
         if (!sgSnap.empty) {
-          data = sgSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         } else {
           // Fallback to exam_results
           const erRef = collection(db, "exam_results");
@@ -99,20 +108,25 @@ export default function Results() {
             erRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
-            orderBy("semester", "desc")
+            orderBy("semester", "desc"),
           );
           const erSnap = await getDocs(qEr);
-          data = erSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
         }
 
         // Fetch course details
-        const uniqueCourseIds = Array.from(new Set(data.map(r => r.course_id)));
+        const uniqueCourseIds = Array.from(
+          new Set(data.map((r) => r.course_id)),
+        );
         const courseMap = new Map();
         for (let i = 0; i < uniqueCourseIds.length; i += 10) {
           const chunk = uniqueCourseIds.slice(i, i + 10);
-          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const qCourse = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
           const courseSnap = await getDocs(qCourse);
-          courseSnap.docs.forEach(d => courseMap.set(d.id, d.data()));
+          courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
         }
 
         // Normalize data
@@ -120,14 +134,17 @@ export default function Results() {
           const course = courseMap.get(row.course_id);
           return {
             ...row,
-            courseTitle: course?.title || "Course",
+            courseTitle: course?.name || "Course", // Changed from title to name
             courseCode: course?.code || "",
             credits: course?.credits || 3,
             marks: row.total || row.marks || 0,
             grade_point: row.gp || row.grade_point || 0,
             semester_remark:
               row.semester_remark ||
-              calculateSemesterRemark(row.gp || row.grade_point || 0, row.grade),
+              calculateSemesterRemark(
+                row.gp || row.grade_point || 0,
+                row.grade,
+              ),
             a1: row.assignment1 || 0,
             a2: row.assignment2 || 0,
             mid: row.midterm || 0,
@@ -169,7 +186,7 @@ export default function Results() {
         const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
         const totalPoints = terms.reduce(
           (sum, t) => sum + t.gpa * t.totalCredits,
-          0
+          0,
         );
         const computedCgpa = totalCredits
           ? Number((totalPoints / totalCredits).toFixed(2))
@@ -188,7 +205,7 @@ export default function Results() {
   }, [user, profile]);
 
   const getPerformanceLevel = (
-    gpa: number
+    gpa: number,
   ): { label: string; color: string; bgColor: string } => {
     if (gpa >= 4.5)
       return {
@@ -392,7 +409,7 @@ export default function Results() {
                                 </td>
                                 <td
                                   className={`px-4 py-3 text-center font-bold ${getGradeColor(
-                                    course.grade
+                                    course.grade,
                                   )}`}
                                 >
                                   {course.grade || "—"}
@@ -426,7 +443,7 @@ export default function Results() {
                               </div>
                               <div
                                 className={`font-bold ${getGradeColor(
-                                  course.grade
+                                  course.grade,
                                 )}`}
                               >
                                 {course.grade || "—"}
