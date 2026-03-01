@@ -91,7 +91,7 @@ export default function Enrollment() {
       const q = query(
         collection(db, "enrollments"),
         where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc")
+        orderBy("enrolled_at", "desc"),
       );
 
       const querySnapshot = await getDocs(q);
@@ -120,7 +120,7 @@ export default function Enrollment() {
             }
           }
           return e;
-        })
+        }),
       );
 
       setEnrollments(fullEnrollments);
@@ -136,7 +136,8 @@ export default function Enrollment() {
   ];
 
   const filteredEnrollments = enrollments.filter(
-    (e) => selectedSemester === "all" || e.course?.semester === selectedSemester
+    (e) =>
+      selectedSemester === "all" || e.course?.semester === selectedSemester,
   );
 
   const stats = {
@@ -350,7 +351,7 @@ export default function Enrollment() {
                               <p className="text-sm text-muted-foreground">
                                 {enrollment.course?.semester} • Enrolled{" "}
                                 {new Date(
-                                  enrollment.enrolled_at
+                                  enrollment.enrolled_at,
                                 ).toLocaleDateString()}
                               </p>
                             </div>

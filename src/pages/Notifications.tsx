@@ -28,7 +28,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  updateDoc,
+  doc,
+  writeBatch,
+  serverTimestamp,
+} from "firebase/firestore";
 import { formatDistanceToNow } from "date-fns";
 
 interface Notification {
