@@ -26,7 +26,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  updateDoc,
+  doc,
+  deleteDoc,
+  Timestamp,
+} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
@@ -86,28 +97,25 @@ export default function LecturerQuiz() {
   const loadQuizzes = async () => {
     try {
       setLoading(true);
-      if (!user?.id) return;
+      if (!user?.uid) return;
 
-      // @ts-ignore - Supabase type instantiation issue
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("*")
-        .eq("lecturer_id", user.id)
-        .order("created_at", { ascending: false });
+      const quizzesRef = collection(db, "quizzes");
+      const q = query(
+        quizzesRef,
+        where("lecturer_id", "==", user.uid),
+        orderBy("created_at", "desc"),
+      );
 
-      console.log("LecturerQuiz: Loading quizzes for user:", user.id);
-      console.log("LecturerQuiz: Query result:", { data, error });
+      console.log("LecturerQuiz: Loading quizzes for user:", user.uid);
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as any[];
 
-      if (data && data.length > 0) {
-        console.log(
-          "LecturerQuiz: Full quiz data:",
-          JSON.stringify(data, null, 2)
-        );
-      }
+      console.log("LecturerQuiz: Query result count:", data.length);
 
-      if (error) throw error;
-
-      const quizzesData: Quiz[] = (data || []).map((row: any) => {
+      const quizzesData: Quiz[] = data.map((row: any) => {
         const quizData: Quiz = {
           id: row.id,
           title: row.title,
@@ -119,7 +127,10 @@ export default function LecturerQuiz() {
           totalPoints: row.total_points,
           timeLimit: row.time_limit,
           passingScore: row.passing_score,
-          dueDate: row.due_date,
+          dueDate:
+            row.due_date instanceof Timestamp
+              ? row.due_date.toDate().toISOString()
+              : row.due_date,
           status: row.status,
           totalAttempts: row.total_attempts || 0,
           averageScore: row.average_score || 0,
@@ -134,10 +145,15 @@ export default function LecturerQuiz() {
       });
 
       // Check for expired quizzes and auto-close them
-      const expiredQuizIds = await autoCloseExpiredQuizzes(supabase, user.id);
+      // NOTE: We'll need to update autoCloseExpiredQuizzes utility to use Firebase
+      const expiredQuizIds = await autoCloseExpiredQuizzes(db, user.uid);
 
       // Update local quiz data for expired quizzes
-      if (expiredQuizIds.length > 0) {
+      if (
+        expiredQuizIds &&
+        Array.isArray(expiredQuizIds) &&
+        expiredQuizIds.length > 0
+      ) {
         quizzesData.forEach((quiz) => {
           if (expiredQuizIds.includes(quiz.id)) {
             quiz.status = "closed";
@@ -162,8 +178,8 @@ export default function LecturerQuiz() {
             ? Math.round(
                 quizzesData.reduce(
                   (sum, q) => sum + (q.completionRate || 0),
-                  0
-                ) / quizzesData.length
+                  0,
+                ) / quizzesData.length,
               )
             : 0,
       };
@@ -193,7 +209,7 @@ export default function LecturerQuiz() {
         (q) =>
           q.title.toLowerCase().includes(query) ||
           q.courseTitle.toLowerCase().includes(query) ||
-          q.description.toLowerCase().includes(query)
+          q.description.toLowerCase().includes(query),
       );
     }
 
@@ -215,12 +231,7 @@ export default function LecturerQuiz() {
   const handleDeleteQuiz = async (quizId: string) => {
     if (confirm("Are you sure you want to delete this quiz?")) {
       try {
-        const { error } = await supabase
-          .from("quizzes")
-          .delete()
-          .eq("id", quizId);
-
-        if (error) throw error;
+        await deleteDoc(doc(db, "quizzes", quizId));
 
         toast({
           title: "Success",
@@ -291,7 +302,7 @@ export default function LecturerQuiz() {
             // If database insertion fails, try to store questions in localStorage for the new quiz
             console.log(
               "Database question duplication failed, storing locally:",
-              questionsError.message
+              questionsError.message,
             );
             const storageKey = `quiz_questions_${newQuiz.id}`;
             localStorage.setItem(storageKey, JSON.stringify(questionsData));
@@ -301,7 +312,7 @@ export default function LecturerQuiz() {
         // If any database operations fail, just continue without duplicating questions
         console.log(
           "Question duplication failed, continuing without questions:",
-          questionsError
+          questionsError,
         );
       }
 
@@ -547,7 +558,7 @@ export default function LecturerQuiz() {
                             <Badge
                               variant="outline"
                               className={`${getStatusColor(
-                                quiz.status
+                                quiz.status,
                               )} flex items-center gap-1`}
                             >
                               {getStatusIcon(quiz.status)}

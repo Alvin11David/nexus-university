@@ -17,7 +17,18 @@ import { Badge } from "@/components/ui/badge";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { db } from "@/firebase";
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, getDoc, orderBy, Timestamp } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  addDoc,
+  getDoc,
+  orderBy,
+  Timestamp,
+} from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -61,31 +72,38 @@ export default function LecturerEnrollments() {
       if (!user?.uid) return;
 
       const lecturerCoursesRef = collection(db, "lecturer_courses");
-      const lcQuery = query(lecturerCoursesRef, where("lecturer_id", "==", user.uid));
-      
+      const lcQuery = query(
+        lecturerCoursesRef,
+        where("lecturer_id", "==", user.uid),
+      );
+
       const coursesRef = collection(db, "courses");
       const cQuery = query(coursesRef, where("instructor_id", "==", user.uid));
 
       const [lcSnapshot, cSnapshot] = await Promise.all([
         getDocs(lcQuery),
-        getDocs(cQuery)
+        getDocs(cQuery),
       ]);
 
       const courseMap = new Map<string, EnrollmentRow["course"]>();
 
       // Fetch course details for lecturer_courses
-      const lecturerCourseIds = lcSnapshot.docs.map(doc => doc.data().course_id);
+      const lecturerCourseIds = lcSnapshot.docs.map(
+        (doc) => doc.data().course_id,
+      );
       if (lecturerCourseIds.length > 0) {
-        await Promise.all(lecturerCourseIds.map(async (cid) => {
-          const cDoc = await getDoc(doc(db, "courses", cid));
-          if (cDoc.exists()) {
-            courseMap.set(cid, { id: cDoc.id, ...cDoc.data() } as any);
-          }
-        }));
+        await Promise.all(
+          lecturerCourseIds.map(async (cid) => {
+            const cDoc = await getDoc(doc(db, "courses", cid));
+            if (cDoc.exists()) {
+              courseMap.set(cid, { id: cDoc.id, ...cDoc.data() } as any);
+            }
+          }),
+        );
       }
 
       // Add direct instructor courses
-      cSnapshot.docs.forEach(d => {
+      cSnapshot.docs.forEach((d) => {
         courseMap.set(d.id, { id: d.id, ...d.data() } as any);
       });
 
@@ -99,29 +117,34 @@ export default function LecturerEnrollments() {
       const enrollmentsRef = collection(db, "enrollments");
       // Firestore 'in' matches can handle up to 30 values
       const eQuery = query(
-        enrollmentsRef, 
+        enrollmentsRef,
         where("course_id", "in", courseIds.slice(0, 30)),
-        orderBy("enrolled_at", "desc")
+        orderBy("enrolled_at", "desc"),
       );
-      
+
       const eSnapshot = await getDocs(eQuery);
-      const enrollmentData = eSnapshot.docs.map(doc => ({
+      const enrollmentData = eSnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       })) as any[];
 
       const studentIds = Array.from(
-        new Set(enrollmentData.map((e) => e.student_id).filter(Boolean))
+        new Set(enrollmentData.map((e) => e.student_id).filter(Boolean)),
       );
 
       let profileMap = new Map<string, EnrollmentRow["student"]>();
       if (studentIds.length > 0) {
-        await Promise.all(studentIds.map(async (sid) => {
-          const pDoc = await getDoc(doc(db, "profiles", sid as string));
-          if (pDoc.exists()) {
-            profileMap.set(sid as string, { id: pDoc.id, ...pDoc.data() } as any);
-          }
-        }));
+        await Promise.all(
+          studentIds.map(async (sid) => {
+            const pDoc = await getDoc(doc(db, "profiles", sid as string));
+            if (pDoc.exists()) {
+              profileMap.set(
+                sid as string,
+                { id: pDoc.id, ...pDoc.data() } as any,
+              );
+            }
+          }),
+        );
       }
 
       const enriched = enrollmentData.map((row) => ({
@@ -156,21 +179,23 @@ export default function LecturerEnrollments() {
       if (target.student_id) {
         await addDoc(collection(db, "notifications"), {
           user_id: target.student_id,
-          title: status === "approved" ? "Enrollment approved" : "Enrollment update",
-          message: status === "approved"
-            ? `Your enrollment for ${target.course?.code ?? "the course"} was approved.`
-            : `Your enrollment for ${target.course?.code ?? "the course"} was ${status}.`,
+          title:
+            status === "approved" ? "Enrollment approved" : "Enrollment update",
+          message:
+            status === "approved"
+              ? `Your enrollment for ${target.course?.code ?? "the course"} was approved.`
+              : `Your enrollment for ${target.course?.code ?? "the course"} was ${status}.`,
           type: "info",
           link: "/enrollment",
           created_at: Timestamp.now(),
-          is_read: false
+          is_read: false,
         });
       }
 
       setEnrollments((prev) =>
         prev.map((enrollment) =>
-          enrollment.id === id ? { ...enrollment, status } : enrollment
-        )
+          enrollment.id === id ? { ...enrollment, status } : enrollment,
+        ),
       );
 
       toast({
@@ -194,15 +219,15 @@ export default function LecturerEnrollments() {
 
   const pending = useMemo(
     () => enrollments.filter((e) => e.status === "pending"),
-    [enrollments]
+    [enrollments],
   );
   const approved = useMemo(
     () => enrollments.filter((e) => e.status === "approved"),
-    [enrollments]
+    [enrollments],
   );
   const rejected = useMemo(
     () => enrollments.filter((e) => e.status === "rejected"),
-    [enrollments]
+    [enrollments],
   );
 
   return (
@@ -355,7 +380,7 @@ export default function LecturerEnrollments() {
                           <p className="text-xs text-muted-foreground">
                             Enrolled{" "}
                             {new Date(
-                              enrollment.enrolled_at
+                              enrollment.enrolled_at,
                             ).toLocaleDateString()}
                           </p>
                         </div>
