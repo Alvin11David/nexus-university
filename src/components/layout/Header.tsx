@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
