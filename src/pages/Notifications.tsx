@@ -135,17 +135,26 @@ export default function Notifications() {
   }, []);
 
   const fetchNotifications = async () => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const q = query(
+        collection(db, "notifications"),
+        where("user_id", "==", user.uid),
+        orderBy("created_at", "desc"),
+      );
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map((d) => {
+        const docData = d.data();
+        return {
+          id: d.id,
+          ...docData,
+          created_at:
+            docData.created_at?.toDate?.()?.toISOString() || docData.created_at,
+        } as Notification;
+      });
 
-      if (error) throw error;
       setNotifications(data || []);
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -156,15 +165,11 @@ export default function Notifications() {
 
   const markAsRead = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", id);
-
-      if (error) throw error;
+      const notificationRef = doc(db, "notifications", id);
+      await updateDoc(notificationRef, { is_read: true });
 
       setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
 
       // Notify header to refresh badge immediately
@@ -175,16 +180,23 @@ export default function Notifications() {
   };
 
   const markAllAsRead = async () => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("user_id", user.id)
-        .eq("is_read", false);
+      const q = query(
+        collection(db, "notifications"),
+        where("user_id", "==", user.uid),
+        where("is_read", "==", false),
+      );
+      const querySnapshot = await getDocs(q);
 
-      if (error) throw error;
+      if (querySnapshot.empty) return;
+
+      const batch = writeBatch(db);
+      querySnapshot.docs.forEach((d) => {
+        batch.update(d.ref, { is_read: true });
+      });
+      await batch.commit();
 
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
 
