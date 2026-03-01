@@ -118,93 +118,114 @@ export default function Portal() {
   }, [user]);
 
   const fetchData = async () => {
+    if (!user?.uid) return;
+
     try {
-      const [resultsRes, schedulesRes, feesRes, enrollmentsRes] =
-        await Promise.all([
-          supabase
-            .from("exam_results")
-            .select("*, course:courses(code, title, credits)")
-            .eq("student_id", user?.id)
-            .order("academic_year", { ascending: false }),
-          supabase
-            .from("schedules")
-            .select("*, course:courses(code, title)")
-            .order("day_of_week"),
-          supabase
-            .from("fees")
-            .select("*")
-            .eq("student_id", user?.id)
-            .order("due_date", { ascending: false }),
-          supabase
-            .from("enrollments")
-            .select("course_id, status")
-            .eq("student_id", user?.id)
-            .in("status", ["approved", "pending"]),
-        ]);
+      setLoading(true);
 
-      if (resultsRes.data) setResults(resultsRes.data);
-      if (schedulesRes.data) setSchedules(schedulesRes.data);
-      if (feesRes.data) setFees(feesRes.data);
+      // 1. Fetch Exam Results with course details
+      const resultsQuery = query(
+        collection(db, "exam_results"),
+        where("student_id", "==", user.uid),
+        orderBy("academic_year", "desc")
+      );
+      const resultsSnap = await getDocs(resultsQuery);
+      const resultsData = await Promise.all(
+        resultsSnap.docs.map(async (d) => {
+          const res = d.data();
+          const courseRef = doc(db, "courses", res.course_id);
+          const courseSnap = await getDoc(courseRef);
+          return {
+            id: d.id,
+            ...res,
+            course: courseSnap.exists() ? courseSnap.data() : null,
+          } as ExamResult;
+        })
+      );
+      setResults(resultsData);
 
-      // Fetch assignments for enrolled courses
-      if (enrollmentsRes.data && enrollmentsRes.data.length > 0) {
-        const courseIds = enrollmentsRes.data
-          .map((e) => e.course_id)
-          .filter(Boolean);
-        const { data: assignmentsData } = await supabase
-          .from("assignments")
-          .select(
-            "id, title, description, due_date, total_points, status, course_id, instruction_document_url, instruction_document_name, courses(code, title)"
-          )
-          .in("course_id", courseIds)
-          .order("due_date", { ascending: true });
+      // 2. Fetch Schedules
+      const schedulesQuery = query(
+        collection(db, "schedules"),
+        orderBy("day_of_week")
+      );
+      const schedulesSnap = await getDocs(schedulesQuery);
+      const schedulesData = await Promise.all(
+        schedulesSnap.docs.map(async (d) => {
+          const sch = d.data();
+          const courseRef = doc(db, "courses", sch.course_id);
+          const courseSnap = await getDoc(courseRef);
+          return {
+            id: d.id,
+            ...sch,
+            course: courseSnap.exists() ? courseSnap.data() : null,
+          } as Schedule;
+        })
+      );
+      setSchedules(schedulesData);
 
-        if (assignmentsData) {
-          const assignmentIds = (assignmentsData as any[]).map((a) => a.id);
-          let submissions: {
-            assignment_id: string;
-            status: string | null;
-            score?: number;
-            feedback?: string;
-          }[] = [];
+      // 3. Fetch Fees
+      const feesQuery = query(
+        collection(db, "fees"),
+        where("student_id", "==", user.uid),
+        orderBy("due_date", "desc")
+      );
+      const feesSnap = await getDocs(feesQuery);
+      setFees(
+        feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Fee)
+      );
 
-          if (assignmentIds.length) {
-            const { data: subs } = await supabase
-              .from("submissions")
-              .select("assignment_id, status, score, feedback")
-              .eq("student_id", user?.id)
-              .in("assignment_id", assignmentIds);
-            submissions = subs || [];
+      // 4. Fetch Enrollments & Assignments
+      const enrollmentsQuery = query(
+        collection(db, "enrollments"),
+        where("student_id", "==", user.uid),
+        where("status", "in", ["approved", "pending"])
+      );
+      const enrollmentsSnap = await getDocs(enrollmentsQuery);
+      const courseIds = enrollmentsSnap.docs.map((d) => d.data().course_id);
+
+      if (courseIds.length > 0) {
+        // Firestore 'in' queries are limited to 10 elements. 
+        // We'll fetch assignments for these course IDs.
+        const assignmentsQuery = query(
+          collection(db, "Assignments"),
+          where("course_id", "in", courseIds.slice(0, 10))
+        );
+        const assignmentsSnap = await getDocs(assignmentsQuery);
+        const assignmentsRaw = assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        // 5. Fetch Submissions for these assignments
+        const submissionsQuery = query(
+          collection(db, "submissions"),
+          where("student_id", "==", user.uid),
+          where("assignment_id", "in", assignmentsRaw.map(a => a.id).slice(0, 10))
+        );
+        const submissionsSnap = await getDocs(submissionsQuery);
+        const submissionsData = submissionsSnap.docs.map(d => d.data());
+
+        const mappedAssignments: Assignment[] = assignmentsRaw.map((assignment: any) => {
+          const submission = submissionsData.find(s => s.assignment_id === assignment.id);
+          let status: "pending" | "submitted" | "graded" = "pending";
+          if (submission?.status === "submitted" || submission?.status === "graded") {
+            status = submission.score !== undefined ? "graded" : "submitted";
           }
 
-          const mappedAssignments: Assignment[] = (
-            assignmentsData as any[]
-          ).map((assignment) => {
-            const submission = submissions.find(
-              (s) => s.assignment_id === assignment.id
-            );
-            let status: "pending" | "submitted" | "graded" = "pending";
-            if (submission?.status === "submitted") {
-              status = submission.score !== undefined ? "graded" : "submitted";
-            }
-
-            return {
-              id: assignment.id,
-              title: assignment.title,
-              description: assignment.description || "",
-              dueDate: assignment.due_date,
-              totalPoints: assignment.total_points ?? 100,
-              courseTitle: assignment.courses?.title || "Course",
-              courseCode: assignment.courses?.code || "",
-              status,
-              instructionDocumentUrl: assignment.instruction_document_url,
-              instructionDocumentName: assignment.instruction_document_name,
-              score: submission?.score,
-              feedback: submission?.feedback,
-            };
-          });
-          setAssignments(mappedAssignments);
-        }
+          return {
+            id: assignment.id,
+            title: assignment.title,
+            description: assignment.description || "",
+            dueDate: assignment.due_date,
+            totalPoints: assignment.total_points ?? 100,
+            courseTitle: assignment.course_title || "Course",
+            courseCode: assignment.course_code || "",
+            status,
+            instructionDocumentUrl: assignment.instruction_document_url,
+            instructionDocumentName: assignment.instruction_document_name,
+            score: submission?.score,
+            feedback: submission?.feedback,
+          };
+        });
+        setAssignments(mappedAssignments.sort((a,b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()));
       }
     } catch (error) {
       console.error("Error fetching portal data:", error);
