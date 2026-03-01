@@ -37,6 +37,7 @@ import {
   doc,
   deleteDoc,
   Timestamp,
+  addDoc,
 } from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
@@ -77,8 +78,7 @@ export default function LecturerQuiz() {
   const { profile, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const displayName =
-    profile?.full_name || user?.user_metadata?.full_name || "Lecturer";
+  const displayName = profile?.full_name || "Lecturer";
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [filteredQuizzes, setFilteredQuizzes] = useState<Quiz[]>([]);
@@ -216,11 +216,11 @@ export default function LecturerQuiz() {
   };
 
   useEffect(() => {
-    if (user?.id) {
+    if (user?.uid) {
       loadQuizzes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.uid]);
 
   useEffect(() => {
     filterQuizzes();

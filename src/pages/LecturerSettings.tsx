@@ -32,8 +32,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/firebase";
+import { db, auth } from "@/firebase";
 import { doc, updateDoc, Timestamp } from "firebase/firestore";
+import {
+  updatePassword,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+} from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 
 const itemVariants = {
@@ -167,26 +172,6 @@ export default function LecturerSettings() {
     }
   };
 
-      if (error) throw error;
-
-      toast({
-        title: "Settings Saved",
-        description: "Your profile has been updated successfully",
-      });
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (error: any) {
-      toast({
-        title: "Save Failed",
-        description: error.message || "Failed to save profile",
-        variant: "destructive",
-      });
-    } finally {
-      setSavingProfile(false);
-    }
-  };
-
   const handlePasswordUpdate = async () => {
     // Validation
     if (!currentPassword || !newPassword || !confirmPassword) {
@@ -219,36 +204,20 @@ export default function LecturerSettings() {
     setUpdatingPassword(true);
 
     try {
-      // First, verify the current password by attempting to sign in
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user?.email || "",
-        password: currentPassword,
-      });
-
-      if (signInError) {
-        toast({
-          title: "Invalid Current Password",
-          description: "The current password you entered is incorrect",
-          variant: "destructive",
-        });
-        setUpdatingPassword(false);
-        return;
+      if (!auth.currentUser || !auth.currentUser.email) {
+        throw new Error("No user logged in");
       }
 
-      // Update the password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      // Re-authenticate user before updating password
+      const credential = EmailAuthProvider.credential(
+        auth.currentUser.email,
+        currentPassword
+      );
 
-      if (updateError) {
-        toast({
-          title: "Password Update Failed",
-          description: updateError.message,
-          variant: "destructive",
-        });
-        setUpdatingPassword(false);
-        return;
-      }
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Update password
+      await updatePassword(auth.currentUser, newPassword);
 
       // Success
       toast({
@@ -261,8 +230,9 @@ export default function LecturerSettings() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (error: any) {
+      console.error("Password update error:", error);
       toast({
-        title: "Error",
+        title: "Update Failed",
         description: error.message || "An unexpected error occurred",
         variant: "destructive",
       });
@@ -1183,13 +1153,13 @@ export default function LecturerSettings() {
                       // Reset appearance preferences
                       setColorTheme((profile as any).color_theme || "Auto");
                       setDashboardLayout(
-                        (profile as any).dashboard_layout || "Compact"
+                        (profile as any).dashboard_layout || "Compact",
                       );
                       setFontSize((profile as any).font_size || "Medium");
                       setLanguage((profile as any).language || "English");
                       setShowSidebar((profile as any).show_sidebar !== false);
                       setAnimateTransitions(
-                        (profile as any).animate_transitions !== false
+                        (profile as any).animate_transitions !== false,
                       );
                       setCompactMode((profile as any).compact_mode || false);
                       setShowTooltips((profile as any).show_tooltips !== false);
