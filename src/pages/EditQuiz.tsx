@@ -30,7 +30,20 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import {
+  doc,
+  getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
+  updateDoc,
+  writeBatch,
+  Timestamp,
+  addDoc,
+  deleteDoc,
+} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CourseOption {
@@ -233,7 +246,7 @@ export default function EditQuiz() {
         if (deleteError) {
           console.log(
             "Error deleting existing questions:",
-            deleteError.message
+            deleteError.message,
           );
         }
 
@@ -256,7 +269,7 @@ export default function EditQuiz() {
           if (questionsError) {
             console.log(
               "Database question save failed, storing locally:",
-              questionsError.message
+              questionsError.message,
             );
             // Store in localStorage as fallback
             const storageKey = `quiz_questions_${id}`;
@@ -305,7 +318,7 @@ export default function EditQuiz() {
   const updateQuestion = (
     index: number,
     field: keyof QuizQuestion,
-    value: any
+    value: any,
   ) => {
     const updatedQuestions = [...questions];
     updatedQuestions[index] = { ...updatedQuestions[index], [field]: value };
@@ -319,7 +332,7 @@ export default function EditQuiz() {
   const updateQuestionOption = (
     questionIndex: number,
     optionIndex: number,
-    value: string
+    value: string,
   ) => {
     const updatedQuestions = [...questions];
     const question = updatedQuestions[questionIndex];
@@ -621,7 +634,7 @@ export default function EditQuiz() {
                                 value:
                                   | "multiple_choice"
                                   | "true_false"
-                                  | "short_answer"
+                                  | "short_answer",
                               ) => updateQuestion(index, "type", value)}
                             >
                               <SelectTrigger className="w-40">
@@ -656,7 +669,7 @@ export default function EditQuiz() {
                               updateQuestion(
                                 index,
                                 "points",
-                                parseInt(e.target.value) || 1
+                                parseInt(e.target.value) || 1,
                               )
                             }
                             className="w-20"
@@ -691,7 +704,7 @@ export default function EditQuiz() {
                                   updateQuestionOption(
                                     index,
                                     optionIndex,
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 placeholder={`Option ${optionIndex + 1}`}
@@ -749,7 +762,7 @@ export default function EditQuiz() {
                               updateQuestion(
                                 index,
                                 "correct_answer",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             placeholder="Enter the correct answer"

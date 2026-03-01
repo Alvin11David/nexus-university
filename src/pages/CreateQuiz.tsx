@@ -193,7 +193,7 @@ export default function CreateQuiz() {
         average_score: 0,
         completion_rate: 0,
         highest_score: 0,
-        lowest_score: 0
+        lowest_score: 0,
       });
 
       toast({
