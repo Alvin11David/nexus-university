@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Edit2, Save, X, Calculator, Download, Upload } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import { collection, query, limit, getDocs, where, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -77,11 +78,15 @@ export default function MarksManagement() {
 
   const loadCourses = async () => {
     try {
-      const { data } = await supabase
-        .from("courses")
-        .select("id, code, title")
-        .limit(10);
-      setCourses(data || []);
+      const coursesRef = collection(db, "courses");
+      const q = query(coursesRef, limit(10));
+      const querySnapshot = await getDocs(q);
+      const data = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Course[];
+      
+      setCourses(data);
       if (data && data.length > 0) {
         loadStudents(data[0]);
         setSelectedCourse(data[0]);
@@ -95,23 +100,31 @@ export default function MarksManagement() {
 
   const loadStudents = async (course: Course) => {
     try {
-      const { data: enrollments } = await supabase
-        .from("enrollments")
-        .select("student_id")
-        .eq("course_id", course.id);
+      const enrollmentsRef = collection(db, "enrollments");
+      const q = query(enrollmentsRef, where("course_id", "==", course.id));
+      const querySnapshot = await getDocs(q);
+      const studentIds = querySnapshot.docs.map(doc => doc.data().student_id);
 
-      if (!enrollments) return;
+      if (studentIds.length === 0) {
+        setStudents([]);
+        return;
+      }
 
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name")
-        .in(
-          "id",
-          enrollments.map((e) => e.student_id)
-        );
+      const profiles = await Promise.all(
+        studentIds.map(async (id) => {
+          const docRef = doc(db, "profiles", id);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            return { id: docSnap.id, ...docSnap.data() };
+          }
+          return null;
+        })
+      );
+
+      const validProfiles = profiles.filter(p => p !== null) as any[];
 
       const marks =
-        profiles?.map((p) => {
+        validProfiles.map((p) => {
           const cw = Math.round(Math.random() * 30 * 10) / 10;
           const test = Math.round(Math.random() * 10 * 10) / 10;
           const quiz = Math.round(Math.random() * 10 * 10) / 10;
@@ -125,7 +138,7 @@ export default function MarksManagement() {
           return {
             id: p.id,
             student_id: p.id,
-            student_name: p.full_name,
+            student_name: p.full_name || "Unknown Student",
             coursework: cw,
             test,
             quiz,
