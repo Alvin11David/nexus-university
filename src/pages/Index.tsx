@@ -177,7 +177,7 @@ export default function Index() {
                       className="border-violet-100 text-violet-700 hover:bg-violet-50 px-8 h-14 rounded-full shadow-sm"
                     >
                       <Link to="/auth" className="flex items-center gap-2">
-                        Member Login
+                        Student Login
                       </Link>
                     </Button>
                   </>
