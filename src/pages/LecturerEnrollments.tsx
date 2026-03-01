@@ -58,30 +58,35 @@ export default function LecturerEnrollments() {
   const fetchEnrollments = async () => {
     setLoading(true);
     try {
-      // Get all courses this lecturer manages (via lecturer_courses or instructor_id)
-      const [lecturerCoursesRes, instructorCoursesRes] = await Promise.all([
-        supabase
-          .from("lecturer_courses")
-          .select(
-            `course_id, courses(id, title, code, credits, semester, year)`
-          )
-          .eq("lecturer_id", user!.id),
-        supabase
-          .from("courses")
-          .select("id, title, code, credits, semester, year")
-          .eq("instructor_id", user!.id),
+      if (!user?.uid) return;
+
+      const lecturerCoursesRef = collection(db, "lecturer_courses");
+      const lcQuery = query(lecturerCoursesRef, where("lecturer_id", "==", user.uid));
+      
+      const coursesRef = collection(db, "courses");
+      const cQuery = query(coursesRef, where("instructor_id", "==", user.uid));
+
+      const [lcSnapshot, cSnapshot] = await Promise.all([
+        getDocs(lcQuery),
+        getDocs(cQuery)
       ]);
 
       const courseMap = new Map<string, EnrollmentRow["course"]>();
 
-      lecturerCoursesRes.data?.forEach((row) => {
-        if (row.courses) {
-          courseMap.set(row.course_id, row.courses);
-        }
-      });
+      // Fetch course details for lecturer_courses
+      const lecturerCourseIds = lcSnapshot.docs.map(doc => doc.data().course_id);
+      if (lecturerCourseIds.length > 0) {
+        await Promise.all(lecturerCourseIds.map(async (cid) => {
+          const cDoc = await getDoc(doc(db, "courses", cid));
+          if (cDoc.exists()) {
+            courseMap.set(cid, { id: cDoc.id, ...cDoc.data() } as any);
+          }
+        }));
+      }
 
-      instructorCoursesRes.data?.forEach((row) => {
-        courseMap.set(row.id, row as EnrollmentRow["course"]);
+      // Add direct instructor courses
+      cSnapshot.docs.forEach(d => {
+        courseMap.set(d.id, { id: d.id, ...d.data() } as any);
       });
 
       const courseIds = Array.from(courseMap.keys());
@@ -91,40 +96,37 @@ export default function LecturerEnrollments() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("enrollments")
-        .select(
-          `
-          id,
-          status,
-          enrolled_at,
-          course_id,
-          student_id,
-          course:courses(id, title, code, credits, semester, year)
-        `
-        )
-        .in("course_id", courseIds)
-        .order("enrolled_at", { ascending: false });
-
-      if (error) throw error;
+      const enrollmentsRef = collection(db, "enrollments");
+      // Firestore 'in' matches can handle up to 30 values
+      const eQuery = query(
+        enrollmentsRef, 
+        where("course_id", "in", courseIds.slice(0, 30)),
+        orderBy("enrolled_at", "desc")
+      );
+      
+      const eSnapshot = await getDocs(eQuery);
+      const enrollmentData = eSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as any[];
 
       const studentIds = Array.from(
-        new Set((data || []).map((e) => e.student_id).filter(Boolean))
+        new Set(enrollmentData.map((e) => e.student_id).filter(Boolean))
       );
 
       let profileMap = new Map<string, EnrollmentRow["student"]>();
       if (studentIds.length > 0) {
-        const { data: profiles, error: profileError } = await supabase
-          .from("profiles")
-          .select("id, full_name, email, registration_number, student_number")
-          .in("id", studentIds);
-
-        if (profileError) throw profileError;
-        profiles?.forEach((p) => profileMap.set(p.id, p));
+        await Promise.all(studentIds.map(async (sid) => {
+          const pDoc = await getDoc(doc(db, "profiles", sid as string));
+          if (pDoc.exists()) {
+            profileMap.set(sid as string, { id: pDoc.id, ...pDoc.data() } as any);
+          }
+        }));
       }
 
-      const enriched = (data || []).map((row) => ({
+      const enriched = enrollmentData.map((row) => ({
         ...row,
+        course: courseMap.get(row.course_id),
         student: profileMap.get(row.student_id) || undefined,
       }));
 
@@ -147,36 +149,22 @@ export default function LecturerEnrollments() {
 
     setUpdatingId(id);
     try {
-      const { error } = await supabase
-        .from("enrollments")
-        .update({ status })
-        .eq("id", id);
-
-      if (error) throw error;
+      const enrollmentRef = doc(db, "enrollments", id);
+      await updateDoc(enrollmentRef, { status });
 
       // Notify the student when their enrollment is reviewed
       if (target.student_id) {
-        const { error: notifyError } = await supabase
-          .from("notifications")
-          .insert({
-            user_id: target.student_id,
-            title:
-              status === "approved"
-                ? "Enrollment approved"
-                : "Enrollment update",
-            message:
-              status === "approved"
-                ? `Your enrollment for ${
-                    target.course?.code ?? "the course"
-                  } was approved.`
-                : `Your enrollment for ${
-                    target.course?.code ?? "the course"
-                  } was ${status}.`,
-            type: "info",
-            link: "/enrollment",
-          });
-
-        if (notifyError) console.error("Notification error", notifyError);
+        await addDoc(collection(db, "notifications"), {
+          user_id: target.student_id,
+          title: status === "approved" ? "Enrollment approved" : "Enrollment update",
+          message: status === "approved"
+            ? `Your enrollment for ${target.course?.code ?? "the course"} was approved.`
+            : `Your enrollment for ${target.course?.code ?? "the course"} was ${status}.`,
+          type: "info",
+          link: "/enrollment",
+          created_at: Timestamp.now(),
+          is_read: false
+        });
       }
 
       setEnrollments((prev) =>
