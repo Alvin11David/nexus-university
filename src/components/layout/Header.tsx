@@ -24,7 +24,13 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/firebase";
-import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  getDocs,
+} from "firebase/firestore";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -38,14 +44,18 @@ export function Header() {
       const q = query(
         collection(db, "notifications"),
         where("user_id", "==", user.uid),
-        where("is_read", "==", false)
+        where("is_read", "==", false),
       );
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        setUnreadCount(snapshot.size);
-      }, (error) => {
-        console.error("Error with notifications snapshot:", error);
-      });
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          setUnreadCount(snapshot.size);
+        },
+        (error) => {
+          console.error("Error with notifications snapshot:", error);
+        },
+      );
 
       return () => unsubscribe();
     }
