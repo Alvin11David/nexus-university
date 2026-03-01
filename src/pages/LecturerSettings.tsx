@@ -114,7 +114,7 @@ export default function LecturerSettings() {
   ];
 
   const handleSave = async () => {
-    if (!user?.id) {
+    if (!user?.uid) {
       toast({
         title: "Error",
         description: "User not found",
@@ -126,28 +126,46 @@ export default function LecturerSettings() {
     setSavingProfile(true);
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: fullName,
-          department: department,
-          specialization: specialization,
-          office_location: officeLocation,
-          office_hours: officeHours,
-          office_phone: officePhone,
-          phone_number: phoneNumber,
-          bio: bio,
-          color_theme: colorTheme,
-          dashboard_layout: dashboardLayout,
-          font_size: fontSize,
-          language: language,
-          show_sidebar: showSidebar,
-          animate_transitions: animateTransitions,
-          compact_mode: compactMode,
-          show_tooltips: showTooltips,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+      const profileRef = doc(db, "profiles", user.uid);
+      await updateDoc(profileRef, {
+        full_name: fullName,
+        department: department,
+        specialization: specialization,
+        office_location: officeLocation,
+        office_hours: officeHours,
+        office_phone: officePhone,
+        phone_number: phoneNumber,
+        bio: bio,
+        color_theme: colorTheme,
+        dashboard_layout: dashboardLayout,
+        font_size: fontSize,
+        language: language,
+        show_sidebar: showSidebar,
+        animate_transitions: animateTransitions,
+        compact_mode: compactMode,
+        show_tooltips: showTooltips,
+        updated_at: Timestamp.now(),
+      });
+
+      setSaved(true);
+      toast({
+        title: "Success",
+        description: "Settings updated successfully!",
+      });
+
+      // Clear saved status after some time
+      setTimeout(() => setSaved(false), 3000);
+    } catch (error: any) {
+      console.error("Error saving profile", error);
+      toast({
+        title: "Error",
+        description: error.message || "Something went wrong",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
       if (error) throw error;
 

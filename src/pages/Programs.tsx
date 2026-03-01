@@ -16,7 +16,14 @@ import {
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { db } from "@/firebase";
-import { collection, getDocs, query, orderBy, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  orderBy,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface Program {
@@ -120,22 +127,36 @@ export default function Programs() {
         const coursesRef = collection(db, "courses");
         const q = query(coursesRef, orderBy("created_at", "desc"));
         const snapshot = await getDocs(q);
-        const coursesData = snapshot.docs.map(doc => ({
+        const coursesData = snapshot.docs.map((doc) => ({
           id: doc.id,
-          ...doc.data()
+          ...doc.data(),
         })) as any[];
 
-        const enrollmentsSnapshot = await getDocs(collection(db, "enrollments"));
-        const enrollmentCounts = enrollmentsSnapshot.docs.reduce((acc: any, doc: any) => {
-          const cid = doc.data().course_id;
-          acc[cid] = (acc[cid] || 0) + 1;
-          return acc;
-        }, {});
+        const enrollmentsSnapshot = await getDocs(
+          collection(db, "enrollments"),
+        );
+        const enrollmentCounts = enrollmentsSnapshot.docs.reduce(
+          (acc: any, doc: any) => {
+            const cid = doc.data().course_id;
+            acc[cid] = (acc[cid] || 0) + 1;
+            return acc;
+          },
+          {},
+        );
 
         const mapped = coursesData.map((course: any, idx: number) => {
-          const icons = [BookOpen, GraduationCap, Users, Zap, Globe, Trophy, Sparkles, TrendingUp];
+          const icons = [
+            BookOpen,
+            GraduationCap,
+            Users,
+            Zap,
+            Globe,
+            Trophy,
+            Sparkles,
+            TrendingUp,
+          ];
           const IconComponent = icons[idx % icons.length];
-          
+
           return {
             id: course.id,
             title: course.title,
@@ -148,7 +169,8 @@ export default function Programs() {
                 : course.status || "closed",
             color: programColors[idx % programColors.length],
             icon: <IconComponent className="h-6 w-6" />,
-            department: course.department_name || course.department || "General",
+            department:
+              course.department_name || course.department || "General",
           };
         });
 
@@ -164,7 +186,7 @@ export default function Programs() {
   }, [user]);
 
   const filteredPrograms = programs.filter(
-    (p) => filter === "all" || p.status === filter
+    (p) => filter === "all" || p.status === filter,
   );
 
   const stats = {
@@ -295,8 +317,8 @@ export default function Programs() {
               {filter === "running"
                 ? "No running programs at the moment"
                 : filter === "closed"
-                ? "No closed programs"
-                : "No programs available"}
+                  ? "No closed programs"
+                  : "No programs available"}
             </p>
           </motion.div>
         ) : (
