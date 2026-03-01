@@ -93,7 +93,7 @@ export default function Notifications() {
       const chars = titleRef.current.textContent?.split("") || [];
       titleRef.current.innerHTML = chars
         .map((char) =>
-          char === " " ? " " : `<span class="inline-block">${char}</span>`
+          char === " " ? " " : `<span class="inline-block">${char}</span>`,
         )
         .join("");
 
@@ -111,7 +111,7 @@ export default function Notifications() {
           duration: 0.8,
           stagger: 0.03,
           ease: "back.out(1.7)",
-        }
+        },
       );
     }
 
@@ -129,7 +129,7 @@ export default function Notifications() {
           duration: 0.6,
           delay: 0.4,
           ease: "power3.out",
-        }
+        },
       );
     }
   }, []);
@@ -378,8 +378,8 @@ export default function Notifications() {
                     {filter === "unread"
                       ? "No Unread Notifications"
                       : filter === "read"
-                      ? "No Read Notifications"
-                      : "No Notifications Yet"}
+                        ? "No Read Notifications"
+                        : "No Notifications Yet"}
                   </h3>
                   <p className="text-muted-foreground max-w-md mx-auto">
                     {filter === "all"
@@ -393,7 +393,7 @@ export default function Notifications() {
                     {filteredNotifications.map((notification, index) => {
                       const Icon = getNotificationIcon(notification.type);
                       const colorClass = getNotificationColor(
-                        notification.type
+                        notification.type,
                       );
 
                       return (
@@ -460,7 +460,7 @@ export default function Notifications() {
                                         <span>
                                           {formatDistanceToNow(
                                             new Date(notification.created_at),
-                                            { addSuffix: true }
+                                            { addSuffix: true },
                                           )}
                                         </span>
                                       </div>
