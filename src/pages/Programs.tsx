@@ -117,39 +117,25 @@ export default function Programs() {
     const fetchPrograms = async () => {
       try {
         setLoading(true);
-        const { data: coursesData, error } = await supabase
-          .from("courses")
-          .select(
-            "id, title, code, description, status, department_id, departments(name)"
-          )
-          .order("created_at", { ascending: false });
+        const coursesRef = collection(db, "courses");
+        const q = query(coursesRef, orderBy("created_at", "desc"));
+        const snapshot = await getDocs(q);
+        const coursesData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as any[];
 
-        if (error) throw error;
+        const enrollmentsSnapshot = await getDocs(collection(db, "enrollments"));
+        const enrollmentCounts = enrollmentsSnapshot.docs.reduce((acc: any, doc: any) => {
+          const cid = doc.data().course_id;
+          acc[cid] = (acc[cid] || 0) + 1;
+          return acc;
+        }, {});
 
-        const { data: enrollmentsData } = await supabase
-          .from("enrollments")
-          .select("course_id");
-
-        const enrollmentCounts =
-          enrollmentsData?.reduce(
-            (acc: { [key: string]: number }, e: { course_id: string }) => {
-              acc[e.course_id] = (acc[e.course_id] || 0) + 1;
-              return acc;
-            },
-            {}
-          ) || {};
-
-        const mapped = (coursesData || []).map((course: any, idx: number) => {
-          const IconComponent = [
-            BookOpen,
-            GraduationCap,
-            Users,
-            Zap,
-            Globe,
-            Trophy,
-            Sparkles,
-            TrendingUp,
-          ][idx % 8];
+        const mapped = coursesData.map((course: any, idx: number) => {
+          const icons = [BookOpen, GraduationCap, Users, Zap, Globe, Trophy, Sparkles, TrendingUp];
+          const IconComponent = icons[idx % icons.length];
+          
           return {
             id: course.id,
             title: course.title,
@@ -162,7 +148,7 @@ export default function Programs() {
                 : course.status || "closed",
             color: programColors[idx % programColors.length],
             icon: <IconComponent className="h-6 w-6" />,
-            department: course.departments?.name || "General",
+            department: course.department_name || course.department || "General",
           };
         });
 

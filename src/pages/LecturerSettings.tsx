@@ -32,7 +32,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/firebase";
+import { doc, updateDoc, Timestamp } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 const itemVariants = {

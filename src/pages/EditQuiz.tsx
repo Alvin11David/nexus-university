@@ -176,7 +176,7 @@ export default function EditQuiz() {
   };
 
   const handleSaveQuiz = async () => {
-    if (!user?.id || !id) return;
+    if (!user?.uid || !id) return;
 
     try {
       setSaving(true);
