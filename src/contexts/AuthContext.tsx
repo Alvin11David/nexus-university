@@ -34,6 +34,7 @@ type User = FirebaseUser;
 type Session = { user: User } | null;
 
 interface Profile {
+  course_id?: string | null;
   id: string;
   full_name: string;
   email: string;

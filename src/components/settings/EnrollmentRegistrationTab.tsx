@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -54,11 +54,12 @@ interface Enrollment {
 }
 
 interface CourseUnit {
+  title: ReactNode;
   id: string;
   code: string;
-  title: string;
+  name: string;
   credits: number;
-  semester: string;
+  semester: number;
   year: number;
 }
 
@@ -819,9 +820,10 @@ export function EnrollmentRegistrationTab() {
                           {unit.code}
                         </Badge>
                       </div>
-                      <p className="font-medium">{unit.title}</p>
+                      <p className="font-medium">{unit.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {unit.credits} Credits • {unit.semester} {unit.year}
+                        {unit.credits} Credits • Semester {unit.semester} Year{" "}
+                        {unit.year}
                       </p>
                     </div>
                   </div>
