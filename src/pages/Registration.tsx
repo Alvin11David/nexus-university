@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ArrowRight,
   BookMarked,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,9 @@ export default function Registration() {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [existingEnrollments, setExistingEnrollments] = useState<string[]>([]);
+  const [existingEnrollments, setExistingEnrollments] = useState<
+    Record<string, string>
+  >({});
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -197,9 +200,12 @@ export default function Registration() {
           where("student_id", "==", user.uid),
         );
         const enrollSnapshot = await getDocs(qEnroll);
-        setExistingEnrollments(
-          enrollSnapshot.docs.map((d) => (d.data() as any).course_id),
-        );
+        const enrollmentsMap: Record<string, string> = {};
+        enrollSnapshot.docs.forEach((doc) => {
+          const data = doc.data() as any;
+          enrollmentsMap[data.course_id] = data.status;
+        });
+        setExistingEnrollments(enrollmentsMap);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -209,10 +215,17 @@ export default function Registration() {
   };
 
   const toggleCourse = (courseId: string) => {
-    if (existingEnrollments.includes(courseId)) {
+    const status = existingEnrollments[courseId];
+    if (status) {
+      const statusMessage =
+        status === "approved"
+          ? "Enrolled"
+          : status === "pending"
+            ? "Pending Approval"
+            : "Request " + status;
       toast({
-        title: "Already Enrolled",
-        description: "You are already registered for this course.",
+        title: statusMessage,
+        description: `Your enrollment request for this course is ${status}.`,
         variant: "destructive",
       });
       return;
@@ -551,9 +564,8 @@ export default function Registration() {
                             const isSelected = selectedCourses.includes(
                               course.id,
                             );
-                            const isEnrolled = existingEnrollments.includes(
-                              course.id,
-                            );
+                            const status = existingEnrollments[course.id];
+                            const isEnrolled = !!status;
 
                             return (
                               <motion.div
@@ -565,7 +577,11 @@ export default function Registration() {
                                 <Card
                                   className={`cursor-pointer transition-all duration-300 hover:shadow-lg group ${
                                     isEnrolled
-                                      ? "opacity-60 cursor-not-allowed bg-muted/50"
+                                      ? status === "approved"
+                                        ? "opacity-60 cursor-not-allowed bg-emerald-50/50 border-emerald-200"
+                                        : status === "pending"
+                                          ? "opacity-60 cursor-not-allowed bg-amber-50/50 border-amber-200"
+                                          : "opacity-60 cursor-not-allowed bg-destructive/5 border-destructive/20"
                                       : isSelected
                                         ? "ring-2 ring-secondary shadow-lg shadow-secondary/10 bg-secondary/5"
                                         : "hover:border-secondary/50"
@@ -584,7 +600,13 @@ export default function Registration() {
                                         }`}
                                       >
                                         {isEnrolled ? (
-                                          <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                                          status === "approved" ? (
+                                            <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                                          ) : status === "pending" ? (
+                                            <Clock className="h-6 w-6 text-amber-500" />
+                                          ) : (
+                                            <Ban className="h-6 w-6 text-destructive" />
+                                          )
                                         ) : isSelected ? (
                                           <Check className="h-6 w-6" />
                                         ) : (
@@ -604,8 +626,23 @@ export default function Registration() {
                                             {course.credits} Credits
                                           </Badge>
                                           {isEnrolled && (
-                                            <Badge className="bg-emerald-500/10 text-emerald-600 border-0 text-xs">
-                                              Already Enrolled
+                                            <Badge
+                                              className={`border-0 text-xs ${
+                                                status === "approved"
+                                                  ? "bg-emerald-500/10 text-emerald-600"
+                                                  : status === "pending"
+                                                    ? "bg-amber-500/10 text-amber-600"
+                                                    : "bg-destructive/10 text-destructive"
+                                              }`}
+                                            >
+                                              {status === "approved"
+                                                ? "Enrolled"
+                                                : status === "pending"
+                                                  ? "Pending Approval"
+                                                  : status
+                                                      .charAt(0)
+                                                      .toUpperCase() +
+                                                    status.slice(1)}
                                             </Badge>
                                           )}
                                         </div>
@@ -621,14 +658,24 @@ export default function Registration() {
                                       <div
                                         className={`h-12 w-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
                                           isEnrolled
-                                            ? "bg-emerald-500/10"
+                                            ? status === "approved"
+                                              ? "bg-emerald-500/10"
+                                              : status === "pending"
+                                                ? "bg-amber-500/10"
+                                                : "bg-destructive/10"
                                             : isSelected
                                               ? "bg-secondary text-secondary-foreground scale-110"
                                               : "bg-muted text-muted-foreground group-hover:bg-secondary/20 group-hover:text-secondary"
                                         }`}
                                       >
                                         {isEnrolled ? (
-                                          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                          status === "approved" ? (
+                                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                          ) : status === "pending" ? (
+                                            <Clock className="h-5 w-5 text-amber-500" />
+                                          ) : (
+                                            <Ban className="h-5 w-5 text-destructive" />
+                                          )
                                         ) : isSelected ? (
                                           <Check className="h-5 w-5" />
                                         ) : (
