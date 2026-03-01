@@ -257,11 +257,11 @@ export default function Auth() {
 
     try {
       // Auto-detect if email is lecturer format
-      const lecturerEmailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
+      const lecturerEmailPattern = /^[a-zA-Z0-9._%+-]+@lecturer\.com$/i;
       const isLecturer = lecturerEmailPattern.test(formData.email);
 
       // Auto-detect if email is registrar format
-      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const registrarEmailPattern = /^[a-zA-Z0-9._%+-]+@registrar\.com$/i;
       const isRegistrar = registrarEmailPattern.test(formData.email);
 
       if (isLecturer) {
@@ -357,7 +357,7 @@ export default function Auth() {
           : formData.email;
 
       // Check if email is registrar format
-      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const registrarEmailPattern = /^[a-zA-Z0-9._%+-]+@registrar\.com$/i;
       const isRegistrarEmail = registrarEmailPattern.test(emailToUse);
 
       const { error } = await signUp(

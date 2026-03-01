@@ -33,6 +33,7 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
+  getDoc,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/components/ui/use-toast";
@@ -145,31 +146,51 @@ export default function LecturerAssignments() {
   useEffect(() => {
     const loadCourses = async () => {
       if (!user) return;
-      const currentAcademicYear = new Date().getFullYear().toString();
-      const currentSemester = "1";
       try {
-        // Fetch lecturer_courses from Firestore
-        const lecturerCoursesQuery = query(
-          collection(db, "lecturer_courses"),
-          where("lecturer_id", "==", user.uid),
-          where("academic_year", "==", currentAcademicYear),
-          where("semester", "==", currentSemester),
-        );
-        const snapshot = await getDocs(lecturerCoursesQuery);
-        const mapped = snapshot.docs.map((docSnap) => {
-          const lc = docSnap.data();
-          return {
-            id: lc.course_id,
-            title: lc.course_title || "Untitled Course",
-            code: lc.course_code || "",
-          };
-        });
-        setCourses(mapped);
-        if (mapped.length > 0) {
-          setSelectedCourse(mapped[0].id);
+        // Fetch lecturer's profile to get assigned_course_units
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
+
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            const mapped: CourseOption[] = [];
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                mapped.push({
+                  id: doc.id,
+                  title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                  code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                });
+              });
+            }
+            setCourses(mapped);
+            // Do not pre-select, let user choose from dropdown
+          } else {
+            setCourses([]);
+          }
+        } else {
+          setCourses([]);
         }
       } catch (error) {
         console.error("Error loading courses", error);
+        setCourses([]);
       }
     };
     loadCourses();
@@ -391,16 +412,22 @@ export default function LecturerAssignments() {
         setUploadingDocument(false);
       }
 
-      const assignmentUpdate = {
+      const assignmentUpdate: any = {
         title: editFormData.title,
         description: editFormData.description,
         due_date: new Date(editFormData.dueDate).toISOString(),
         total_points: editFormData.totalPoints,
         course_id: editFormData.courseId,
-        instruction_document_url: instructionDocUrl,
-        instruction_document_name: instructionDocName,
         updated_at: serverTimestamp(),
       };
+
+      // Only include instruction document fields if they are defined
+      if (instructionDocUrl !== undefined) {
+        assignmentUpdate.instruction_document_url = instructionDocUrl;
+      }
+      if (instructionDocName !== undefined) {
+        assignmentUpdate.instruction_document_name = instructionDocName;
+      }
 
       await updateDoc(doc(db, "Assignments", editing.id), assignmentUpdate);
 
