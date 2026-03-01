@@ -165,26 +165,12 @@ export default function CreateQuiz() {
 
     try {
       setLoading(true);
-      console.log("Creating quiz with formData:", formData);
-      console.log("Current user:", user);
-
-      // Show debug info to user
-      toast({
-        title: "Debug Info",
-        description: `User ID: ${typedUser?.id ?? "unknown"}, Course ID: ${formData.courseId}`,
-      });
+      if (!user?.uid) throw new Error("User UID not found");
 
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
-      console.log("Selected course:", selectedCourse);
 
-      toast({
-        title: "Debug Info 2",
-        description: `Selected course: ${selectedCourse?.title}`,
-      });
-      console.log("Selected course:", selectedCourse);
-
-      // Save quiz to Firestore 'Quizzes' collection
-      await addDoc(collection(db, "Quizzes"), {
+      // Save quiz to Firestore 'quizzes' collection
+      await addDoc(collection(db, "quizzes"), {
         title: formData.title,
         description: formData.description,
         course_id: formData.courseId,
@@ -200,47 +186,15 @@ export default function CreateQuiz() {
         attempts_allowed: formData.attemptsAllowed,
         shuffle_questions: formData.shuffleQuestions,
         show_answers: formData.showAnswers,
-        lecturer_id: typedUser.id,
-        created_at: new Date().toISOString(),
+        lecturer_id: user.uid,
+        created_at: Timestamp.now(),
+        updated_at: Timestamp.now(),
+        total_attempts: 0,
+        average_score: 0,
+        completion_rate: 0,
+        highest_score: 0,
+        lowest_score: 0
       });
-
-      const { data, error } = await supabase
-        .from("quizzes")
-        .insert([
-          {
-            title: formData.title,
-            description: formData.description,
-            course_id: formData.courseId,
-            course_title: selectedCourse?.title,
-            course_code: selectedCourse?.code,
-            total_questions: formData.totalQuestions,
-            total_points: formData.totalPoints,
-            time_limit: formData.timeLimit,
-            passing_score: formData.passingScore,
-            start_date: formData.startDate,
-            end_date: formData.endDate,
-            status: formData.status,
-            attempts_allowed: formData.attemptsAllowed,
-            shuffle_questions: formData.shuffleQuestions,
-            show_answers: formData.showAnswers,
-            lecturer_id: typedUser.id,
-            created_at: new Date().toISOString(),
-          },
-        ])
-        .select();
-
-      console.log("Supabase insert result:", { data, error });
-
-      // Show insert result to user
-      toast({
-        title: "Insert Result",
-        description: error
-          ? `Error: ${error.message}`
-          : `Success: ${data?.length} quiz created`,
-        variant: error ? "destructive" : "default",
-      });
-
-      if (error) throw error;
 
       toast({
         title: "Success",

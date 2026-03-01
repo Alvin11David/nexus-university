@@ -271,7 +271,7 @@ export default function LecturerQuiz() {
         average_score: 0,
         completion_rate: 0,
         highest_score: 0,
-        lowest_score: 0
+        lowest_score: 0,
       };
 
       const newQuizRef = await addDoc(collection(db, "quizzes"), newQuizData);
@@ -284,14 +284,16 @@ export default function LecturerQuiz() {
         const questionsSnapshot = await getDocs(q);
 
         if (!questionsSnapshot.empty) {
-          const writeBatchPromises = questionsSnapshot.docs.map(async (qDoc) => {
-            const qData = qDoc.data();
-            return addDoc(collection(db, "quiz_questions"), {
-              ...qData,
-              quiz_id: newQuizId,
-              created_at: Timestamp.now()
-            });
-          });
+          const writeBatchPromises = questionsSnapshot.docs.map(
+            async (qDoc) => {
+              const qData = qDoc.data();
+              return addDoc(collection(db, "quiz_questions"), {
+                ...qData,
+                quiz_id: newQuizId,
+                created_at: Timestamp.now(),
+              });
+            },
+          );
 
           await Promise.all(writeBatchPromises);
         }
