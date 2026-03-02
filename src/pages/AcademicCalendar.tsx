@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { addDoc, collection } from "firebase/firestore";
+import { useMemo, useState, useEffect } from "react";
+import { addDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -9,70 +9,18 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Clock, Flag, Layers, List } from "lucide-react";
 
-const calendarData = {
-  academicYear: "2025/2026",
-  semesters: [
-    {
-      name: "Semester I",
-      status: "Completed",
-      events: [
-        {
-          title: "Change of Programme",
-          start: "8 Jul 2025",
-          end: "16 Aug 2025",
-          status: "Close",
-        },
-        {
-          title: "Administrative Change of Programme",
-          start: "2 Aug 2025",
-          end: "29 Nov 2025",
-          status: "Close",
-        },
-        {
-          title: "Enrollment",
-          start: "3 Aug 2025",
-          end: "5 Dec 2025",
-          status: "Close",
-        },
-        {
-          title: "Registration",
-          start: "3 Aug 2025",
-          end: "5 Dec 2025",
-          status: "Close",
-        },
-        {
-          title: "Graduation",
-          start: "18 Aug 2025",
-          end: "1 Jan 2026",
-          status: "Close",
-        },
-        {
-          title: "Course Evaluation",
-          start: "4 Nov 2025",
-          end: "12 Nov 2025",
-          status: "Close",
-        },
-      ],
-    },
-    {
-      name: "Semester II",
-      status: "Current",
-      events: [
-        {
-          title: "Registration",
-          start: "5 Jan 2026",
-          end: "23 May 2026",
-          status: "Open",
-        },
-        {
-          title: "Enrollment",
-          start: "5 Jan 2026",
-          end: "23 May 2026",
-          status: "Open",
-        },
-      ],
-    },
-  ],
+type CalendarData = {
+  academicYear: string;
+  semesters: {
+    name: string;
+    status: string;
+    events: {
+      title: string;
+      start: string;
+      end: string;
+      status: string;
+    }[];
+  }[];
 };
 
 const statusStyles: Record<string, string> = {
@@ -86,8 +34,33 @@ const statusStyles: Record<string, string> = {
 type StatusFilter = "All" | "Open" | "Close" | "Current" | "Completed";
 
 export default function AcademicCalendar() {
+  const [calendarData, setCalendarData] = useState<CalendarData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [viewMode, setViewMode] = useState<"grid" | "timeline">("grid");
+
+  useEffect(() => {
+    const fetchCalendarData = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "AcademicCalendar"));
+        if (!querySnapshot.empty) {
+          // Assuming the first document is the main calendar
+          const doc = querySnapshot.docs[0];
+          setCalendarData(doc.data() as CalendarData);
+        } else {
+          setError("No academic calendar data found.");
+        }
+      } catch (err) {
+        setError("Failed to fetch academic calendar data.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCalendarData();
+  }, []);
 
   // Handler to save academic calendar data to Firestore
   const handleSaveCalendar = async () => {
@@ -112,18 +85,21 @@ export default function AcademicCalendar() {
 
   const filteredSemesters = useMemo(
     () =>
-      calendarData.semesters
-        .map((semester) => ({
-          ...semester,
-          events: semester.events.filter((event) =>
-            matchesFilter(semester.status, event.status),
-          ),
-        }))
-        .filter((semester) => semester.events.length > 0),
-    [statusFilter],
+      calendarData
+        ? calendarData.semesters
+            .map((semester) => ({
+              ...semester,
+              events: semester.events.filter((event) =>
+                matchesFilter(semester.status, event.status),
+              ),
+            }))
+            .filter((semester) => semester.events.length > 0)
+        : [],
+    [statusFilter, calendarData],
   );
 
   const timelineEvents = useMemo(() => {
+    if (!calendarData) return [];
     const parseDate = (value: string) => new Date(value);
     return calendarData.semesters
       .flatMap((semester) =>
@@ -138,7 +114,7 @@ export default function AcademicCalendar() {
           })),
       )
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }, [statusFilter]);
+  }, [statusFilter, calendarData]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
