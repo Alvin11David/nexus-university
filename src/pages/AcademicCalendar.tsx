@@ -116,6 +116,34 @@ export default function AcademicCalendar() {
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
   }, [statusFilter, calendarData]);
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
+        <StudentHeader />
+        <main className="container py-8">
+          <div className="max-w-6xl mx-auto space-y-8">
+            <div className="text-center">Loading academic calendar...</div>
+          </div>
+        </main>
+        <StudentBottomNav />
+      </div>
+    );
+  }
+
+  if (error || !calendarData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
+        <StudentHeader />
+        <main className="container py-8">
+          <div className="max-w-6xl mx-auto space-y-8">
+            <div className="text-center text-red-500">{error || "No data available"}</div>
+          </div>
+        </main>
+        <StudentBottomNav />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
       <StudentHeader />
