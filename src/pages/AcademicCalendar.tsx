@@ -9,6 +9,16 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Clock, Flag, Layers, List } from "lucide-react";
 
+type Event = {
+  id: string;
+  title: string;
+  description: string;
+  date: any; // Firestore timestamp
+  dueDate: any;
+  type: string;
+  isActive: boolean;
+};
+
 type CalendarData = {
   academicYear: string;
   semesters: {
@@ -44,13 +54,29 @@ export default function AcademicCalendar() {
     const fetchCalendarData = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "AcademicCalendar"));
-        if (!querySnapshot.empty) {
-          // Assuming the first document is the main calendar
-          const doc = querySnapshot.docs[0];
-          setCalendarData(doc.data() as CalendarData);
-        } else {
-          setError("No academic calendar data found.");
-        }
+        const events: Event[] = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Event));
+
+        // Transform to calendarData structure
+        const transformedData: CalendarData = {
+          academicYear: "2025/2026",
+          semesters: [
+            {
+              name: "All Events",
+              status: "Current",
+              events: events.map(event => ({
+                title: event.title,
+                start: event.date.toDate ? event.date.toDate().toLocaleDateString() : event.date,
+                end: event.dueDate.toDate ? event.dueDate.toDate().toLocaleDateString() : event.dueDate,
+                status: event.isActive ? "Open" : "Close"
+              }))
+            }
+          ]
+        };
+
+        setCalendarData(transformedData);
       } catch (err) {
         setError("Failed to fetch academic calendar data.");
         console.error(err);
@@ -85,7 +111,7 @@ export default function AcademicCalendar() {
 
   const filteredSemesters = useMemo(
     () =>
-      calendarData
+      calendarData && calendarData.semesters
         ? calendarData.semesters
             .map((semester) => ({
               ...semester,
@@ -99,7 +125,7 @@ export default function AcademicCalendar() {
   );
 
   const timelineEvents = useMemo(() => {
-    if (!calendarData) return [];
+    if (!calendarData || !calendarData.semesters) return [];
     const parseDate = (value: string) => new Date(value);
     return calendarData.semesters
       .flatMap((semester) =>
@@ -136,7 +162,9 @@ export default function AcademicCalendar() {
         <StudentHeader />
         <main className="container py-8">
           <div className="max-w-6xl mx-auto space-y-8">
-            <div className="text-center text-red-500">{error || "No data available"}</div>
+            <div className="text-center text-red-500">
+              {error || "No data available"}
+            </div>
           </div>
         </main>
         <StudentBottomNav />
@@ -159,7 +187,7 @@ export default function AcademicCalendar() {
                 Academic Calendar
               </Badge>
               <h1 className="font-display text-3xl sm:text-4xl font-bold">
-                Academic Year {calendarData.academicYear}
+                Academic Year {calendarData?.academicYear || "Loading"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 Key academic activities and their windows for the current year.
