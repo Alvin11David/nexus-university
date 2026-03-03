@@ -282,6 +282,10 @@ export default function CreateQuiz() {
 
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
 
+      // Combine date and time for storage
+      const startDateTime = combineDateTime(formData.startDate, formData.startTime, formData.startTimePeriod);
+      const endDateTime = combineDateTime(formData.endDate, formData.endTime, formData.endTimePeriod);
+
       // Save quiz to Firestore 'quizzes' collection
       await addDoc(collection(db, "quizzes"), {
         title: formData.title,
@@ -293,12 +297,13 @@ export default function CreateQuiz() {
         total_points: formData.totalPoints,
         time_limit: formData.timeLimit,
         passing_score: formData.passingScore,
-        start_date: formData.startDate,
-        end_date: formData.endDate,
+        start_date: startDateTime,
+        end_date: endDateTime,
         status: formData.status,
         attempts_allowed: formData.attemptsAllowed,
         shuffle_questions: formData.shuffleQuestions,
         show_answers: formData.showAnswers,
+        auto_deactivate: formData.autoDeactivate,
         lecturer_id: user.uid,
         created_at: Timestamp.now(),
         updated_at: Timestamp.now(),
