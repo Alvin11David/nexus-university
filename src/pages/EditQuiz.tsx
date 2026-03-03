@@ -231,6 +231,10 @@ export default function EditQuiz() {
       setSaving(true);
       if (!id) return;
 
+      // Combine date and time for storage
+      const startDateTime = combineDateTime(quizData.startDate, quizData.startTime, quizData.startTimePeriod);
+      const endDateTime = combineDateTime(quizData.endDate, quizData.endTime, quizData.endTimePeriod);
+
       // Update quiz data
       const quizRef = doc(db, "quizzes", id);
       await updateDoc(quizRef, {
@@ -241,12 +245,13 @@ export default function EditQuiz() {
         course_code: quizData.courseCode,
         time_limit: quizData.timeLimit,
         passing_score: quizData.passingScore,
-        start_date: quizData.startDate,
-        end_date: quizData.endDate,
+        start_date: startDateTime,
+        end_date: endDateTime,
         status: quizData.status,
         attempts_allowed: quizData.attemptsAllowed,
         shuffle_questions: quizData.shuffleQuestions,
         show_answers: quizData.showAnswers,
+        auto_deactivate: quizData.autoDeactivate,
         updated_at: Timestamp.now(),
       });
 
@@ -514,26 +519,70 @@ export default function EditQuiz() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={quizData.startDate}
-                    onChange={(e) =>
-                      setQuizData({ ...quizData, startDate: e.target.value })
-                    }
-                  />
+                  <Label>Start Date & Time</Label>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      type="date"
+                      value={quizData.startDate}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, startDate: e.target.value })
+                      }
+                    />
+                    <Input
+                      type="time"
+                      value={quizData.startTime}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, startTime: e.target.value })
+                      }
+                    />
+                    <Select
+                      value={quizData.startTimePeriod}
+                      onValueChange={(value: "AM" | "PM") =>
+                        setQuizData({ ...quizData, startTimePeriod: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={quizData.endDate}
-                    onChange={(e) =>
-                      setQuizData({ ...quizData, endDate: e.target.value })
-                    }
-                  />
+                  <Label>End Date & Time</Label>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      type="date"
+                      value={quizData.endDate}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, endDate: e.target.value })
+                      }
+                    />
+                    <Input
+                      type="time"
+                      value={quizData.endTime}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, endTime: e.target.value })
+                      }
+                    />
+                    <Select
+                      value={quizData.endTimePeriod}
+                      onValueChange={(value: "AM" | "PM") =>
+                        setQuizData({ ...quizData, endTimePeriod: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -577,6 +626,18 @@ export default function EditQuiz() {
                   />
                   <Label htmlFor="showAnswers">
                     Show Answers After Submission
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="autoDeactivate"
+                    checked={quizData.autoDeactivate}
+                    onCheckedChange={(checked) =>
+                      setQuizData({ ...quizData, autoDeactivate: checked })
+                    }
+                  />
+                  <Label htmlFor="autoDeactivate">
+                    Auto-Deactivate on End Date
                   </Label>
                 </div>
               </div>
