@@ -1382,16 +1382,21 @@ export default function Webmail() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg md:text-xl">
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto mx-2 md:mx-auto p-4 md:p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl md:text-2xl font-semibold">
               Compose Message
             </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send a message to lecturers or students
+            </p>
           </DialogHeader>
-          <div className="space-y-4 md:space-y-4">
+          <div className="space-y-6">
             <div>
-              <label className="text-sm font-medium mb-2 block">To</label>
-              <div className="space-y-2">
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                To
+              </label>
+              <div className="space-y-3">
                 <Input
                   placeholder="Type name or email to search..."
                   value={composeTo}
@@ -1407,25 +1412,30 @@ export default function Webmail() {
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
-                  className={`h-12 ${composeToId ? "border-green-500" : ""}`}
+                  className={`h-12 text-base ${composeToId ? "border-green-500 focus:border-green-500" : ""}`}
                 />
                 {composeTo && !composeToId && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
                     No user found. Please select from the list below.
                   </p>
                 )}
                 {composeToId && (
-                  <p className="text-xs text-green-600">✓ Recipient selected</p>
+                  <p className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Recipient selected
+                  </p>
                 )}
                 {showingAllUsers && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
                     {profile?.role?.toLowerCase() === "lecturer"
                       ? "No enrolled students found. Showing all students as fallback."
                       : "No lecturers found yet. Showing all users as fallback."}
                   </p>
                 )}
                 {composeTo && (
-                  <ScrollArea className="max-h-32 rounded-md border">
+                  <ScrollArea className="max-h-40 md:max-h-32 rounded-md border">
                     <div className="p-2 space-y-1">
                       {users
                         .filter(
@@ -1446,9 +1456,11 @@ export default function Webmail() {
                               setComposeTo(user.email);
                               setComposeToId(user.id);
                             }}
-                            className="w-full text-left px-3 py-3 rounded hover:bg-muted transition-colors"
+                            className="w-full text-left px-3 py-3 md:py-2 rounded hover:bg-muted transition-colors touch-manipulation"
                           >
-                            <div className="font-medium">{user.full_name}</div>
+                            <div className="font-medium text-sm md:text-base">
+                              {user.full_name}
+                            </div>
                             <div className="text-xs text-muted-foreground">
                               {user.email}
                             </div>
@@ -1461,88 +1473,99 @@ export default function Webmail() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Subject</label>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Subject
+              </label>
               <Input
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
-                placeholder="Subject..."
-                className="h-12"
+                placeholder="Enter message subject..."
+                className="h-12 text-base"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Message</label>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Message
+              </label>
               <Textarea
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                className="min-h-[200px] md:min-h-[300px] resize-none text-sm md:text-base"
+                className="min-h-[200px] md:min-h-[300px] resize-none text-base leading-relaxed"
+                rows={8}
               />
             </div>
 
             {/* Attachment Section */}
             <div>
-              <label className="text-sm font-medium mb-2 block">
+              <label className="text-sm font-medium mb-3 block text-foreground">
                 Attachment (Optional)
               </label>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    document.getElementById("attachment-upload")?.click()
-                  }
-                  disabled={uploadingAttachment}
-                  className="w-full sm:w-auto h-12"
-                >
-                  <Paperclip className="h-4 w-4 mr-2" />
-                  {attachmentFile ? "Change File" : "Attach File"}
-                </Button>
-                <input
-                  id="attachment-upload"
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 10485760) {
-                        alert("File size must be less than 10MB");
-                        return;
-                      }
-                      setAttachmentFile(file);
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document.getElementById("attachment-upload")?.click()
                     }
-                  }}
-                />
-                {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-                    <span className="text-sm text-muted-foreground truncate flex-1">
-                      {attachmentFile.name} (
-                      {(attachmentFile.size / 1024).toFixed(1)} KB)
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAttachmentFile(null)}
-                      className="flex-shrink-0"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                    disabled={uploadingAttachment}
+                    className="w-full sm:w-auto h-12 flex-shrink-0"
+                  >
+                    <Paperclip className="h-4 w-4 mr-2" />
+                    {attachmentFile ? "Change File" : "Attach File"}
+                  </Button>
+                  <input
+                    id="attachment-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10485760) {
+                          alert("File size must be less than 10MB");
+                          return;
+                        }
+                        setAttachmentFile(file);
+                      }
+                    }}
+                  />
+                  {attachmentFile && (
+                    <div className="flex items-center gap-2 flex-1 min-w-0 bg-muted/50 rounded-md p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {attachmentFile.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {(attachmentFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAttachmentFile(null)}
+                        className="flex-shrink-0 h-8 w-8 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
-              </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t">
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
                 disabled={savingDraft}
-                className="w-full sm:w-auto h-12 order-2 sm:order-1"
+                className="w-full sm:w-auto h-12 order-2 sm:order-1 border-2"
               >
                 {savingDraft ? (
                   <>
@@ -1561,7 +1584,7 @@ export default function Webmail() {
                   !composeBody.trim() ||
                   sending
                 }
-                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2"
+                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2 shadow-lg"
               >
                 {sending ? (
                   <>
@@ -1571,7 +1594,7 @@ export default function Webmail() {
                 ) : (
                   <>
                     <Send className="h-4 w-4 mr-2" />
-                    Send
+                    Send Message
                   </>
                 )}
               </Button>

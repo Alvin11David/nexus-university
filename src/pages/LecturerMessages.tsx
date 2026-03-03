@@ -648,13 +648,20 @@ export default function LecturerMessages() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg md:text-xl">New Message to Student</DialogTitle>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto mx-2 md:mx-auto p-4 md:p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl md:text-2xl font-semibold">
+              New Message to Student
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send a message to your students
+            </p>
           </DialogHeader>
-          <div className="space-y-4 md:space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">To:</label>
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                To
+              </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                 <select
@@ -666,7 +673,7 @@ export default function LecturerMessages() {
                     setComposeToId(e.target.value);
                     setComposeTo(selectedStudent?.email || "");
                   }}
-                  className="w-full pl-10 pr-4 py-3 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary h-12"
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary h-12 text-base"
                 >
                   <option value="">Select a student...</option>
                   {students.map((student) => (
@@ -677,23 +684,27 @@ export default function LecturerMessages() {
                 </select>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Subject:</label>
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Subject
+              </label>
               <Input
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
-                placeholder="Enter subject..."
-                className="h-12"
+                placeholder="Enter message subject..."
+                className="h-12 text-base"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Message:</label>
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Message
+              </label>
               <Textarea
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                rows={6}
-                className="min-h-[150px] md:min-h-[200px] resize-none text-sm md:text-base"
+                rows={8}
+                className="min-h-[200px] md:min-h-[300px] resize-none text-base leading-relaxed"
               />
             </div>
 
@@ -767,7 +778,12 @@ export default function LecturerMessages() {
             </Button>
             <Button
               onClick={handleSendMessage}
-              disabled={sending || !composeToId || !composeSubject.trim() || !composeBody.trim()}
+              disabled={
+                sending ||
+                !composeToId ||
+                !composeSubject.trim() ||
+                !composeBody.trim()
+              }
               className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary order-1 sm:order-2"
             >
               {sending ? "Sending..." : "Send Message"}
@@ -787,7 +803,9 @@ export default function LecturerMessages() {
           >
             <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
               <DialogHeader>
-                <DialogTitle className="text-lg md:text-xl pr-8">{selectedMessage.subject}</DialogTitle>
+                <DialogTitle className="text-lg md:text-xl pr-8">
+                  {selectedMessage.subject}
+                </DialogTitle>
               </DialogHeader>
               <ScrollArea className="max-h-[60vh] md:max-h-[400px] pr-4">
                 <div className="space-y-4">
