@@ -15,6 +15,8 @@ import {
   Star,
   Clock,
   Paperclip,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -30,6 +32,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -778,7 +781,7 @@ export default function LecturerMessages() {
               variant="outline"
               onClick={() => {
                 setIsComposeOpen(false);
-                resetComposeForm();
+                setComposeTo();
               }}
               disabled={sending}
               className="w-full sm:w-auto h-12 text-base order-2 sm:order-1"
