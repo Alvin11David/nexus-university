@@ -575,7 +575,7 @@ export default function Webmail() {
           : `Re: ${selectedMessage.subject}`,
       );
       setComposeBody(
-        `\n\n---\nOn ${new Date(selectedMessage.created_at).toLocaleString()}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
+        `\n\n---\nOn ${selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime()) ? new Date(selectedMessage.created_at).toLocaleString() : "Unknown time"}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
           .split("\n")
           .join("\n> ")}`,
       );
@@ -594,9 +594,9 @@ export default function Webmail() {
         : `Fwd: ${selectedMessage.subject}`,
     );
     setComposeBody(
-      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${new Date(
+      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime()) ? new Date(
         selectedMessage.created_at,
-      ).toLocaleString()}\n\n${selectedMessage.body}`,
+      ).toLocaleString() : "Unknown time"}\n\n${selectedMessage.body}`,
     );
     setIsComposeOpen(true);
   };
