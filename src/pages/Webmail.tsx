@@ -1406,7 +1406,9 @@ export default function Webmail() {
                 )}
                 {showingAllUsers && (
                   <p className="text-xs text-amber-600">
-                    No lecturers found yet. Showing all users as fallback.
+                    {profile?.role?.toLowerCase() === "lecturer"
+                      ? "No enrolled students found. Showing all students as fallback."
+                      : "No lecturers found yet. Showing all users as fallback."}
                   </p>
                 )}
                 {composeTo && (
