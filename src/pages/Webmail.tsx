@@ -1065,10 +1065,13 @@ export default function Webmail() {
                                             {message.body}
                                           </p>
                                           <p className="text-xs text-muted-foreground mt-2">
-                                            {formatDistanceToNow(
-                                              new Date(message.created_at),
-                                              { addSuffix: true }
-                                            )}
+                                            {message.created_at && !isNaN(new Date(message.created_at).getTime())
+                                              ? formatDistanceToNow(
+                                                  new Date(message.created_at),
+                                                  { addSuffix: true }
+                                                )
+                                              : "Unknown time"
+                                            }
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
