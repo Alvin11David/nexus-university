@@ -87,6 +87,7 @@ export default function LecturerQuiz() {
     "all" | "draft" | "active" | "closed"
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [courses, setCourses] = useState<any[]>([]);
   const [stats, setStats] = useState({
     totalQuizzes: 0,
     activeQuizzes: 0,
@@ -195,6 +196,49 @@ export default function LecturerQuiz() {
     }
   };
 
+  const fetchLecturerCourses = async () => {
+    try {
+      if (!user?.uid) return;
+
+      const q = query(
+        collection(db, "lecturer_courses"),
+        where("lecturer_id", "==", user.uid)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setCourses([]);
+        return;
+      }
+
+      const lecturerCoursesData = querySnapshot.docs.map(doc => doc.data());
+      const courseIds = lecturerCoursesData.map(lc => lc.course_id);
+
+      // Fetch course details chunked (max 30 ids per 'in' query)
+      const coursesData: any[] = [];
+      for (let i = 0; i < courseIds.length; i += 30) {
+        const chunk = courseIds.slice(i, i + 30);
+        const coursesQuery = query(
+          collection(db, "courses"),
+          where("__name__", "in", chunk)
+        );
+        const coursesSnap = await getDocs(coursesQuery);
+        coursesSnap.forEach(doc => {
+          coursesData.push({ id: doc.id, ...doc.data() });
+        });
+      }
+
+      setCourses(coursesData);
+    } catch (error) {
+      console.error("Error fetching lecturer courses:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load courses",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filterQuizzes = () => {
     let filtered = [...quizzes];
 
@@ -218,6 +262,7 @@ export default function LecturerQuiz() {
   useEffect(() => {
     if (user?.uid) {
       loadQuizzes();
+      fetchLecturerCourses();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
