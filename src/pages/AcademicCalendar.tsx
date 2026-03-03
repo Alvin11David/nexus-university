@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { addDoc, collection } from "firebase/firestore";
+import { useMemo, useState, useEffect } from "react";
+import { addDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -9,70 +9,28 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Clock, Flag, Layers, List } from "lucide-react";
 
-const calendarData = {
-  academicYear: "2025/2026",
-  semesters: [
-    {
-      name: "Semester I",
-      status: "Completed",
-      events: [
-        {
-          title: "Change of Programme",
-          start: "8 Jul 2025",
-          end: "16 Aug 2025",
-          status: "Close",
-        },
-        {
-          title: "Administrative Change of Programme",
-          start: "2 Aug 2025",
-          end: "29 Nov 2025",
-          status: "Close",
-        },
-        {
-          title: "Enrollment",
-          start: "3 Aug 2025",
-          end: "5 Dec 2025",
-          status: "Close",
-        },
-        {
-          title: "Registration",
-          start: "3 Aug 2025",
-          end: "5 Dec 2025",
-          status: "Close",
-        },
-        {
-          title: "Graduation",
-          start: "18 Aug 2025",
-          end: "1 Jan 2026",
-          status: "Close",
-        },
-        {
-          title: "Course Evaluation",
-          start: "4 Nov 2025",
-          end: "12 Nov 2025",
-          status: "Close",
-        },
-      ],
-    },
-    {
-      name: "Semester II",
-      status: "Current",
-      events: [
-        {
-          title: "Registration",
-          start: "5 Jan 2026",
-          end: "23 May 2026",
-          status: "Open",
-        },
-        {
-          title: "Enrollment",
-          start: "5 Jan 2026",
-          end: "23 May 2026",
-          status: "Open",
-        },
-      ],
-    },
-  ],
+type Event = {
+  id: string;
+  title: string;
+  description: string;
+  date: any;
+  dueDate: any;
+  type: string;
+  isActive: boolean;
+};
+
+type CalendarData = {
+  academicYear: string;
+  semesters: {
+    name: string;
+    status: string;
+    events: {
+      title: string;
+      start: string;
+      end: string;
+      status: string;
+    }[];
+  }[];
 };
 
 const statusStyles: Record<string, string> = {
@@ -86,8 +44,56 @@ const statusStyles: Record<string, string> = {
 type StatusFilter = "All" | "Open" | "Close" | "Current" | "Completed";
 
 export default function AcademicCalendar() {
+  const [calendarData, setCalendarData] = useState<CalendarData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [viewMode, setViewMode] = useState<"grid" | "timeline">("grid");
+
+  useEffect(() => {
+    const fetchCalendarData = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "AcademicCalendar"));
+        const events: Event[] = querySnapshot.docs.map(
+          (doc) =>
+            ({
+              id: doc.id,
+              ...doc.data(),
+            }) as Event,
+        );
+
+        // Transform to calendarData structure
+        const transformedData: CalendarData = {
+          academicYear: "2025/2026",
+          semesters: [
+            {
+              name: "All Events",
+              status: "Current",
+              events: events.map((event) => ({
+                title: event.title,
+                start: event.date.toDate
+                  ? event.date.toDate().toLocaleDateString()
+                  : event.date,
+                end: event.dueDate.toDate
+                  ? event.dueDate.toDate().toLocaleDateString()
+                  : event.dueDate,
+                status: event.isActive ? "Open" : "Close",
+              })),
+            },
+          ],
+        };
+
+        setCalendarData(transformedData);
+      } catch (err) {
+        setError("Failed to fetch academic calendar data.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCalendarData();
+  }, []);
 
   // Handler to save academic calendar data to Firestore
   const handleSaveCalendar = async () => {
@@ -112,18 +118,21 @@ export default function AcademicCalendar() {
 
   const filteredSemesters = useMemo(
     () =>
-      calendarData.semesters
-        .map((semester) => ({
-          ...semester,
-          events: semester.events.filter((event) =>
-            matchesFilter(semester.status, event.status),
-          ),
-        }))
-        .filter((semester) => semester.events.length > 0),
-    [statusFilter],
+      calendarData && calendarData.semesters
+        ? calendarData.semesters
+            .map((semester) => ({
+              ...semester,
+              events: semester.events.filter((event) =>
+                matchesFilter(semester.status, event.status),
+              ),
+            }))
+            .filter((semester) => semester.events.length > 0)
+        : [],
+    [statusFilter, calendarData],
   );
 
   const timelineEvents = useMemo(() => {
+    if (!calendarData || !calendarData.semesters) return [];
     const parseDate = (value: string) => new Date(value);
     return calendarData.semesters
       .flatMap((semester) =>
@@ -138,7 +147,37 @@ export default function AcademicCalendar() {
           })),
       )
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }, [statusFilter]);
+  }, [statusFilter, calendarData]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
+        <StudentHeader />
+        <main className="container py-8">
+          <div className="max-w-6xl mx-auto space-y-8">
+            <div className="text-center">Loading academic calendar...</div>
+          </div>
+        </main>
+        <StudentBottomNav />
+      </div>
+    );
+  }
+
+  if (error || !calendarData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
+        <StudentHeader />
+        <main className="container py-8">
+          <div className="max-w-6xl mx-auto space-y-8">
+            <div className="text-center text-red-500">
+              {error || "No data available"}
+            </div>
+          </div>
+        </main>
+        <StudentBottomNav />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
@@ -155,7 +194,7 @@ export default function AcademicCalendar() {
                 Academic Calendar
               </Badge>
               <h1 className="font-display text-3xl sm:text-4xl font-bold">
-                Academic Year {calendarData.academicYear}
+                Academic Year {calendarData?.academicYear || "Loading"}
               </h1>
               <p className="text-sm text-muted-foreground">
                 Key academic activities and their windows for the current year.

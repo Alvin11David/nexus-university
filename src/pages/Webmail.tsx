@@ -37,7 +37,23 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy, deleteDoc, or, and } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+  deleteDoc,
+  or,
+  and,
+} from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/integrations/firebase/client";
 import { formatDistanceToNow, format } from "date-fns";
@@ -109,6 +125,7 @@ export default function Webmail() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showingAllUsers, setShowingAllUsers] = useState(false);
 
   // Compose state
@@ -125,7 +142,7 @@ export default function Webmail() {
 
   const downloadAttachment = async (
     attachmentUrl: string,
-    attachmentName: string
+    attachmentName: string,
   ) => {
     try {
       const storageRef = ref(storage, attachmentUrl);
@@ -158,7 +175,7 @@ export default function Webmail() {
       const chars = titleRef.current.textContent?.split("") || [];
       titleRef.current.innerHTML = chars
         .map((char) =>
-          char === " " ? " " : `<span class="inline-block">${char}</span>`
+          char === " " ? " " : `<span class="inline-block">${char}</span>`,
         )
         .join("");
 
@@ -176,7 +193,7 @@ export default function Webmail() {
           duration: 0.6,
           stagger: 0.02,
           ease: "back.out(1.7)",
-        }
+        },
       );
     }
   }, []);
@@ -188,11 +205,11 @@ export default function Webmail() {
       const snapshot = await getDocs(q);
 
       const allUsers = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as any))
-        .filter(u => u.id !== user?.uid);
+        .map((d) => ({ id: d.id, ...d.data() }) as any)
+        .filter((u) => u.id !== user?.uid);
 
       const lecturers = allUsers.filter(
-        (u) => u.role && u.role.toLowerCase() === "lecturer"
+        (u) => u.role && u.role.toLowerCase() === "lecturer",
       );
 
       if (lecturers.length > 0) {
@@ -220,39 +237,47 @@ export default function Webmail() {
           messagesRef,
           where("to_user_id", "==", user.uid),
           where("is_deleted_by_recipient", "==", false),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "sent") {
         q = query(
           messagesRef,
           where("from_user_id", "==", user.uid),
           where("is_deleted_by_sender", "==", false),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "starred") {
         q = query(
           messagesRef,
           and(
             where("is_starred", "==", true),
-            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+            or(
+              where("to_user_id", "==", user.uid),
+              where("from_user_id", "==", user.uid),
+            ),
           ),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "archived") {
         q = query(
           messagesRef,
           and(
             where("is_archived", "==", true),
-            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+            or(
+              where("to_user_id", "==", user.uid),
+              where("from_user_id", "==", user.uid),
+            ),
           ),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else {
         q = query(messagesRef, orderBy("created_at", "desc"));
       }
 
       const snapshot = await getDocs(q);
-      const messagesData = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Message));
+      const messagesData = snapshot.docs.map(
+        (d) => ({ id: d.id, ...(d.data() as any) }) as Message,
+      );
 
       if (messagesData.length === 0) {
         setMessages([]);
@@ -260,20 +285,27 @@ export default function Webmail() {
       }
 
       // Get unique user IDs
-      const userIds = Array.from(new Set(messagesData.flatMap(m => [m.from_user_id, m.to_user_id])));
+      const userIds = Array.from(
+        new Set(messagesData.flatMap((m) => [m.from_user_id, m.to_user_id])),
+      );
 
       // Fetch profiles in chunks (Firestore 'in' limit is 10)
       const profilesData: any[] = [];
       for (let i = 0; i < userIds.length; i += 10) {
         const chunk = userIds.slice(i, i + 10);
-        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
         const pSnapshot = await getDocs(pQuery);
-        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        profilesData.push(
+          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
+        );
       }
 
-      const profileMap = new Map(profilesData.map(p => [p.id, p]));
+      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
 
-      const messagesWithProfiles = messagesData.map(msg => ({
+      const messagesWithProfiles = messagesData.map((msg) => ({
         ...msg,
         from_profile: profileMap.get(msg.from_user_id) || null,
         to_profile: profileMap.get(msg.to_user_id) || null,
@@ -292,9 +324,15 @@ export default function Webmail() {
 
     try {
       const draftsRef = collection(db, "message_drafts");
-      const q = query(draftsRef, where("user_id", "==", user.uid), orderBy("updated_at", "desc"));
+      const q = query(
+        draftsRef,
+        where("user_id", "==", user.uid),
+        orderBy("updated_at", "desc"),
+      );
       const snapshot = await getDocs(q);
-      const draftsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const draftsData = snapshot.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as any,
+      );
 
       if (draftsData.length === 0) {
         setDrafts([]);
@@ -314,12 +352,17 @@ export default function Webmail() {
       const profilesData: any[] = [];
       for (let i = 0; i < recipientIds.length; i += 10) {
         const chunk = recipientIds.slice(i, i + 10);
-        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
         const pSnapshot = await getDocs(pQuery);
-        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        profilesData.push(
+          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
+        );
       }
 
-      const profileMap = new Map(profilesData.map(p => [p.id, p]));
+      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
 
       const draftsWithProfiles = draftsData.map((draft: any) => ({
         ...draft,
@@ -425,8 +468,7 @@ export default function Webmail() {
     } catch (error: any) {
       console.error("Error sending message:", error);
       alert(
-        "Failed to send message. Please try again. Error: " +
-        error.message
+        "Failed to send message. Please try again. Error: " + error.message,
       );
     } finally {
       setSending(false);
@@ -520,9 +562,10 @@ export default function Webmail() {
   const handleReply = () => {
     if (!selectedMessage) return;
 
-    const replyTo = selectedMessage.from_user_id === user?.uid
-      ? selectedMessage.to_profile
-      : selectedMessage.from_profile;
+    const replyTo =
+      selectedMessage.from_user_id === user?.uid
+        ? selectedMessage.to_profile
+        : selectedMessage.from_profile;
 
     if (replyTo) {
       setComposeTo(replyTo.full_name);
@@ -530,12 +573,12 @@ export default function Webmail() {
       setComposeSubject(
         selectedMessage.subject.startsWith("Re:")
           ? selectedMessage.subject
-          : `Re: ${selectedMessage.subject}`
+          : `Re: ${selectedMessage.subject}`,
       );
       setComposeBody(
-        `\n\n---\nOn ${new Date(selectedMessage.created_at).toLocaleString()}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
+        `\n\n---\nOn ${selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime()) ? new Date(selectedMessage.created_at).toLocaleString() : "Unknown time"}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
           .split("\n")
-          .join("\n> ")}`
+          .join("\n> ")}`,
       );
       setIsComposeOpen(true);
     }
@@ -549,12 +592,15 @@ export default function Webmail() {
     setComposeSubject(
       selectedMessage.subject.startsWith("Fwd:")
         ? selectedMessage.subject
-        : `Fwd: ${selectedMessage.subject}`
+        : `Fwd: ${selectedMessage.subject}`,
     );
     setComposeBody(
-      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${new Date(
-        selectedMessage.created_at
-      ).toLocaleString()}\n\n${selectedMessage.body}`
+      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${
+        selectedMessage.created_at &&
+        !isNaN(new Date(selectedMessage.created_at).getTime())
+          ? new Date(selectedMessage.created_at).toLocaleString()
+          : "Unknown time"
+      }\n\n${selectedMessage.body}`,
     );
     setIsComposeOpen(true);
   };
@@ -588,7 +634,7 @@ export default function Webmail() {
   });
 
   const unreadCount = messages.filter(
-    (m) => !m.is_read && m.to_user_id === user?.id
+    (m) => !m.is_read && m.to_user_id === user?.uid,
   ).length;
 
   const getInitials = (name: string) => {
@@ -631,94 +677,140 @@ export default function Webmail() {
         </div>
       </section>
 
-      <main className="container py-8">
+      <main className="container py-4 md:py-8">
         <div className="max-w-7xl mx-auto">
-          {/* Compose Button */}
+          {/* Mobile Menu Button */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
+            className="mb-4 md:hidden"
+          >
+            <Button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              variant="outline"
+              className="w-full gap-2 h-12"
+            >
+              <Mail className="h-5 w-5" />
+              {selectedView === "inbox" && "Inbox"}
+              {selectedView === "sent" && "Sent"}
+              {selectedView === "drafts" && "Drafts"}
+              {selectedView === "starred" && "Starred"}
+              {selectedView === "archived" && "Archived"}
+              <ChevronLeft className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? 'rotate-90' : '-rotate-90'}`} />
+            </Button>
+          </motion.div>
+
+          {/* Compose Button - Mobile */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 md:hidden"
           >
             <Button
               onClick={() => setIsComposeOpen(true)}
-              className="gap-2 h-12 px-6 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 text-white shadow-lg"
+              className="w-full gap-2 h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 text-white shadow-lg"
             >
               <Plus className="h-5 w-5" />
               Compose
             </Button>
           </motion.div>
 
-          <div className="grid lg:grid-cols-4 gap-6">
+          <div className="grid lg:grid-cols-4 gap-4 md:gap-6">
             {/* Sidebar */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="lg:col-span-1"
+              animate={{
+                opacity: 1,
+                x: 0,
+                height: sidebarOpen ? 'auto' : '0',
+                overflow: 'hidden'
+              }}
+              className={`lg:col-span-1 ${sidebarOpen ? 'block' : 'hidden lg:block'}`}
             >
               <Card className="border-0 shadow-lg">
-                <CardContent className="p-4 space-y-1">
+                <CardContent className="p-3 md:p-4 space-y-1">
                   <button
-                    onClick={() => setSelectedView("inbox")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "inbox"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    onClick={() => {
+                      setSelectedView("inbox");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                      selectedView === "inbox"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <Inbox className="h-5 w-5" />
+                    <Inbox className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Inbox</span>
                     {unreadCount > 0 && (
-                      <Badge className="ml-auto bg-amber-500">
+                      <Badge className="ml-auto bg-amber-500 text-xs">
                         {unreadCount}
                       </Badge>
                     )}
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("sent")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "sent"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    onClick={() => {
+                      setSelectedView("sent");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                      selectedView === "sent"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <Send className="h-5 w-5" />
+                    <Send className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Sent</span>
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("drafts")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "drafts"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    onClick={() => {
+                      setSelectedView("drafts");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                      selectedView === "drafts"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <FileText className="h-5 w-5" />
+                    <FileText className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Drafts</span>
                     {drafts.length > 0 && (
-                      <Badge variant="secondary" className="ml-auto">
+                      <Badge variant="secondary" className="ml-auto text-xs">
                         {drafts.length}
                       </Badge>
                     )}
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("starred")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "starred"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    onClick={() => {
+                      setSelectedView("starred");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                      selectedView === "starred"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <Star className="h-5 w-5" />
+                    <Star className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Starred</span>
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("archived")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "archived"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    onClick={() => {
+                      setSelectedView("archived");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                      selectedView === "archived"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
-                    <Archive className="h-5 w-5" />
+                    <Archive className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Archived</span>
                   </button>
                 </CardContent>
@@ -777,10 +869,13 @@ export default function Webmail() {
                                     </p>
                                   )}
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    {format(
-                                      new Date(draft.created_at),
-                                      "MMM d, yyyy h:mm a"
-                                    )}
+                                    {draft.created_at &&
+                                    !isNaN(new Date(draft.created_at).getTime())
+                                      ? format(
+                                          new Date(draft.created_at),
+                                          "MMM d, yyyy h:mm a",
+                                        )
+                                      : "Unknown time"}
                                   </p>
                                 </div>
                               </div>
@@ -822,19 +917,24 @@ export default function Webmail() {
                   ) : selectedMessage ? (
                     /* Message Detail View */
                     <Card className="border-0 shadow-lg">
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-4 mb-6">
+                      <CardContent className="p-4 md:p-6">
+                        <div className="flex items-center gap-2 md:gap-4 mb-4 md:mb-6">
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => setSelectedMessage(null)}
+                            className="h-10 w-10 md:h-8 md:w-8"
                           >
                             <ChevronLeft className="h-5 w-5" />
                           </Button>
-                          <div className="flex-1" />
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg md:text-2xl font-bold truncate">
+                              {selectedMessage.subject}
+                            </h2>
+                          </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
+                              <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8">
                                 <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -843,15 +943,16 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleToggleStar(
                                     selectedMessage.id,
-                                    selectedMessage.is_starred
+                                    selectedMessage.is_starred,
                                   )
                                 }
                               >
                                 <Star
-                                  className={`h-4 w-4 mr-2 ${selectedMessage.is_starred
-                                    ? "fill-amber-500 text-amber-500"
-                                    : ""
-                                    }`}
+                                  className={`h-4 w-4 mr-2 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
                                 />
                                 {selectedMessage.is_starred ? "Unstar" : "Star"}
                               </DropdownMenuItem>
@@ -859,7 +960,7 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleArchive(
                                     selectedMessage.id,
-                                    selectedMessage.is_archived
+                                    selectedMessage.is_archived,
                                   )
                                 }
                               >
@@ -882,11 +983,8 @@ export default function Webmail() {
 
                         <div className="space-y-6">
                           <div>
-                            <h2 className="text-2xl font-bold mb-4">
-                              {selectedMessage.subject}
-                            </h2>
-                            <div className="flex items-start gap-4 pb-4 border-b">
-                              <Avatar className="h-12 w-12">
+                            <div className="flex items-start gap-3 md:gap-4 pb-4 border-b">
+                              <Avatar className="h-12 w-12 flex-shrink-0">
                                 <AvatarImage
                                   src={
                                     selectedMessage.from_profile?.avatar_url ||
@@ -896,26 +994,32 @@ export default function Webmail() {
                                 <AvatarFallback>
                                   {getInitials(
                                     selectedMessage.from_profile?.full_name ||
-                                    "U"
+                                      "U",
                                   )}
                                 </AvatarFallback>
                               </Avatar>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                                  <span className="font-semibold text-sm md:text-base">
                                     {selectedMessage.from_profile?.full_name ||
                                       "Unknown"}
                                   </span>
-                                  <span className="text-muted-foreground">
-                                    &lt;{selectedMessage.from_profile?.email}
-                                    &gt;
+                                  <span className="text-muted-foreground text-sm hidden sm:inline">
+                                    &lt;{selectedMessage.from_profile?.email}&gt;
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {format(
-                                    new Date(selectedMessage.created_at),
-                                    "PPpp"
-                                  )}
+                                  {selectedMessage.created_at &&
+                                  !isNaN(
+                                    new Date(
+                                      selectedMessage.created_at,
+                                    ).getTime(),
+                                  )
+                                    ? formatDistanceToNow(
+                                        new Date(selectedMessage.created_at),
+                                        { addSuffix: true }
+                                      )
+                                    : "Unknown time"}
                                 </p>
                               </div>
                               <Button
@@ -924,22 +1028,24 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleToggleStar(
                                     selectedMessage.id,
-                                    selectedMessage.is_starred
+                                    selectedMessage.is_starred,
                                   )
                                 }
+                                className="h-8 w-8 flex-shrink-0"
                               >
                                 <Star
-                                  className={`h-5 w-5 ${selectedMessage.is_starred
-                                    ? "fill-amber-500 text-amber-500"
-                                    : ""
-                                    }`}
+                                  className={`h-5 w-5 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
                                 />
                               </Button>
                             </div>
                           </div>
 
                           <div className="prose max-w-none">
-                            <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                            <p className="whitespace-pre-wrap text-foreground leading-relaxed text-sm md:text-base">
                               {selectedMessage.body}
                             </p>
                           </div>
@@ -956,25 +1062,27 @@ export default function Webmail() {
                                   downloadAttachment(
                                     selectedMessage.attachment_url!,
                                     selectedMessage.attachment_name ||
-                                    "attachment"
+                                      "attachment",
                                   )
                                 }
-                                className="gap-2"
+                                className="gap-2 w-full sm:w-auto justify-start h-12"
                               >
                                 <Paperclip className="h-4 w-4" />
-                                {selectedMessage.attachment_name}{" "}
-                                {selectedMessage.attachment_size &&
-                                  `(${(
-                                    selectedMessage.attachment_size / 1024
-                                  ).toFixed(1)} KB)`}
+                                <span className="truncate">
+                                  {selectedMessage.attachment_name}{" "}
+                                  {selectedMessage.attachment_size &&
+                                    `(${(
+                                      selectedMessage.attachment_size / 1024
+                                    ).toFixed(1)} KB)`}
+                                </span>
                               </Button>
                             </div>
                           )}
 
-                          <div className="flex gap-2 pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t">
                             <Button
                               variant="outline"
-                              className="gap-2"
+                              className="gap-2 flex-1 sm:flex-initial h-12"
                               onClick={handleReply}
                             >
                               <Reply className="h-4 w-4" />
@@ -982,7 +1090,7 @@ export default function Webmail() {
                             </Button>
                             <Button
                               variant="outline"
-                              className="gap-2"
+                              className="gap-2 flex-1 sm:flex-initial h-12"
                               onClick={handleForward}
                             >
                               <Forward className="h-4 w-4" />
@@ -1011,7 +1119,7 @@ export default function Webmail() {
                               <AnimatePresence>
                                 {filteredMessages.map((message, index) => {
                                   const isSent =
-                                    message.from_user_id === user?.id;
+                                    message.from_user_id === user?.uid;
                                   const otherProfile = isSent
                                     ? message.to_profile
                                     : message.from_profile;
@@ -1023,10 +1131,11 @@ export default function Webmail() {
                                       animate={{ opacity: 1, x: 0 }}
                                       exit={{ opacity: 0, x: 20 }}
                                       transition={{ delay: index * 0.03 }}
-                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${!message.is_read && !isSent
-                                        ? "bg-primary/5"
-                                        : ""
-                                        }`}
+                                      className={`p-3 md:p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
+                                        !message.is_read && !isSent
+                                          ? "bg-primary/5"
+                                          : ""
+                                      }`}
                                       onClick={() => {
                                         setSelectedMessage(message);
                                         if (!message.is_read && !isSent) {
@@ -1034,8 +1143,8 @@ export default function Webmail() {
                                         }
                                       }}
                                     >
-                                      <div className="flex items-start gap-4">
-                                        <Avatar className="h-10 w-10 flex-shrink-0">
+                                      <div className="flex items-start gap-3 md:gap-4">
+                                        <Avatar className="h-10 w-10 md:h-10 md:w-10 flex-shrink-0">
                                           <AvatarImage
                                             src={
                                               otherProfile?.avatar_url ||
@@ -1044,13 +1153,13 @@ export default function Webmail() {
                                           />
                                           <AvatarFallback className="text-xs">
                                             {getInitials(
-                                              otherProfile?.full_name || "U"
+                                              otherProfile?.full_name || "U",
                                             )}
                                           </AvatarFallback>
                                         </Avatar>
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-semibold truncate">
+                                            <span className="font-semibold truncate text-sm md:text-base">
                                               {otherProfile?.full_name ||
                                                 "Unknown"}
                                             </span>
@@ -1058,43 +1167,51 @@ export default function Webmail() {
                                               <Circle className="h-2 w-2 fill-secondary text-secondary flex-shrink-0" />
                                             )}
                                           </div>
-                                          <p className="font-medium truncate mb-1">
+                                          <p className="font-medium truncate mb-1 text-sm md:text-base">
                                             {message.subject || "(No subject)"}
                                           </p>
                                           <p className="text-sm text-muted-foreground line-clamp-2">
                                             {message.body}
                                           </p>
                                           <p className="text-xs text-muted-foreground mt-2">
-                                            {formatDistanceToNow(
-                                              new Date(message.created_at),
-                                              { addSuffix: true }
-                                            )}
+                                            {message.created_at &&
+                                            !isNaN(
+                                              new Date(
+                                                message.created_at,
+                                              ).getTime(),
+                                            )
+                                              ? formatDistanceToNow(
+                                                  new Date(message.created_at),
+                                                  { addSuffix: true },
+                                                )
+                                              : "Unknown time"}
                                           </p>
                                         </div>
-                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                        <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8"
+                                            className="h-8 w-8 md:h-8 md:w-8 touch-manipulation"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleToggleStar(
                                                 message.id,
-                                                message.is_starred
+                                                message.is_starred,
                                               );
                                             }}
                                           >
                                             <Star
-                                              className={`h-4 w-4 ${message.is_starred
-                                                ? "fill-amber-500 text-amber-500"
-                                                : ""
-                                                }`}
+                                              className={`h-4 w-4 ${
+                                                message.is_starred
+                                                  ? "fill-amber-500 text-amber-500"
+                                                  : ""
+                                              }`}
                                             />
                                           </Button>
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 hover:text-destructive"
+                                            className="h-8 w-8 md:h-8 md:w-8 hover:text-destructive touch-manipulation"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleDelete(message.id);
@@ -1123,11 +1240,11 @@ export default function Webmail() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
           <DialogHeader>
-            <DialogTitle>Compose Message</DialogTitle>
+            <DialogTitle className="text-lg md:text-xl">Compose Message</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">To</label>
               <div className="space-y-2">
@@ -1139,14 +1256,14 @@ export default function Webmail() {
                     const foundUser = users.find(
                       (u) =>
                         u.email.toLowerCase() ===
-                        e.target.value.toLowerCase() ||
+                          e.target.value.toLowerCase() ||
                         u.full_name
                           .toLowerCase()
-                          .includes(e.target.value.toLowerCase())
+                          .includes(e.target.value.toLowerCase()),
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
-                  className={composeToId ? "border-green-500" : ""}
+                  className={`h-12 ${composeToId ? "border-green-500" : ""}`}
                 />
                 {composeTo && !composeToId && (
                   <p className="text-xs text-amber-600">
@@ -1172,7 +1289,7 @@ export default function Webmail() {
                               .includes(composeTo.toLowerCase()) ||
                             u.full_name
                               .toLowerCase()
-                              .includes(composeTo.toLowerCase())
+                              .includes(composeTo.toLowerCase()),
                         )
                         .slice(0, 10)
                         .map((user) => (
@@ -1183,7 +1300,7 @@ export default function Webmail() {
                               setComposeTo(user.email);
                               setComposeToId(user.id);
                             }}
-                            className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors"
+                            className="w-full text-left px-3 py-3 rounded hover:bg-muted transition-colors"
                           >
                             <div className="font-medium">{user.full_name}</div>
                             <div className="text-xs text-muted-foreground">
@@ -1203,6 +1320,7 @@ export default function Webmail() {
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
                 placeholder="Subject..."
+                className="h-12"
               />
             </div>
 
@@ -1212,7 +1330,7 @@ export default function Webmail() {
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                className="min-h-[300px] resize-none"
+                className="min-h-[200px] md:min-h-[300px] resize-none text-sm md:text-base"
               />
             </div>
 
@@ -1221,7 +1339,7 @@ export default function Webmail() {
               <label className="text-sm font-medium mb-2 block">
                 Attachment (Optional)
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -1229,6 +1347,7 @@ export default function Webmail() {
                     document.getElementById("attachment-upload")?.click()
                   }
                   disabled={uploadingAttachment}
+                  className="w-full sm:w-auto h-12"
                 >
                   <Paperclip className="h-4 w-4 mr-2" />
                   {attachmentFile ? "Change File" : "Attach File"}
@@ -1250,8 +1369,8 @@ export default function Webmail() {
                   }}
                 />
                 {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm text-muted-foreground truncate">
+                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+                    <span className="text-sm text-muted-foreground truncate flex-1">
                       {attachmentFile.name} (
                       {(attachmentFile.size / 1024).toFixed(1)} KB)
                     </span>
@@ -1260,6 +1379,7 @@ export default function Webmail() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setAttachmentFile(null)}
+                      className="flex-shrink-0"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -1271,11 +1391,12 @@ export default function Webmail() {
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
                 disabled={savingDraft}
+                className="w-full sm:w-auto h-12 order-2 sm:order-1"
               >
                 {savingDraft ? (
                   <>
@@ -1294,7 +1415,7 @@ export default function Webmail() {
                   !composeBody.trim() ||
                   sending
                 }
-                className="bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90"
+                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2"
               >
                 {sending ? (
                   <>
