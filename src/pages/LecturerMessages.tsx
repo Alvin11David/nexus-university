@@ -648,9 +648,9 @@ export default function LecturerMessages() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
           <DialogHeader>
-            <DialogTitle>New Message to Student</DialogTitle>
+            <DialogTitle className="text-lg md:text-xl">New Message to Student</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
