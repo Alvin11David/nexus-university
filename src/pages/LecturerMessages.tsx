@@ -781,7 +781,7 @@ export default function LecturerMessages() {
               variant="outline"
               onClick={() => {
                 setIsComposeOpen(false);
-                setComposeTo();
+                setComposeTo("");
               }}
               disabled={sending}
               className="w-full sm:w-auto h-12 text-base order-2 sm:order-1"
