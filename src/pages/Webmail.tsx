@@ -213,16 +213,76 @@ export default function Webmail() {
         .map((d) => ({ id: d.id, ...d.data() }) as any)
         .filter((u) => u.id !== user?.uid);
 
-      const lecturers = allUsers.filter(
-        (u) => u.role && u.role.toLowerCase() === "lecturer",
-      );
+      // Role-based recipient filtering
+      let recipients;
+      if (profile?.role?.toLowerCase() === "lecturer") {
+        // Lecturers can message students enrolled in their courses
+        try {
+          // Get courses taught by this lecturer
+          const lecturerCoursesQuery = query(
+            collection(db, "lecturer_courses"),
+            where("lecturer_id", "==", user?.uid)
+          );
+          const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
+          const courseIds = lecturerCoursesSnap.docs.map(doc => doc.data().course_id);
 
-      if (lecturers.length > 0) {
-        setUsers(lecturers);
+          // Also check direct instructor assignments
+          const directCoursesQuery = query(
+            collection(db, "courses"),
+            where("instructor_id", "==", user?.uid)
+          );
+          const directCoursesSnap = await getDocs(directCoursesQuery);
+          const directCourseIds = directCoursesSnap.docs.map(doc => doc.id);
+
+          // Combine all course IDs
+          const allCourseIds = [...courseIds, ...directCourseIds];
+
+          if (allCourseIds.length > 0) {
+            // Get enrollments for these courses
+            const enrollmentsQuery = query(
+              collection(db, "enrollments"),
+              where("course_id", "in", allCourseIds.slice(0, 10)) // Firestore 'in' limit is 10
+            );
+            const enrollmentsSnap = await getDocs(enrollmentsQuery);
+
+            // Get unique student IDs
+            const studentIds = [...new Set(enrollmentsSnap.docs.map(doc => doc.data().student_id))];
+
+            if (studentIds.length > 0) {
+              // Get student profiles
+              recipients = allUsers.filter(u =>
+                u.role?.toLowerCase() === "student" &&
+                studentIds.includes(u.id)
+              );
+            } else {
+              // Fallback to all students if no enrollments found
+              recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+            }
+          } else {
+            // Fallback to all students if no courses assigned
+            recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+          }
+        } catch (error) {
+          console.error("Error fetching enrolled students:", error);
+          // Fallback to all students
+          recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+        }
         setShowingAllUsers(false);
       } else {
+        // Students can message lecturers
+        recipients = allUsers.filter(
+          (u) => u.role && u.role.toLowerCase() === "lecturer",
+        );
+        setShowingAllUsers(false);
+      }
+
+      // Fallback to all users if no role-specific recipients found
+      if (recipients.length === 0) {
         setUsers(allUsers);
         setShowingAllUsers(true);
+      } else {
+        setUsers(recipients);
+        setShowingAllUsers(false);
       }
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -827,7 +887,10 @@ export default function Webmail() {
                         <Star className="h-5 w-5 flex-shrink-0" />
                         <span className="font-medium">Starred</span>
                         {starredCount > 0 && (
-                          <Badge variant="secondary" className="ml-auto text-xs">
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto text-xs"
+                          >
                             {starredCount}
                           </Badge>
                         )}
