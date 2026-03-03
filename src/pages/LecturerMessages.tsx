@@ -652,7 +652,7 @@ export default function LecturerMessages() {
           <DialogHeader>
             <DialogTitle className="text-lg md:text-xl">New Message to Student</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 md:space-y-4 py-4">
             <div className="space-y-2">
               <label className="text-sm font-medium">To:</label>
               <div className="relative">
@@ -666,7 +666,7 @@ export default function LecturerMessages() {
                     setComposeToId(e.target.value);
                     setComposeTo(selectedStudent?.email || "");
                   }}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary h-12"
                 >
                   <option value="">Select a student...</option>
                   {students.map((student) => (
@@ -683,6 +683,7 @@ export default function LecturerMessages() {
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
                 placeholder="Enter subject..."
+                className="h-12"
               />
             </div>
             <div className="space-y-2">
@@ -691,7 +692,8 @@ export default function LecturerMessages() {
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                rows={8}
+                rows={6}
+                className="min-h-[150px] md:min-h-[200px] resize-none text-sm md:text-base"
               />
             </div>
 
