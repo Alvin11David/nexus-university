@@ -824,10 +824,13 @@ export default function Webmail() {
                                     </p>
                                   )}
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    {format(
-                                      new Date(draft.created_at),
-                                      "MMM d, yyyy h:mm a",
-                                    )}
+                                    {draft.created_at && !isNaN(new Date(draft.created_at).getTime())
+                                      ? format(
+                                          new Date(draft.created_at),
+                                          "MMM d, yyyy h:mm a",
+                                        )
+                                      : "Unknown time"
+                                    }
                                   </p>
                                 </div>
                               </div>
@@ -960,10 +963,13 @@ export default function Webmail() {
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {format(
-                                    new Date(selectedMessage.created_at),
-                                    "PPpp",
-                                  )}
+                                  {selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime())
+                                    ? format(
+                                        new Date(selectedMessage.created_at),
+                                        "PPpp",
+                                      )
+                                    : "Unknown time"
+                                  }
                                 </p>
                               </div>
                               <Button
