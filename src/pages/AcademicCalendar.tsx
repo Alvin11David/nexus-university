@@ -13,7 +13,7 @@ type Event = {
   id: string;
   title: string;
   description: string;
-  date: any; // Firestore timestamp
+  date: any;
   dueDate: any;
   type: string;
   isActive: boolean;
@@ -54,10 +54,13 @@ export default function AcademicCalendar() {
     const fetchCalendarData = async () => {
       try {
         const querySnapshot = await getDocs(collection(db, "AcademicCalendar"));
-        const events: Event[] = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        } as Event));
+        const events: Event[] = querySnapshot.docs.map(
+          (doc) =>
+            ({
+              id: doc.id,
+              ...doc.data(),
+            }) as Event,
+        );
 
         // Transform to calendarData structure
         const transformedData: CalendarData = {
@@ -66,14 +69,18 @@ export default function AcademicCalendar() {
             {
               name: "All Events",
               status: "Current",
-              events: events.map(event => ({
+              events: events.map((event) => ({
                 title: event.title,
-                start: event.date.toDate ? event.date.toDate().toLocaleDateString() : event.date,
-                end: event.dueDate.toDate ? event.dueDate.toDate().toLocaleDateString() : event.dueDate,
-                status: event.isActive ? "Open" : "Close"
-              }))
-            }
-          ]
+                start: event.date.toDate
+                  ? event.date.toDate().toLocaleDateString()
+                  : event.date,
+                end: event.dueDate.toDate
+                  ? event.dueDate.toDate().toLocaleDateString()
+                  : event.dueDate,
+                status: event.isActive ? "Open" : "Close",
+              })),
+            },
+          ],
         };
 
         setCalendarData(transformedData);
