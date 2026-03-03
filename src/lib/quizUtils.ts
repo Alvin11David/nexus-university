@@ -8,11 +8,12 @@ export const autoCloseExpiredQuizzes = async (
   try {
     const currentTime = new Date();
 
-    // Find all active quizzes that have expired
+    // Find all active quizzes that have expired and have auto_deactivate enabled
     const quizzesRef = collection(db, "quizzes");
     let q = query(
       quizzesRef,
-      where("status", "==", "active")
+      where("status", "==", "active"),
+      where("auto_deactivate", "==", true)
     );
 
     // Filter by lecturer (for lecturer views)
