@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -19,7 +19,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/firebase";
-import { addDoc, collection, Timestamp } from "firebase/firestore";
+import {
+  addDoc,
+  collection,
+  Timestamp,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CourseOption {
@@ -30,37 +39,11 @@ interface CourseOption {
 
 export default function CreateQuiz() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-
-  interface UserWithId {
-    id?: string;
-    [key: string]: any;
-  }
-  const typedUser = user as UserWithId;
+  const [searchParams] = useSearchParams();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [courses] = useState<CourseOption[]>([
-    {
-      id: "550e8400-e29b-41d4-a716-446655440000",
-      title: "Data Structures 101",
-      code: "CS201",
-    },
-    {
-      id: "550e8400-e29b-41d4-a716-446655440001",
-      title: "Algorithms",
-      code: "CS202",
-    },
-    {
-      id: "550e8400-e29b-41d4-a716-446655440002",
-      title: "Programming Fundamentals",
-      code: "CS101",
-    },
-    {
-      id: "550e8400-e29b-41d4-a716-446655440003",
-      title: "Digital Logic",
-      code: "CS150",
-    },
-  ]);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -71,14 +54,135 @@ export default function CreateQuiz() {
     timeLimit: 30,
     passingScore: 12,
     startDate: "",
+    startTime: "",
+    startTimePeriod: "AM" as "AM" | "PM",
     endDate: "",
+    endTime: "",
+    endTimePeriod: "PM" as "AM" | "PM",
     status: "active" as "draft" | "active" | "closed",
     attemptsAllowed: 1,
     shuffleQuestions: false,
     showAnswers: false,
+    autoDeactivate: true,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Helper function to combine date, time, and AM/PM into ISO string
+  const combineDateTime = (date: string, time: string, period: "AM" | "PM"): string => {
+    const [hours, minutes] = time.split(':');
+    let hour24 = parseInt(hours);
+
+    if (period === 'PM' && hour24 !== 12) {
+      hour24 += 12;
+    } else if (period === 'AM' && hour24 === 12) {
+      hour24 = 0;
+    }
+
+    const dateTime = new Date(date);
+    dateTime.setHours(hour24, parseInt(minutes), 0, 0);
+
+    return dateTime.toISOString();
+  };
+
+  // Fetch lecturer's assigned courses
+  const fetchLecturerCourses = async () => {
+    try {
+      if (!user?.uid) return;
+
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedRawCourses: any[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
+
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            // Firestore 'in' supports up to 30 values
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                assignedRawCourses.push({
+                  id: doc.id,
+                  code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                  title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                });
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile or course units:", err);
+      }
+
+      // Set available courses to the assigned course units
+      const coursesData: CourseOption[] = assignedRawCourses.map((raw) => ({
+        id: raw.id,
+        code: raw.code,
+        title: raw.title,
+      }));
+
+      setCourses(coursesData);
+    } catch (error) {
+      console.error("Error fetching lecturer courses:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load courses",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle URL parameter for pre-selected course
+  useEffect(() => {
+    const courseParam = searchParams.get("course");
+    if (courseParam) {
+      // Set the courseId immediately from URL parameter
+      setFormData((prev) => ({ ...prev, courseId: courseParam }));
+    }
+  }, [searchParams]);
+
+  // Validate pre-selected course once courses are loaded
+  useEffect(() => {
+    const courseParam = searchParams.get("course");
+    if (courseParam && courses.length > 0) {
+      // Check if the pre-selected course exists in the loaded courses
+      const courseExists = courses.find((c) => c.id === courseParam);
+      if (!courseExists) {
+        // If the course doesn't exist, clear the selection and show error
+        setFormData((prev) => ({ ...prev, courseId: "" }));
+        toast({
+          title: "Course Not Found",
+          description:
+            "The selected course is not available. Please choose a different course.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [courses, searchParams, toast]);
+
+  // Fetch courses on component mount
+  useEffect(() => {
+    if (user?.uid) {
+      fetchLecturerCourses();
+    }
+  }, [user?.uid]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -107,15 +211,24 @@ export default function CreateQuiz() {
     if (!formData.startDate) {
       newErrors.startDate = "Start date is required";
     }
+    if (!formData.startTime) {
+      newErrors.startTime = "Start time is required";
+    }
     if (!formData.endDate) {
       newErrors.endDate = "End date is required";
     }
-    if (
-      formData.startDate &&
-      formData.endDate &&
-      new Date(formData.startDate) >= new Date(formData.endDate)
-    ) {
-      newErrors.endDate = "End date must be after start date";
+    if (!formData.endTime) {
+      newErrors.endTime = "End time is required";
+    }
+
+    // Combine date and time for validation
+    if (formData.startDate && formData.startTime && formData.endDate && formData.endTime) {
+      const startDateTime = combineDateTime(formData.startDate, formData.startTime, formData.startTimePeriod);
+      const endDateTime = combineDateTime(formData.endDate, formData.endTime, formData.endTimePeriod);
+
+      if (startDateTime >= endDateTime) {
+        newErrors.endDate = "End date and time must be after start date and time";
+      }
     }
     if (formData.attemptsAllowed < 1) {
       newErrors.attemptsAllowed = "Must allow at least 1 attempt";
@@ -314,10 +427,16 @@ export default function CreateQuiz() {
                     }
                     className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                   >
-                    <option value="">Select a course</option>
+                    <option value="">
+                      {courses.length === 0
+                        ? formData.courseId
+                          ? "Loading course details..."
+                          : "Loading courses..."
+                        : "Select a course"}
+                    </option>
                     {courses.map((course) => (
                       <option key={course.id} value={course.id}>
-                        {course.title} ({course.code})
+                        {course.code} - {course.title}
                       </option>
                     ))}
                   </select>
