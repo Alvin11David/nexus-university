@@ -458,18 +458,50 @@ export default function CreateQuiz() {
                     <label className="block text-sm font-medium mb-2">
                       Start Date & Time *
                     </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.startDate}
-                      onChange={(e) =>
-                        handleInputChange("startDate", e.target.value)
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <div>
+                        <input
+                          type="date"
+                          value={formData.startDate}
+                          onChange={(e) =>
+                            handleInputChange("startDate", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="time"
+                          value={formData.startTime}
+                          onChange={(e) =>
+                            handleInputChange("startTime", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <select
+                          value={formData.startTimePeriod}
+                          onChange={(e) =>
+                            handleInputChange("startTimePeriod", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
                     {errors.startDate && (
                       <p className="text-sm text-destructive mt-1 flex items-center gap-1">
                         <AlertCircle className="h-4 w-4" />
                         {errors.startDate}
+                      </p>
+                    )}
+                    {errors.startTime && (
+                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.startTime}
                       </p>
                     )}
                   </div>
@@ -478,18 +510,50 @@ export default function CreateQuiz() {
                     <label className="block text-sm font-medium mb-2">
                       End Date & Time *
                     </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.endDate}
-                      onChange={(e) =>
-                        handleInputChange("endDate", e.target.value)
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
+                    <div className="grid gap-2 md:grid-cols-3">
+                      <div>
+                        <input
+                          type="date"
+                          value={formData.endDate}
+                          onChange={(e) =>
+                            handleInputChange("endDate", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <input
+                          type="time"
+                          value={formData.endTime}
+                          onChange={(e) =>
+                            handleInputChange("endTime", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <select
+                          value={formData.endTimePeriod}
+                          onChange={(e) =>
+                            handleInputChange("endTimePeriod", e.target.value)
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
+                    </div>
                     {errors.endDate && (
                       <p className="text-sm text-destructive mt-1 flex items-center gap-1">
                         <AlertCircle className="h-4 w-4" />
                         {errors.endDate}
+                      </p>
+                    )}
+                    {errors.endTime && (
+                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        {errors.endTime}
                       </p>
                     )}
                   </div>
