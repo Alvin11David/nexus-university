@@ -125,7 +125,7 @@ export default function Webmail() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
-  const [showingAllUsers, setShowingAllUsers] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -594,9 +594,12 @@ export default function Webmail() {
         : `Fwd: ${selectedMessage.subject}`,
     );
     setComposeBody(
-      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime()) ? new Date(
-        selectedMessage.created_at,
-      ).toLocaleString() : "Unknown time"}\n\n${selectedMessage.body}`,
+      `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${
+        selectedMessage.created_at &&
+        !isNaN(new Date(selectedMessage.created_at).getTime())
+          ? new Date(selectedMessage.created_at).toLocaleString()
+          : "Unknown time"
+      }\n\n${selectedMessage.body}`,
     );
     setIsComposeOpen(true);
   };
@@ -824,13 +827,13 @@ export default function Webmail() {
                                     </p>
                                   )}
                                   <p className="text-xs text-muted-foreground mt-2">
-                                    {draft.created_at && !isNaN(new Date(draft.created_at).getTime())
+                                    {draft.created_at &&
+                                    !isNaN(new Date(draft.created_at).getTime())
                                       ? format(
                                           new Date(draft.created_at),
                                           "MMM d, yyyy h:mm a",
                                         )
-                                      : "Unknown time"
-                                    }
+                                      : "Unknown time"}
                                   </p>
                                 </div>
                               </div>
@@ -963,13 +966,17 @@ export default function Webmail() {
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
-                                  {selectedMessage.created_at && !isNaN(new Date(selectedMessage.created_at).getTime())
+                                  {selectedMessage.created_at &&
+                                  !isNaN(
+                                    new Date(
+                                      selectedMessage.created_at,
+                                    ).getTime(),
+                                  )
                                     ? format(
                                         new Date(selectedMessage.created_at),
                                         "PPpp",
                                       )
-                                    : "Unknown time"
-                                  }
+                                    : "Unknown time"}
                                 </p>
                               </div>
                               <Button
