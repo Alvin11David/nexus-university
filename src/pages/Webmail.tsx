@@ -126,6 +126,7 @@ export default function Webmail() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showingAllUsers, setShowingAllUsers] = useState(false);
 
   // Compose state
   const [composeTo, setComposeTo] = useState("");
@@ -1432,10 +1433,6 @@ export default function Webmail() {
           </div>
         </DialogContent>
       </Dialog>
-
-function setShowingAllUsers(arg0: boolean) {
-  throw new Error("Function not implemented.");
-}
 
       <StudentBottomNav />
     </div>
