@@ -754,6 +754,23 @@ export default function CreateQuiz() {
                     </p>
                   </div>
                 </label>
+
+                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={formData.autoDeactivate}
+                    onChange={(e) =>
+                      handleInputChange("autoDeactivate", e.target.checked)
+                    }
+                    className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <div>
+                    <p className="font-medium">Auto-Deactivate on End Date</p>
+                    <p className="text-sm text-muted-foreground">
+                      Automatically close the quiz when the end date and time is reached
+                    </p>
+                  </div>
+                </label>
               </CardContent>
             </Card>
 
