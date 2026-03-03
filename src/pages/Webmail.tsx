@@ -1126,7 +1126,7 @@ export default function Webmail() {
                                       animate={{ opacity: 1, x: 0 }}
                                       exit={{ opacity: 0, x: 20 }}
                                       transition={{ delay: index * 0.03 }}
-                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
+                                      className={`p-3 md:p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
                                         !message.is_read && !isSent
                                           ? "bg-primary/5"
                                           : ""
@@ -1138,8 +1138,8 @@ export default function Webmail() {
                                         }
                                       }}
                                     >
-                                      <div className="flex items-start gap-4">
-                                        <Avatar className="h-10 w-10 flex-shrink-0">
+                                      <div className="flex items-start gap-3 md:gap-4">
+                                        <Avatar className="h-10 w-10 md:h-10 md:w-10 flex-shrink-0">
                                           <AvatarImage
                                             src={
                                               otherProfile?.avatar_url ||
@@ -1154,7 +1154,7 @@ export default function Webmail() {
                                         </Avatar>
                                         <div className="flex-1 min-w-0">
                                           <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-semibold truncate">
+                                            <span className="font-semibold truncate text-sm md:text-base">
                                               {otherProfile?.full_name ||
                                                 "Unknown"}
                                             </span>
@@ -1162,7 +1162,7 @@ export default function Webmail() {
                                               <Circle className="h-2 w-2 fill-secondary text-secondary flex-shrink-0" />
                                             )}
                                           </div>
-                                          <p className="font-medium truncate mb-1">
+                                          <p className="font-medium truncate mb-1 text-sm md:text-base">
                                             {message.subject || "(No subject)"}
                                           </p>
                                           <p className="text-sm text-muted-foreground line-clamp-2">
@@ -1182,11 +1182,11 @@ export default function Webmail() {
                                               : "Unknown time"}
                                           </p>
                                         </div>
-                                        <div className="flex items-center gap-2 flex-shrink-0">
+                                        <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8"
+                                            className="h-8 w-8 md:h-8 md:w-8 touch-manipulation"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleToggleStar(
@@ -1206,7 +1206,7 @@ export default function Webmail() {
                                           <Button
                                             variant="ghost"
                                             size="icon"
-                                            className="h-8 w-8 hover:text-destructive"
+                                            className="h-8 w-8 md:h-8 md:w-8 hover:text-destructive touch-manipulation"
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               handleDelete(message.id);
