@@ -37,7 +37,23 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy, deleteDoc, or, and } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+  deleteDoc,
+  or,
+  and,
+} from "firebase/firestore";
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, auth, storage } from "@/integrations/firebase/client";
 import { formatDistanceToNow, format } from "date-fns";
@@ -125,7 +141,7 @@ export default function Webmail() {
 
   const downloadAttachment = async (
     attachmentUrl: string,
-    attachmentName: string
+    attachmentName: string,
   ) => {
     try {
       const storageRef = ref(storage, attachmentUrl);
@@ -158,7 +174,7 @@ export default function Webmail() {
       const chars = titleRef.current.textContent?.split("") || [];
       titleRef.current.innerHTML = chars
         .map((char) =>
-          char === " " ? " " : `<span class="inline-block">${char}</span>`
+          char === " " ? " " : `<span class="inline-block">${char}</span>`,
         )
         .join("");
 
@@ -176,7 +192,7 @@ export default function Webmail() {
           duration: 0.6,
           stagger: 0.02,
           ease: "back.out(1.7)",
-        }
+        },
       );
     }
   }, []);
@@ -188,11 +204,11 @@ export default function Webmail() {
       const snapshot = await getDocs(q);
 
       const allUsers = snapshot.docs
-        .map(d => ({ id: d.id, ...d.data() } as any))
-        .filter(u => u.id !== user?.uid);
+        .map((d) => ({ id: d.id, ...d.data() }) as any)
+        .filter((u) => u.id !== user?.uid);
 
       const lecturers = allUsers.filter(
-        (u) => u.role && u.role.toLowerCase() === "lecturer"
+        (u) => u.role && u.role.toLowerCase() === "lecturer",
       );
 
       if (lecturers.length > 0) {
@@ -220,39 +236,47 @@ export default function Webmail() {
           messagesRef,
           where("to_user_id", "==", user.uid),
           where("is_deleted_by_recipient", "==", false),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "sent") {
         q = query(
           messagesRef,
           where("from_user_id", "==", user.uid),
           where("is_deleted_by_sender", "==", false),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "starred") {
         q = query(
           messagesRef,
           and(
             where("is_starred", "==", true),
-            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+            or(
+              where("to_user_id", "==", user.uid),
+              where("from_user_id", "==", user.uid),
+            ),
           ),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else if (selectedView === "archived") {
         q = query(
           messagesRef,
           and(
             where("is_archived", "==", true),
-            or(where("to_user_id", "==", user.uid), where("from_user_id", "==", user.uid))
+            or(
+              where("to_user_id", "==", user.uid),
+              where("from_user_id", "==", user.uid),
+            ),
           ),
-          orderBy("created_at", "desc")
+          orderBy("created_at", "desc"),
         );
       } else {
         q = query(messagesRef, orderBy("created_at", "desc"));
       }
 
       const snapshot = await getDocs(q);
-      const messagesData = snapshot.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Message));
+      const messagesData = snapshot.docs.map(
+        (d) => ({ id: d.id, ...(d.data() as any) }) as Message,
+      );
 
       if (messagesData.length === 0) {
         setMessages([]);
@@ -260,20 +284,27 @@ export default function Webmail() {
       }
 
       // Get unique user IDs
-      const userIds = Array.from(new Set(messagesData.flatMap(m => [m.from_user_id, m.to_user_id])));
+      const userIds = Array.from(
+        new Set(messagesData.flatMap((m) => [m.from_user_id, m.to_user_id])),
+      );
 
       // Fetch profiles in chunks (Firestore 'in' limit is 10)
       const profilesData: any[] = [];
       for (let i = 0; i < userIds.length; i += 10) {
         const chunk = userIds.slice(i, i + 10);
-        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
         const pSnapshot = await getDocs(pQuery);
-        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        profilesData.push(
+          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
+        );
       }
 
-      const profileMap = new Map(profilesData.map(p => [p.id, p]));
+      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
 
-      const messagesWithProfiles = messagesData.map(msg => ({
+      const messagesWithProfiles = messagesData.map((msg) => ({
         ...msg,
         from_profile: profileMap.get(msg.from_user_id) || null,
         to_profile: profileMap.get(msg.to_user_id) || null,
@@ -292,9 +323,15 @@ export default function Webmail() {
 
     try {
       const draftsRef = collection(db, "message_drafts");
-      const q = query(draftsRef, where("user_id", "==", user.uid), orderBy("updated_at", "desc"));
+      const q = query(
+        draftsRef,
+        where("user_id", "==", user.uid),
+        orderBy("updated_at", "desc"),
+      );
       const snapshot = await getDocs(q);
-      const draftsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+      const draftsData = snapshot.docs.map(
+        (d) => ({ id: d.id, ...d.data() }) as any,
+      );
 
       if (draftsData.length === 0) {
         setDrafts([]);
@@ -314,12 +351,17 @@ export default function Webmail() {
       const profilesData: any[] = [];
       for (let i = 0; i < recipientIds.length; i += 10) {
         const chunk = recipientIds.slice(i, i + 10);
-        const pQuery = query(collection(db, "profiles"), where("__name__", "in", chunk));
+        const pQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
         const pSnapshot = await getDocs(pQuery);
-        profilesData.push(...pSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+        profilesData.push(
+          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
+        );
       }
 
-      const profileMap = new Map(profilesData.map(p => [p.id, p]));
+      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
 
       const draftsWithProfiles = draftsData.map((draft: any) => ({
         ...draft,
@@ -425,8 +467,7 @@ export default function Webmail() {
     } catch (error: any) {
       console.error("Error sending message:", error);
       alert(
-        "Failed to send message. Please try again. Error: " +
-        error.message
+        "Failed to send message. Please try again. Error: " + error.message,
       );
     } finally {
       setSending(false);
@@ -520,9 +561,10 @@ export default function Webmail() {
   const handleReply = () => {
     if (!selectedMessage) return;
 
-    const replyTo = selectedMessage.from_user_id === user?.uid
-      ? selectedMessage.to_profile
-      : selectedMessage.from_profile;
+    const replyTo =
+      selectedMessage.from_user_id === user?.uid
+        ? selectedMessage.to_profile
+        : selectedMessage.from_profile;
 
     if (replyTo) {
       setComposeTo(replyTo.full_name);
@@ -530,12 +572,12 @@ export default function Webmail() {
       setComposeSubject(
         selectedMessage.subject.startsWith("Re:")
           ? selectedMessage.subject
-          : `Re: ${selectedMessage.subject}`
+          : `Re: ${selectedMessage.subject}`,
       );
       setComposeBody(
         `\n\n---\nOn ${new Date(selectedMessage.created_at).toLocaleString()}, ${replyTo.full_name} wrote:\n> ${selectedMessage.body
           .split("\n")
-          .join("\n> ")}`
+          .join("\n> ")}`,
       );
       setIsComposeOpen(true);
     }
@@ -549,12 +591,12 @@ export default function Webmail() {
     setComposeSubject(
       selectedMessage.subject.startsWith("Fwd:")
         ? selectedMessage.subject
-        : `Fwd: ${selectedMessage.subject}`
+        : `Fwd: ${selectedMessage.subject}`,
     );
     setComposeBody(
       `\n\n---\nForwarded message:\nFrom: ${selectedMessage.from_profile?.full_name} <${selectedMessage.from_profile?.email}>\nSubject: ${selectedMessage.subject}\nDate: ${new Date(
-        selectedMessage.created_at
-      ).toLocaleString()}\n\n${selectedMessage.body}`
+        selectedMessage.created_at,
+      ).toLocaleString()}\n\n${selectedMessage.body}`,
     );
     setIsComposeOpen(true);
   };
@@ -588,7 +630,7 @@ export default function Webmail() {
   });
 
   const unreadCount = messages.filter(
-    (m) => !m.is_read && m.to_user_id === user?.id
+    (m) => !m.is_read && m.to_user_id === user?.uid,
   ).length;
 
   const getInitials = (name: string) => {
@@ -659,10 +701,11 @@ export default function Webmail() {
                 <CardContent className="p-4 space-y-1">
                   <button
                     onClick={() => setSelectedView("inbox")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "inbox"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                      selectedView === "inbox"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <Inbox className="h-5 w-5" />
                     <span className="font-medium">Inbox</span>
@@ -675,10 +718,11 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("sent")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "sent"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                      selectedView === "sent"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <Send className="h-5 w-5" />
                     <span className="font-medium">Sent</span>
@@ -686,10 +730,11 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("drafts")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "drafts"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                      selectedView === "drafts"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <FileText className="h-5 w-5" />
                     <span className="font-medium">Drafts</span>
@@ -702,10 +747,11 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("starred")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "starred"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                      selectedView === "starred"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <Star className="h-5 w-5" />
                     <span className="font-medium">Starred</span>
@@ -713,10 +759,11 @@ export default function Webmail() {
 
                   <button
                     onClick={() => setSelectedView("archived")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${selectedView === "archived"
-                      ? "bg-secondary text-secondary-foreground shadow-md"
-                      : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                      selectedView === "archived"
+                        ? "bg-secondary text-secondary-foreground shadow-md"
+                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
                   >
                     <Archive className="h-5 w-5" />
                     <span className="font-medium">Archived</span>
@@ -779,7 +826,7 @@ export default function Webmail() {
                                   <p className="text-xs text-muted-foreground mt-2">
                                     {format(
                                       new Date(draft.created_at),
-                                      "MMM d, yyyy h:mm a"
+                                      "MMM d, yyyy h:mm a",
                                     )}
                                   </p>
                                 </div>
@@ -843,15 +890,16 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleToggleStar(
                                     selectedMessage.id,
-                                    selectedMessage.is_starred
+                                    selectedMessage.is_starred,
                                   )
                                 }
                               >
                                 <Star
-                                  className={`h-4 w-4 mr-2 ${selectedMessage.is_starred
-                                    ? "fill-amber-500 text-amber-500"
-                                    : ""
-                                    }`}
+                                  className={`h-4 w-4 mr-2 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
                                 />
                                 {selectedMessage.is_starred ? "Unstar" : "Star"}
                               </DropdownMenuItem>
@@ -859,7 +907,7 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleArchive(
                                     selectedMessage.id,
-                                    selectedMessage.is_archived
+                                    selectedMessage.is_archived,
                                   )
                                 }
                               >
@@ -896,7 +944,7 @@ export default function Webmail() {
                                 <AvatarFallback>
                                   {getInitials(
                                     selectedMessage.from_profile?.full_name ||
-                                    "U"
+                                      "U",
                                   )}
                                 </AvatarFallback>
                               </Avatar>
@@ -914,7 +962,7 @@ export default function Webmail() {
                                 <p className="text-sm text-muted-foreground">
                                   {format(
                                     new Date(selectedMessage.created_at),
-                                    "PPpp"
+                                    "PPpp",
                                   )}
                                 </p>
                               </div>
@@ -924,15 +972,16 @@ export default function Webmail() {
                                 onClick={() =>
                                   handleToggleStar(
                                     selectedMessage.id,
-                                    selectedMessage.is_starred
+                                    selectedMessage.is_starred,
                                   )
                                 }
                               >
                                 <Star
-                                  className={`h-5 w-5 ${selectedMessage.is_starred
-                                    ? "fill-amber-500 text-amber-500"
-                                    : ""
-                                    }`}
+                                  className={`h-5 w-5 ${
+                                    selectedMessage.is_starred
+                                      ? "fill-amber-500 text-amber-500"
+                                      : ""
+                                  }`}
                                 />
                               </Button>
                             </div>
@@ -956,7 +1005,7 @@ export default function Webmail() {
                                   downloadAttachment(
                                     selectedMessage.attachment_url!,
                                     selectedMessage.attachment_name ||
-                                    "attachment"
+                                      "attachment",
                                   )
                                 }
                                 className="gap-2"
@@ -1011,7 +1060,7 @@ export default function Webmail() {
                               <AnimatePresence>
                                 {filteredMessages.map((message, index) => {
                                   const isSent =
-                                    message.from_user_id === user?.id;
+                                    message.from_user_id === user?.uid;
                                   const otherProfile = isSent
                                     ? message.to_profile
                                     : message.from_profile;
@@ -1023,10 +1072,11 @@ export default function Webmail() {
                                       animate={{ opacity: 1, x: 0 }}
                                       exit={{ opacity: 0, x: 20 }}
                                       transition={{ delay: index * 0.03 }}
-                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${!message.is_read && !isSent
-                                        ? "bg-primary/5"
-                                        : ""
-                                        }`}
+                                      className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${
+                                        !message.is_read && !isSent
+                                          ? "bg-primary/5"
+                                          : ""
+                                      }`}
                                       onClick={() => {
                                         setSelectedMessage(message);
                                         if (!message.is_read && !isSent) {
@@ -1044,7 +1094,7 @@ export default function Webmail() {
                                           />
                                           <AvatarFallback className="text-xs">
                                             {getInitials(
-                                              otherProfile?.full_name || "U"
+                                              otherProfile?.full_name || "U",
                                             )}
                                           </AvatarFallback>
                                         </Avatar>
@@ -1065,13 +1115,17 @@ export default function Webmail() {
                                             {message.body}
                                           </p>
                                           <p className="text-xs text-muted-foreground mt-2">
-                                            {message.created_at && !isNaN(new Date(message.created_at).getTime())
+                                            {message.created_at &&
+                                            !isNaN(
+                                              new Date(
+                                                message.created_at,
+                                              ).getTime(),
+                                            )
                                               ? formatDistanceToNow(
                                                   new Date(message.created_at),
-                                                  { addSuffix: true }
+                                                  { addSuffix: true },
                                                 )
-                                              : "Unknown time"
-                                            }
+                                              : "Unknown time"}
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-2 flex-shrink-0">
@@ -1083,15 +1137,16 @@ export default function Webmail() {
                                               e.stopPropagation();
                                               handleToggleStar(
                                                 message.id,
-                                                message.is_starred
+                                                message.is_starred,
                                               );
                                             }}
                                           >
                                             <Star
-                                              className={`h-4 w-4 ${message.is_starred
-                                                ? "fill-amber-500 text-amber-500"
-                                                : ""
-                                                }`}
+                                              className={`h-4 w-4 ${
+                                                message.is_starred
+                                                  ? "fill-amber-500 text-amber-500"
+                                                  : ""
+                                              }`}
                                             />
                                           </Button>
                                           <Button
@@ -1142,10 +1197,10 @@ export default function Webmail() {
                     const foundUser = users.find(
                       (u) =>
                         u.email.toLowerCase() ===
-                        e.target.value.toLowerCase() ||
+                          e.target.value.toLowerCase() ||
                         u.full_name
                           .toLowerCase()
-                          .includes(e.target.value.toLowerCase())
+                          .includes(e.target.value.toLowerCase()),
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
@@ -1175,7 +1230,7 @@ export default function Webmail() {
                               .includes(composeTo.toLowerCase()) ||
                             u.full_name
                               .toLowerCase()
-                              .includes(composeTo.toLowerCase())
+                              .includes(composeTo.toLowerCase()),
                         )
                         .slice(0, 10)
                         .map((user) => (
