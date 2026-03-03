@@ -441,13 +441,13 @@ export default function LecturerMessages() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-lg">
                 <Mail className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold">Messages</h1>
+                <h1 className="text-2xl md:text-3xl font-bold">Messages</h1>
                 <p className="text-sm text-muted-foreground">
                   Manage your inbox and communications
                 </p>
@@ -455,14 +455,14 @@ export default function LecturerMessages() {
             </div>
             <Button
               onClick={() => setIsComposeOpen(true)}
-              className="bg-gradient-to-r from-primary to-secondary gap-2"
+              className="bg-gradient-to-r from-primary to-secondary gap-2 w-full sm:w-auto"
             >
               <Send className="h-4 w-4" /> New Message
             </Button>
           </div>
 
           {/* Quick Stats */}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-2 md:gap-4">
             <Badge variant="outline" className="px-3 py-1.5">
               <Mail className="h-3 w-3 mr-1" />
               {messages.length} Messages
@@ -481,7 +481,7 @@ export default function LecturerMessages() {
           className="space-y-4"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1 min-w-64">
+            <div className="flex-1 min-w-0">
               <label className="text-sm font-medium block mb-2">
                 Search Messages
               </label>
@@ -491,7 +491,7 @@ export default function LecturerMessages() {
                   placeholder="Search by sender, subject..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-12"
                 />
               </div>
             </div>
@@ -503,7 +503,7 @@ export default function LecturerMessages() {
               <button
                 key={view}
                 onClick={() => setSelectedView(view)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
                   selectedView === view
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/60 text-foreground hover:bg-muted"
@@ -567,7 +567,7 @@ export default function LecturerMessages() {
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <Avatar className="h-10 w-10">
+                          <Avatar className="h-10 w-10 flex-shrink-0">
                             <AvatarImage src={displayProfile?.avatar_url} />
                             <AvatarFallback>
                               {displayProfile?.full_name
@@ -578,7 +578,7 @@ export default function LecturerMessages() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p
-                                className={`font-semibold truncate ${
+                                className={`font-semibold truncate text-sm md:text-base ${
                                   !message.is_read &&
                                   message.to_user_id === user?.uid
                                     ? "font-bold text-foreground"
@@ -589,7 +589,7 @@ export default function LecturerMessages() {
                               </p>
                               {!message.is_read &&
                                 message.to_user_id === user?.uid && (
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
+                                  <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                                 )}
                             </div>
                             <p className="text-sm text-foreground font-medium truncate">
@@ -608,13 +608,13 @@ export default function LecturerMessages() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1 flex-shrink-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleStar(message.id, message.is_starred);
                             }}
-                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors"
+                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors touch-manipulation"
                             title={message.is_starred ? "Unstar" : "Star"}
                           >
                             <Star
@@ -630,7 +630,7 @@ export default function LecturerMessages() {
                               e.stopPropagation();
                               handleDelete(message.id);
                             }}
-                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors text-muted-foreground"
+                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors text-muted-foreground touch-manipulation"
                             title="Delete message"
                           >
                             <Trash2 className="h-4 w-4" />

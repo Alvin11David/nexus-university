@@ -221,18 +221,20 @@ export default function Webmail() {
           // Get courses taught by this lecturer
           const lecturerCoursesQuery = query(
             collection(db, "lecturer_courses"),
-            where("lecturer_id", "==", user?.uid)
+            where("lecturer_id", "==", user?.uid),
           );
           const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
-          const courseIds = lecturerCoursesSnap.docs.map(doc => doc.data().course_id);
+          const courseIds = lecturerCoursesSnap.docs.map(
+            (doc) => doc.data().course_id,
+          );
 
           // Also check direct instructor assignments
           const directCoursesQuery = query(
             collection(db, "courses"),
-            where("instructor_id", "==", user?.uid)
+            where("instructor_id", "==", user?.uid),
           );
           const directCoursesSnap = await getDocs(directCoursesQuery);
-          const directCourseIds = directCoursesSnap.docs.map(doc => doc.id);
+          const directCourseIds = directCoursesSnap.docs.map((doc) => doc.id);
 
           // Combine all course IDs
           const allCourseIds = [...courseIds, ...directCourseIds];
@@ -241,31 +243,42 @@ export default function Webmail() {
             // Get enrollments for these courses
             const enrollmentsQuery = query(
               collection(db, "enrollments"),
-              where("course_id", "in", allCourseIds.slice(0, 10)) // Firestore 'in' limit is 10
+              where("course_id", "in", allCourseIds.slice(0, 10)), // Firestore 'in' limit is 10
             );
             const enrollmentsSnap = await getDocs(enrollmentsQuery);
 
             // Get unique student IDs
-            const studentIds = [...new Set(enrollmentsSnap.docs.map(doc => doc.data().student_id))];
+            const studentIds = [
+              ...new Set(
+                enrollmentsSnap.docs.map((doc) => doc.data().student_id),
+              ),
+            ];
 
             if (studentIds.length > 0) {
               // Get student profiles
-              recipients = allUsers.filter(u =>
-                u.role?.toLowerCase() === "student" &&
-                studentIds.includes(u.id)
+              recipients = allUsers.filter(
+                (u) =>
+                  u.role?.toLowerCase() === "student" &&
+                  studentIds.includes(u.id),
               );
             } else {
               // Fallback to all students if no enrollments found
-              recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+              recipients = allUsers.filter(
+                (u) => u.role?.toLowerCase() === "student",
+              );
             }
           } else {
             // Fallback to all students if no courses assigned
-            recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+            recipients = allUsers.filter(
+              (u) => u.role?.toLowerCase() === "student",
+            );
           }
         } catch (error) {
           console.error("Error fetching enrolled students:", error);
           // Fallback to all students
-          recipients = allUsers.filter(u => u.role?.toLowerCase() === "student");
+          recipients = allUsers.filter(
+            (u) => u.role?.toLowerCase() === "student",
+          );
         }
         setShowingAllUsers(false);
       } else {
