@@ -709,44 +709,50 @@ export default function LecturerMessages() {
             </div>
 
             {/* Attachment Section */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Attachment (Optional):
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Attachment (Optional)
               </label>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    document
-                      .getElementById("lecturer-attachment-upload")
-                      ?.click()
-                  }
-                  disabled={uploadingAttachment}
-                  className="w-full sm:w-auto h-12"
-                >
-                  <Paperclip className="h-4 w-4 mr-2" />
-                  {attachmentFile ? "Change File" : "Attach File"}
-                </Button>
-                <input
-                  id="lecturer-attachment-upload"
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 10485760) {
-                        alert("File size must be less than 10MB");
-                        return;
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    id="lecturer-attachment-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10485760) {
+                          alert("File size must be less than 10MB");
+                          return;
+                        }
+                        setAttachmentFile(file);
                       }
-                      setAttachmentFile(file);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document
+                        .getElementById("lecturer-attachment-upload")
+                        ?.click()
                     }
-                  }}
-                />
+                    disabled={uploadingAttachment}
+                    className="flex items-center gap-2 h-12 px-4 text-base"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    {attachmentFile ? "Change File" : "Attach File"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground self-center">
+                    Max 10MB
+                  </p>
+                </div>
                 {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-                    <span className="text-sm text-muted-foreground truncate flex-1">
+                  <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm truncate max-w-[200px] sm:max-w-[300px]">
                       {attachmentFile.name} (
                       {(attachmentFile.size / 1024).toFixed(1)} KB)
                     </span>
@@ -755,24 +761,27 @@ export default function LecturerMessages() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setAttachmentFile(null)}
-                      className="flex-shrink-0"
+                      className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground flex-shrink-0"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3 w-3" />
                     </Button>
                   </div>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
-              </p>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t">
             <Button
               variant="outline"
-              onClick={() => setIsComposeOpen(false)}
+              onClick={() => {
+                setIsComposeOpen(false);
+                resetComposeForm();
+              }}
               disabled={sending}
-              className="w-full sm:w-auto h-12 order-2 sm:order-1"
+              className="w-full sm:w-auto h-12 text-base order-2 sm:order-1"
             >
               Cancel
             </Button>
@@ -784,11 +793,21 @@ export default function LecturerMessages() {
                 !composeSubject.trim() ||
                 !composeBody.trim()
               }
-              className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary order-1 sm:order-2"
+              className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary text-base order-1 sm:order-2"
             >
-              {sending ? "Sending..." : "Send Message"}
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Message
+                </>
+              )}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
