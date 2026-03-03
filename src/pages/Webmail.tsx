@@ -70,6 +70,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Message {
   id: string;
@@ -506,17 +511,35 @@ export default function Webmail() {
   };
 
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
+    // Immediate UI update for better UX
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) =>
+        msg.id === messageId ? { ...msg, is_starred: !currentValue } : msg,
+      ),
+    );
+
+    if (selectedMessage?.id === messageId) {
+      setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
+    }
+
     try {
       await updateDoc(doc(db, "messages", messageId), {
         is_starred: !currentValue,
         updated_at: serverTimestamp(),
       });
+      // Refresh messages to ensure consistency
       fetchMessages();
-      if (selectedMessage?.id === messageId) {
-        setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
-      }
     } catch (error) {
       console.error("Error toggling star:", error);
+      // Revert the optimistic update on error
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === messageId ? { ...msg, is_starred: currentValue } : msg,
+        ),
+      );
+      if (selectedMessage?.id === messageId) {
+        setSelectedMessage({ ...selectedMessage, is_starred: currentValue });
+      }
     }
   };
 
@@ -637,6 +660,8 @@ export default function Webmail() {
     (m) => !m.is_read && m.to_user_id === user?.uid,
   ).length;
 
+  const starredCount = messages.filter((m) => m.is_starred).length;
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -696,7 +721,9 @@ export default function Webmail() {
               {selectedView === "drafts" && "Drafts"}
               {selectedView === "starred" && "Starred"}
               {selectedView === "archived" && "Archived"}
-              <ChevronLeft className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? 'rotate-90' : '-rotate-90'}`} />
+              <ChevronLeft
+                className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? "rotate-90" : "-rotate-90"}`}
+              />
             </Button>
           </motion.div>
 
@@ -722,10 +749,10 @@ export default function Webmail() {
               animate={{
                 opacity: 1,
                 x: 0,
-                height: sidebarOpen ? 'auto' : '0',
-                overflow: 'hidden'
+                height: sidebarOpen ? "auto" : "0",
+                overflow: "hidden",
               }}
-              className={`lg:col-span-1 ${sidebarOpen ? 'block' : 'hidden lg:block'}`}
+              className={`lg:col-span-1 ${sidebarOpen ? "block" : "hidden lg:block"}`}
             >
               <Card className="border-0 shadow-lg">
                 <CardContent className="p-3 md:p-4 space-y-1">
@@ -784,20 +811,32 @@ export default function Webmail() {
                     )}
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setSelectedView("starred");
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
-                      selectedView === "starred"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Star className="h-5 w-5 flex-shrink-0" />
-                    <span className="font-medium">Starred</span>
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => {
+                          setSelectedView("starred");
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                          selectedView === "starred"
+                            ? "bg-secondary text-secondary-foreground shadow-md"
+                            : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Star className="h-5 w-5 flex-shrink-0" />
+                        <span className="font-medium">Starred</span>
+                        {starredCount > 0 && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            {starredCount}
+                          </Badge>
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>View starred messages</p>
+                    </TooltipContent>
+                  </Tooltip>
 
                   <button
                     onClick={() => {
@@ -934,7 +973,11 @@ export default function Webmail() {
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 md:h-8 md:w-8"
+                              >
                                 <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -1005,7 +1048,8 @@ export default function Webmail() {
                                       "Unknown"}
                                   </span>
                                   <span className="text-muted-foreground text-sm hidden sm:inline">
-                                    &lt;{selectedMessage.from_profile?.email}&gt;
+                                    &lt;{selectedMessage.from_profile?.email}
+                                    &gt;
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -1017,30 +1061,41 @@ export default function Webmail() {
                                   )
                                     ? formatDistanceToNow(
                                         new Date(selectedMessage.created_at),
-                                        { addSuffix: true }
+                                        { addSuffix: true },
                                       )
                                     : "Unknown time"}
                                 </p>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  handleToggleStar(
-                                    selectedMessage.id,
-                                    selectedMessage.is_starred,
-                                  )
-                                }
-                                className="h-8 w-8 flex-shrink-0"
-                              >
-                                <Star
-                                  className={`h-5 w-5 ${
-                                    selectedMessage.is_starred
-                                      ? "fill-amber-500 text-amber-500"
-                                      : ""
-                                  }`}
-                                />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleToggleStar(
+                                        selectedMessage.id,
+                                        selectedMessage.is_starred,
+                                      )
+                                    }
+                                    className="h-8 w-8 flex-shrink-0 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                                  >
+                                    <Star
+                                      className={`h-5 w-5 transition-colors ${
+                                        selectedMessage.is_starred
+                                          ? "fill-amber-500 text-amber-500"
+                                          : "text-muted-foreground hover:text-amber-400"
+                                      }`}
+                                    />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    {selectedMessage.is_starred
+                                      ? "Unstar message"
+                                      : "Star message"}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                           </div>
 
@@ -1188,26 +1243,37 @@ export default function Webmail() {
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 md:h-8 md:w-8 touch-manipulation"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleToggleStar(
-                                                message.id,
-                                                message.is_starred,
-                                              );
-                                            }}
-                                          >
-                                            <Star
-                                              className={`h-4 w-4 ${
-                                                message.is_starred
-                                                  ? "fill-amber-500 text-amber-500"
-                                                  : ""
-                                              }`}
-                                            />
-                                          </Button>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 md:h-8 md:w-8 touch-manipulation hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleStar(
+                                                    message.id,
+                                                    message.is_starred,
+                                                  );
+                                                }}
+                                              >
+                                                <Star
+                                                  className={`h-4 w-4 transition-colors ${
+                                                    message.is_starred
+                                                      ? "fill-amber-500 text-amber-500"
+                                                      : "text-muted-foreground hover:text-amber-400"
+                                                  }`}
+                                                />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>
+                                                {message.is_starred
+                                                  ? "Unstar message"
+                                                  : "Star message"}
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
                                           <Button
                                             variant="ghost"
                                             size="icon"
@@ -1242,7 +1308,9 @@ export default function Webmail() {
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
           <DialogHeader>
-            <DialogTitle className="text-lg md:text-xl">Compose Message</DialogTitle>
+            <DialogTitle className="text-lg md:text-xl">
+              Compose Message
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 md:space-y-4">
             <div>
