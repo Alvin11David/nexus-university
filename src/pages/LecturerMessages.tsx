@@ -785,14 +785,14 @@ export default function LecturerMessages() {
               if (!open) setSelectedMessage(null);
             }}
           >
-            <DialogContent className="sm:max-w-[700px]">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
               <DialogHeader>
-                <DialogTitle>{selectedMessage.subject}</DialogTitle>
+                <DialogTitle className="text-lg md:text-xl pr-8">{selectedMessage.subject}</DialogTitle>
               </DialogHeader>
-              <ScrollArea className="max-h-[400px] pr-4">
+              <ScrollArea className="max-h-[60vh] md:max-h-[400px] pr-4">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 pb-4 border-b">
-                    <Avatar className="h-12 w-12">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pb-4 border-b">
+                    <Avatar className="h-12 w-12 flex-shrink-0">
                       <AvatarImage
                         src={
                           selectedView === "sent"
@@ -812,26 +812,26 @@ export default function LecturerMessages() {
                             : "?"}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
-                      <p className="font-semibold">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm md:text-base">
                         {selectedView === "sent"
                           ? selectedMessage.to_profile?.full_name
                           : selectedMessage.from_profile?.full_name}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground truncate">
                         {selectedView === "sent"
                           ? selectedMessage.to_profile?.email
                           : selectedMessage.from_profile?.email}
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground flex-shrink-0">
                       {formatDistanceToNow(
                         new Date(selectedMessage.created_at),
                         { addSuffix: true },
                       )}
                     </p>
                   </div>
-                  <div className="prose max-w-none whitespace-pre-wrap">
+                  <div className="prose max-w-none whitespace-pre-wrap text-sm md:text-base leading-relaxed">
                     {selectedMessage.body}
                   </div>
 
@@ -847,7 +847,7 @@ export default function LecturerMessages() {
                             selectedMessage.attachment_name || "attachment",
                           )
                         }
-                        className="gap-2"
+                        className="gap-2 w-full sm:w-auto justify-start h-12"
                       >
                         <Paperclip className="h-4 w-4" />
                         {selectedMessage.attachment_name}{" "}
