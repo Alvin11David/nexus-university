@@ -112,6 +112,41 @@ export default function EditQuiz() {
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
+  // Helper function to combine date, time, and AM/PM into ISO string
+  const combineDateTime = (date: string, time: string, period: "AM" | "PM"): string => {
+    const [hours, minutes] = time.split(':');
+    let hour24 = parseInt(hours);
+
+    if (period === 'PM' && hour24 !== 12) {
+      hour24 += 12;
+    } else if (period === 'AM' && hour24 === 12) {
+      hour24 = 0;
+    }
+
+    const dateTime = new Date(date);
+    dateTime.setHours(hour24, parseInt(minutes), 0, 0);
+
+    return dateTime.toISOString();
+  };
+
+  // Helper function to parse datetime string into separate components
+  const parseDateTime = (dateTimeString: string) => {
+    const date = new Date(dateTimeString);
+    const dateString = date.toISOString().split('T')[0];
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+
+    const period: "AM" | "PM" = hours >= 12 ? "PM" : "AM";
+    const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    const timeString = `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+    return {
+      date: dateString,
+      time: timeString,
+      period
+    };
+  };
+
   // Load quiz data
   useEffect(() => {
     if (id && user?.uid) {
@@ -140,6 +175,10 @@ export default function EditQuiz() {
 
       const qData = quizSnap.data();
 
+      // Parse start and end dates
+      const startDateTime = qData.start_date ? parseDateTime(qData.start_date) : { date: "", time: "", period: "AM" as "AM" | "PM" };
+      const endDateTime = qData.end_date ? parseDateTime(qData.end_date) : { date: "", time: "", period: "PM" as "AM" | "PM" };
+
       setQuizData({
         title: qData.title || "",
         description: qData.description || "",
@@ -148,12 +187,17 @@ export default function EditQuiz() {
         courseCode: qData.course_code || "",
         timeLimit: qData.time_limit || 30,
         passingScore: qData.passing_score || 70,
-        startDate: qData.start_date || "",
-        endDate: qData.end_date || "",
+        startDate: startDateTime.date,
+        startTime: startDateTime.time,
+        startTimePeriod: startDateTime.period,
+        endDate: endDateTime.date,
+        endTime: endDateTime.time,
+        endTimePeriod: endDateTime.period,
         status: (qData.status as any) || "draft",
         attemptsAllowed: qData.attempts_allowed || 1,
         shuffleQuestions: qData.shuffle_questions || false,
         showAnswers: qData.show_answers || false,
+        autoDeactivate: qData.auto_deactivate !== false, // Default to true if not set
       });
 
       // Load questions
