@@ -702,7 +702,7 @@ export default function LecturerMessages() {
               <label className="text-sm font-medium">
                 Attachment (Optional):
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -712,6 +712,7 @@ export default function LecturerMessages() {
                       ?.click()
                   }
                   disabled={uploadingAttachment}
+                  className="w-full sm:w-auto h-12"
                 >
                   <Paperclip className="h-4 w-4 mr-2" />
                   {attachmentFile ? "Change File" : "Attach File"}
@@ -733,8 +734,8 @@ export default function LecturerMessages() {
                   }}
                 />
                 {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm text-muted-foreground truncate">
+                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+                    <span className="text-sm text-muted-foreground truncate flex-1">
                       {attachmentFile.name} (
                       {(attachmentFile.size / 1024).toFixed(1)} KB)
                     </span>
@@ -743,6 +744,7 @@ export default function LecturerMessages() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setAttachmentFile(null)}
+                      className="flex-shrink-0"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -754,15 +756,20 @@ export default function LecturerMessages() {
               </p>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => setIsComposeOpen(false)}
               disabled={sending}
+              className="w-full sm:w-auto h-12 order-2 sm:order-1"
             >
               Cancel
             </Button>
-            <Button onClick={handleSendMessage} disabled={sending}>
+            <Button
+              onClick={handleSendMessage}
+              disabled={sending || !composeToId || !composeSubject.trim() || !composeBody.trim()}
+              className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary order-1 sm:order-2"
+            >
               {sending ? "Sending..." : "Send Message"}
             </Button>
           </div>
