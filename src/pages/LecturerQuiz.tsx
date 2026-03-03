@@ -86,6 +86,7 @@ export default function LecturerQuiz() {
   const [filterStatus, setFilterStatus] = useState<
     "all" | "draft" | "active" | "closed"
   >("all");
+  const [selectedCourse, setSelectedCourse] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [courses, setCourses] = useState<any[]>([]);
   const [stats, setStats] = useState({
