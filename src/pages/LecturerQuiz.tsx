@@ -32,6 +32,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   orderBy,
   updateDoc,
   doc,
@@ -201,33 +202,53 @@ export default function LecturerQuiz() {
     try {
       if (!user?.uid) return;
 
-      const q = query(
-        collection(db, "lecturer_courses"),
-        where("lecturer_id", "==", user.uid)
-      );
-      const querySnapshot = await getDocs(q);
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedRawCourses: any[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
 
-      if (querySnapshot.empty) {
-        setCourses([]);
-        return;
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            // Firestore 'in' supports up to 30 values
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                assignedRawCourses.push({
+                  id: doc.id,
+                  course_code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                  course_title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                });
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile or course units:", err);
       }
 
-      const lecturerCoursesData = querySnapshot.docs.map(doc => doc.data());
-      const courseIds = lecturerCoursesData.map(lc => lc.course_id);
-
-      // Fetch course details chunked (max 30 ids per 'in' query)
-      const coursesData: any[] = [];
-      for (let i = 0; i < courseIds.length; i += 30) {
-        const chunk = courseIds.slice(i, i + 30);
-        const coursesQuery = query(
-          collection(db, "courses"),
-          where("__name__", "in", chunk)
-        );
-        const coursesSnap = await getDocs(coursesQuery);
-        coursesSnap.forEach(doc => {
-          coursesData.push({ id: doc.id, ...doc.data() });
-        });
-      }
+      // Set available courses to the assigned course units
+      const coursesData: any[] = assignedRawCourses.map((raw) => ({
+        id: raw.id,
+        course_code: raw.course_code,
+        course_title: raw.course_title,
+      }));
 
       setCourses(coursesData);
     } catch (error) {
@@ -245,10 +266,6 @@ export default function LecturerQuiz() {
 
     if (filterStatus !== "all") {
       filtered = filtered.filter((q) => q.status === filterStatus);
-    }
-
-    if (selectedCourse !== "all") {
-      filtered = filtered.filter((q) => q.courseId === selectedCourse);
     }
 
     if (searchQuery.trim()) {
@@ -275,7 +292,7 @@ export default function LecturerQuiz() {
   useEffect(() => {
     filterQuizzes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quizzes, filterStatus, searchQuery, selectedCourse]);
+  }, [quizzes, filterStatus, searchQuery]);
 
   const handleDeleteQuiz = async (quizId: string) => {
     if (confirm("Are you sure you want to delete this quiz?")) {
@@ -457,22 +474,58 @@ export default function LecturerQuiz() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.3 }}
-                className="flex flex-col gap-3 sm:flex-row"
+                className="flex flex-col gap-4 sm:flex-row"
               >
-                <Button
-                  variant="outline"
-                  className="border-border/60 hover:bg-muted"
-                  onClick={() => navigate("/lecturer/assignments")}
-                >
-                  View Assignments
-                </Button>
-                <Button
-                  className="bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:shadow-lg transition-all"
-                  onClick={() => navigate("/lecturer/quiz/create")}
-                >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Create New Quiz
-                </Button>
+                {/* Course Selection for Quiz Creation */}
+                <div className="flex flex-col gap-2 min-w-[250px]">
+                  <label className="text-sm font-medium text-foreground">
+                    Select Course for New Quiz{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedCourse === "all" ? "" : selectedCourse}
+                    onChange={(e) => setSelectedCourse(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  >
+                    <option value="">Choose a course...</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.course_code} - {course.course_title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Button
+                    variant="outline"
+                    className="border-border/60 hover:bg-muted"
+                    onClick={() => navigate("/lecturer/assignments")}
+                  >
+                    View Assignments
+                  </Button>
+                  <Button
+                    className="bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:shadow-lg transition-all"
+                    onClick={() => {
+                      if (selectedCourse && selectedCourse !== "all") {
+                        navigate(
+                          `/lecturer/quiz/create?course=${selectedCourse}`,
+                        );
+                      } else {
+                        toast({
+                          title: "Course Required",
+                          description:
+                            "Please select a course before creating a quiz.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                    disabled={!selectedCourse || selectedCourse === "all"}
+                  >
+                    <Plus className="h-5 w-5 mr-2" />
+                    Create New Quiz
+                  </Button>
+                </div>
               </motion.div>
             </div>
           </section>
@@ -557,29 +610,14 @@ export default function LecturerQuiz() {
                 ))}
               </div>
 
-              <div className="flex gap-2 items-center">
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => setSelectedCourse(e.target.value)}
-                  className="px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                >
-                  <option value="all">All Courses</option>
-                  {courses.map((course) => (
-                    <option key={course.id} value={course.id}>
-                      {course.course_code} - {course.course_title}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search quizzes..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full sm:w-64 px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search quizzes..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full sm:w-64 px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
               </div>
             </div>
           </section>
