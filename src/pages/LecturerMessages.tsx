@@ -860,14 +860,14 @@ export default function LecturerMessages() {
                   )}
                 </div>
               </ScrollArea>
-              <div className="flex justify-end gap-2 pt-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
                 {selectedView === "inbox" && (
                   <Button
                     onClick={() => {
                       handleReply(selectedMessage);
                       setSelectedMessage(null);
                     }}
-                    className="gap-2"
+                    className="gap-2 w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary"
                   >
                     <Send className="h-4 w-4" /> Reply
                   </Button>
@@ -875,6 +875,7 @@ export default function LecturerMessages() {
                 <Button
                   variant="outline"
                   onClick={() => setSelectedMessage(null)}
+                  className="w-full sm:w-auto h-12"
                 >
                   Close
                 </Button>
