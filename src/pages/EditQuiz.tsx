@@ -98,11 +98,16 @@ export default function EditQuiz() {
     timeLimit: 30,
     passingScore: 70,
     startDate: "",
+    startTime: "",
+    startTimePeriod: "AM" as "AM" | "PM",
     endDate: "",
+    endTime: "",
+    endTimePeriod: "PM" as "AM" | "PM",
     status: "draft" as "draft" | "active" | "closed",
     attemptsAllowed: 1,
     shuffleQuestions: false,
     showAnswers: false,
+    autoDeactivate: true,
   });
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
