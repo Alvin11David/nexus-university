@@ -676,99 +676,140 @@ export default function Webmail() {
         </div>
       </section>
 
-      <main className="container py-8">
+      <main className="container py-4 md:py-8">
         <div className="max-w-7xl mx-auto">
-          {/* Compose Button */}
+          {/* Mobile Menu Button */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
+            className="mb-4 md:hidden"
+          >
+            <Button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              variant="outline"
+              className="w-full gap-2 h-12"
+            >
+              <Mail className="h-5 w-5" />
+              {selectedView === "inbox" && "Inbox"}
+              {selectedView === "sent" && "Sent"}
+              {selectedView === "drafts" && "Drafts"}
+              {selectedView === "starred" && "Starred"}
+              {selectedView === "archived" && "Archived"}
+              <ChevronLeft className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? 'rotate-90' : '-rotate-90'}`} />
+            </Button>
+          </motion.div>
+
+          {/* Compose Button - Mobile */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-4 md:hidden"
           >
             <Button
               onClick={() => setIsComposeOpen(true)}
-              className="gap-2 h-12 px-6 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 text-white shadow-lg"
+              className="w-full gap-2 h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 text-white shadow-lg"
             >
               <Plus className="h-5 w-5" />
               Compose
             </Button>
           </motion.div>
 
-          <div className="grid lg:grid-cols-4 gap-6">
+          <div className="grid lg:grid-cols-4 gap-4 md:gap-6">
             {/* Sidebar */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="lg:col-span-1"
+              animate={{
+                opacity: 1,
+                x: 0,
+                height: sidebarOpen ? 'auto' : '0',
+                overflow: 'hidden'
+              }}
+              className={`lg:col-span-1 ${sidebarOpen ? 'block' : 'hidden lg:block'}`}
             >
               <Card className="border-0 shadow-lg">
-                <CardContent className="p-4 space-y-1">
+                <CardContent className="p-3 md:p-4 space-y-1">
                   <button
-                    onClick={() => setSelectedView("inbox")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    onClick={() => {
+                      setSelectedView("inbox");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
                       selectedView === "inbox"
                         ? "bg-secondary text-secondary-foreground shadow-md"
                         : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <Inbox className="h-5 w-5" />
+                    <Inbox className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Inbox</span>
                     {unreadCount > 0 && (
-                      <Badge className="ml-auto bg-amber-500">
+                      <Badge className="ml-auto bg-amber-500 text-xs">
                         {unreadCount}
                       </Badge>
                     )}
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("sent")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    onClick={() => {
+                      setSelectedView("sent");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
                       selectedView === "sent"
                         ? "bg-secondary text-secondary-foreground shadow-md"
                         : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <Send className="h-5 w-5" />
+                    <Send className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Sent</span>
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("drafts")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    onClick={() => {
+                      setSelectedView("drafts");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
                       selectedView === "drafts"
                         ? "bg-secondary text-secondary-foreground shadow-md"
                         : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <FileText className="h-5 w-5" />
+                    <FileText className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Drafts</span>
                     {drafts.length > 0 && (
-                      <Badge variant="secondary" className="ml-auto">
+                      <Badge variant="secondary" className="ml-auto text-xs">
                         {drafts.length}
                       </Badge>
                     )}
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("starred")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    onClick={() => {
+                      setSelectedView("starred");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
                       selectedView === "starred"
                         ? "bg-secondary text-secondary-foreground shadow-md"
                         : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <Star className="h-5 w-5" />
+                    <Star className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Starred</span>
                   </button>
 
                   <button
-                    onClick={() => setSelectedView("archived")}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                    onClick={() => {
+                      setSelectedView("archived");
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
                       selectedView === "archived"
                         ? "bg-secondary text-secondary-foreground shadow-md"
                         : "hover:bg-muted text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <Archive className="h-5 w-5" />
+                    <Archive className="h-5 w-5 flex-shrink-0" />
                     <span className="font-medium">Archived</span>
                   </button>
                 </CardContent>
