@@ -247,6 +247,10 @@ export default function LecturerQuiz() {
       filtered = filtered.filter((q) => q.status === filterStatus);
     }
 
+    if (selectedCourse !== "all") {
+      filtered = filtered.filter((q) => q.courseId === selectedCourse);
+    }
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -271,7 +275,7 @@ export default function LecturerQuiz() {
   useEffect(() => {
     filterQuizzes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quizzes, filterStatus, searchQuery]);
+  }, [quizzes, filterStatus, searchQuery, selectedCourse]);
 
   const handleDeleteQuiz = async (quizId: string) => {
     if (confirm("Are you sure you want to delete this quiz?")) {
