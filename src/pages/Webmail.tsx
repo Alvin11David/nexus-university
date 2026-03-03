@@ -916,19 +916,24 @@ export default function Webmail() {
                   ) : selectedMessage ? (
                     /* Message Detail View */
                     <Card className="border-0 shadow-lg">
-                      <CardContent className="p-6">
-                        <div className="flex items-center gap-4 mb-6">
+                      <CardContent className="p-4 md:p-6">
+                        <div className="flex items-center gap-2 md:gap-4 mb-4 md:mb-6">
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => setSelectedMessage(null)}
+                            className="h-10 w-10 md:h-8 md:w-8"
                           >
                             <ChevronLeft className="h-5 w-5" />
                           </Button>
-                          <div className="flex-1" />
+                          <div className="flex-1 min-w-0">
+                            <h2 className="text-lg md:text-2xl font-bold truncate">
+                              {selectedMessage.subject}
+                            </h2>
+                          </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
+                              <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8">
                                 <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -977,11 +982,8 @@ export default function Webmail() {
 
                         <div className="space-y-6">
                           <div>
-                            <h2 className="text-2xl font-bold mb-4">
-                              {selectedMessage.subject}
-                            </h2>
-                            <div className="flex items-start gap-4 pb-4 border-b">
-                              <Avatar className="h-12 w-12">
+                            <div className="flex items-start gap-3 md:gap-4 pb-4 border-b">
+                              <Avatar className="h-12 w-12 flex-shrink-0">
                                 <AvatarImage
                                   src={
                                     selectedMessage.from_profile?.avatar_url ||
@@ -995,15 +997,14 @@ export default function Webmail() {
                                   )}
                                 </AvatarFallback>
                               </Avatar>
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-1">
+                                  <span className="font-semibold text-sm md:text-base">
                                     {selectedMessage.from_profile?.full_name ||
                                       "Unknown"}
                                   </span>
-                                  <span className="text-muted-foreground">
-                                    &lt;{selectedMessage.from_profile?.email}
-                                    &gt;
+                                  <span className="text-muted-foreground text-sm hidden sm:inline">
+                                    &lt;{selectedMessage.from_profile?.email}&gt;
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -1013,9 +1014,9 @@ export default function Webmail() {
                                       selectedMessage.created_at,
                                     ).getTime(),
                                   )
-                                    ? format(
+                                    ? formatDistanceToNow(
                                         new Date(selectedMessage.created_at),
-                                        "PPpp",
+                                        { addSuffix: true }
                                       )
                                     : "Unknown time"}
                                 </p>
@@ -1029,6 +1030,7 @@ export default function Webmail() {
                                     selectedMessage.is_starred,
                                   )
                                 }
+                                className="h-8 w-8 flex-shrink-0"
                               >
                                 <Star
                                   className={`h-5 w-5 ${
@@ -1042,7 +1044,7 @@ export default function Webmail() {
                           </div>
 
                           <div className="prose max-w-none">
-                            <p className="whitespace-pre-wrap text-foreground leading-relaxed">
+                            <p className="whitespace-pre-wrap text-foreground leading-relaxed text-sm md:text-base">
                               {selectedMessage.body}
                             </p>
                           </div>
@@ -1062,22 +1064,24 @@ export default function Webmail() {
                                       "attachment",
                                   )
                                 }
-                                className="gap-2"
+                                className="gap-2 w-full sm:w-auto justify-start h-12"
                               >
                                 <Paperclip className="h-4 w-4" />
-                                {selectedMessage.attachment_name}{" "}
-                                {selectedMessage.attachment_size &&
-                                  `(${(
-                                    selectedMessage.attachment_size / 1024
-                                  ).toFixed(1)} KB)`}
+                                <span className="truncate">
+                                  {selectedMessage.attachment_name}{" "}
+                                  {selectedMessage.attachment_size &&
+                                    `(${(
+                                      selectedMessage.attachment_size / 1024
+                                    ).toFixed(1)} KB)`}
+                                </span>
                               </Button>
                             </div>
                           )}
 
-                          <div className="flex gap-2 pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row gap-2 pt-4 border-t">
                             <Button
                               variant="outline"
-                              className="gap-2"
+                              className="gap-2 flex-1 sm:flex-initial h-12"
                               onClick={handleReply}
                             >
                               <Reply className="h-4 w-4" />
@@ -1085,7 +1089,7 @@ export default function Webmail() {
                             </Button>
                             <Button
                               variant="outline"
-                              className="gap-2"
+                              className="gap-2 flex-1 sm:flex-initial h-12"
                               onClick={handleForward}
                             >
                               <Forward className="h-4 w-4" />
@@ -1235,11 +1239,11 @@ export default function Webmail() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
           <DialogHeader>
-            <DialogTitle>Compose Message</DialogTitle>
+            <DialogTitle className="text-lg md:text-xl">Compose Message</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 md:space-y-4">
             <div>
               <label className="text-sm font-medium mb-2 block">To</label>
               <div className="space-y-2">
@@ -1258,7 +1262,7 @@ export default function Webmail() {
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
-                  className={composeToId ? "border-green-500" : ""}
+                  className={`h-12 ${composeToId ? "border-green-500" : ""}`}
                 />
                 {composeTo && !composeToId && (
                   <p className="text-xs text-amber-600">
@@ -1295,7 +1299,7 @@ export default function Webmail() {
                               setComposeTo(user.email);
                               setComposeToId(user.id);
                             }}
-                            className="w-full text-left px-3 py-2 text-sm rounded hover:bg-muted transition-colors"
+                            className="w-full text-left px-3 py-3 rounded hover:bg-muted transition-colors"
                           >
                             <div className="font-medium">{user.full_name}</div>
                             <div className="text-xs text-muted-foreground">
@@ -1315,6 +1319,7 @@ export default function Webmail() {
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
                 placeholder="Subject..."
+                className="h-12"
               />
             </div>
 
@@ -1324,7 +1329,7 @@ export default function Webmail() {
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                className="min-h-[300px] resize-none"
+                className="min-h-[200px] md:min-h-[300px] resize-none text-sm md:text-base"
               />
             </div>
 
@@ -1333,7 +1338,7 @@ export default function Webmail() {
               <label className="text-sm font-medium mb-2 block">
                 Attachment (Optional)
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -1341,6 +1346,7 @@ export default function Webmail() {
                     document.getElementById("attachment-upload")?.click()
                   }
                   disabled={uploadingAttachment}
+                  className="w-full sm:w-auto h-12"
                 >
                   <Paperclip className="h-4 w-4 mr-2" />
                   {attachmentFile ? "Change File" : "Attach File"}
@@ -1362,8 +1368,8 @@ export default function Webmail() {
                   }}
                 />
                 {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm text-muted-foreground truncate">
+                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
+                    <span className="text-sm text-muted-foreground truncate flex-1">
                       {attachmentFile.name} (
                       {(attachmentFile.size / 1024).toFixed(1)} KB)
                     </span>
@@ -1372,6 +1378,7 @@ export default function Webmail() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setAttachmentFile(null)}
+                      className="flex-shrink-0"
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -1383,11 +1390,12 @@ export default function Webmail() {
               </p>
             </div>
 
-            <div className="flex justify-end gap-2 pt-4 border-t">
+            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
                 disabled={savingDraft}
+                className="w-full sm:w-auto h-12 order-2 sm:order-1"
               >
                 {savingDraft ? (
                   <>
@@ -1406,7 +1414,7 @@ export default function Webmail() {
                   !composeBody.trim() ||
                   sending
                 }
-                className="bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90"
+                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2"
               >
                 {sending ? (
                   <>
@@ -1424,6 +1432,10 @@ export default function Webmail() {
           </div>
         </DialogContent>
       </Dialog>
+
+function setShowingAllUsers(arg0: boolean) {
+  throw new Error("Function not implemented.");
+}
 
       <StudentBottomNav />
     </div>
