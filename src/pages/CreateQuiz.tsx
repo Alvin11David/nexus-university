@@ -503,7 +503,7 @@ export default function CreateQuiz() {
           {/* Step Indicator */}
           <div className="mb-8 flex items-center justify-center gap-2">
             <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "upload" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-              <FileUpload className="h-4 w-4" />
+              <Upload className="h-4 w-4" />
               <span className="text-sm font-medium">Upload</span>
             </div>
             <div className="h-1 w-8 bg-muted rounded"></div>
