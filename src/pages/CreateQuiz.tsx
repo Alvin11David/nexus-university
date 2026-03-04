@@ -12,6 +12,7 @@ import {
   Award,
   Users,
   Sparkles,
+  FileUpload,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -30,6 +31,9 @@ import {
   doc,
 } from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
+import { DocumentUpload } from "@/components/DocumentUpload";
+import { QuestionReview } from "@/components/QuestionReview";
+import { DocumentAnalysisResult, ExtractedQuestion } from "@/lib/documentAnalyzer";
 
 interface CourseOption {
   id: string;
