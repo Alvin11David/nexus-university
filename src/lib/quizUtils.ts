@@ -1,10 +1,16 @@
-import { collection, query, where, getDocs, doc, updateDoc, writeBatch } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 // Utility function to auto-close expired quizzes
-export const autoCloseExpiredQuizzes = async (
-  userId?: string
-) => {
+export const autoCloseExpiredQuizzes = async (userId?: string) => {
   try {
     const currentTime = new Date();
 
@@ -13,7 +19,7 @@ export const autoCloseExpiredQuizzes = async (
     let q = query(
       quizzesRef,
       where("status", "==", "active"),
-      where("auto_deactivate", "==", true)
+      where("auto_deactivate", "==", true),
     );
 
     // Filter by lecturer (for lecturer views)
@@ -22,7 +28,7 @@ export const autoCloseExpiredQuizzes = async (
     }
 
     const querySnapshot = await getDocs(q);
-    const expiredQuizzes = querySnapshot.docs.filter(d => {
+    const expiredQuizzes = querySnapshot.docs.filter((d) => {
       const data = d.data();
       return data.end_date && new Date(data.end_date) < currentTime;
     });
@@ -33,14 +39,14 @@ export const autoCloseExpiredQuizzes = async (
 
     // Update expired quizzes to closed status using a batch for atomicity
     const batch = writeBatch(db);
-    expiredQuizzes.forEach(d => {
+    expiredQuizzes.forEach((d) => {
       batch.update(d.ref, { status: "closed" });
     });
 
     await batch.commit();
 
     console.log(`Auto-closed ${expiredQuizzes.length} expired quizzes`);
-    return expiredQuizzes.map(d => d.id);
+    return expiredQuizzes.map((d) => d.id);
   } catch (error) {
     console.error("Error in autoCloseExpiredQuizzes:", error);
     return [];

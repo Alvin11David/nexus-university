@@ -69,13 +69,17 @@ export default function CreateQuiz() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Helper function to combine date, time, and AM/PM into ISO string
-  const combineDateTime = (date: string, time: string, period: "AM" | "PM"): string => {
-    const [hours, minutes] = time.split(':');
+  const combineDateTime = (
+    date: string,
+    time: string,
+    period: "AM" | "PM",
+  ): string => {
+    const [hours, minutes] = time.split(":");
     let hour24 = parseInt(hours);
 
-    if (period === 'PM' && hour24 !== 12) {
+    if (period === "PM" && hour24 !== 12) {
       hour24 += 12;
-    } else if (period === 'AM' && hour24 === 12) {
+    } else if (period === "AM" && hour24 === 12) {
       hour24 = 0;
     }
 
@@ -222,12 +226,26 @@ export default function CreateQuiz() {
     }
 
     // Combine date and time for validation
-    if (formData.startDate && formData.startTime && formData.endDate && formData.endTime) {
-      const startDateTime = combineDateTime(formData.startDate, formData.startTime, formData.startTimePeriod);
-      const endDateTime = combineDateTime(formData.endDate, formData.endTime, formData.endTimePeriod);
+    if (
+      formData.startDate &&
+      formData.startTime &&
+      formData.endDate &&
+      formData.endTime
+    ) {
+      const startDateTime = combineDateTime(
+        formData.startDate,
+        formData.startTime,
+        formData.startTimePeriod,
+      );
+      const endDateTime = combineDateTime(
+        formData.endDate,
+        formData.endTime,
+        formData.endTimePeriod,
+      );
 
       if (startDateTime >= endDateTime) {
-        newErrors.endDate = "End date and time must be after start date and time";
+        newErrors.endDate =
+          "End date and time must be after start date and time";
       }
     }
     if (formData.attemptsAllowed < 1) {
@@ -283,8 +301,16 @@ export default function CreateQuiz() {
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
 
       // Combine date and time for storage
-      const startDateTime = combineDateTime(formData.startDate, formData.startTime, formData.startTimePeriod);
-      const endDateTime = combineDateTime(formData.endDate, formData.endTime, formData.endTimePeriod);
+      const startDateTime = combineDateTime(
+        formData.startDate,
+        formData.startTime,
+        formData.startTimePeriod,
+      );
+      const endDateTime = combineDateTime(
+        formData.endDate,
+        formData.endTime,
+        formData.endTimePeriod,
+      );
 
       // Save quiz to Firestore 'quizzes' collection
       await addDoc(collection(db, "quizzes"), {
@@ -767,7 +793,8 @@ export default function CreateQuiz() {
                   <div>
                     <p className="font-medium">Auto-Deactivate on End Date</p>
                     <p className="text-sm text-muted-foreground">
-                      Automatically close the quiz when the end date and time is reached
+                      Automatically close the quiz when the end date and time is
+                      reached
                     </p>
                   </div>
                 </label>

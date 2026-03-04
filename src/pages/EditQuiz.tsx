@@ -113,13 +113,17 @@ export default function EditQuiz() {
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
   // Helper function to combine date, time, and AM/PM into ISO string
-  const combineDateTime = (date: string, time: string, period: "AM" | "PM"): string => {
-    const [hours, minutes] = time.split(':');
+  const combineDateTime = (
+    date: string,
+    time: string,
+    period: "AM" | "PM",
+  ): string => {
+    const [hours, minutes] = time.split(":");
     let hour24 = parseInt(hours);
 
-    if (period === 'PM' && hour24 !== 12) {
+    if (period === "PM" && hour24 !== 12) {
       hour24 += 12;
-    } else if (period === 'AM' && hour24 === 12) {
+    } else if (period === "AM" && hour24 === 12) {
       hour24 = 0;
     }
 
@@ -132,18 +136,18 @@ export default function EditQuiz() {
   // Helper function to parse datetime string into separate components
   const parseDateTime = (dateTimeString: string) => {
     const date = new Date(dateTimeString);
-    const dateString = date.toISOString().split('T')[0];
+    const dateString = date.toISOString().split("T")[0];
     const hours = date.getHours();
     const minutes = date.getMinutes();
 
     const period: "AM" | "PM" = hours >= 12 ? "PM" : "AM";
     const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
-    const timeString = `${hour12.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    const timeString = `${hour12.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 
     return {
       date: dateString,
       time: timeString,
-      period
+      period,
     };
   };
 
@@ -176,8 +180,12 @@ export default function EditQuiz() {
       const qData = quizSnap.data();
 
       // Parse start and end dates
-      const startDateTime = qData.start_date ? parseDateTime(qData.start_date) : { date: "", time: "", period: "AM" as "AM" | "PM" };
-      const endDateTime = qData.end_date ? parseDateTime(qData.end_date) : { date: "", time: "", period: "PM" as "AM" | "PM" };
+      const startDateTime = qData.start_date
+        ? parseDateTime(qData.start_date)
+        : { date: "", time: "", period: "AM" as "AM" | "PM" };
+      const endDateTime = qData.end_date
+        ? parseDateTime(qData.end_date)
+        : { date: "", time: "", period: "PM" as "AM" | "PM" };
 
       setQuizData({
         title: qData.title || "",
@@ -232,8 +240,16 @@ export default function EditQuiz() {
       if (!id) return;
 
       // Combine date and time for storage
-      const startDateTime = combineDateTime(quizData.startDate, quizData.startTime, quizData.startTimePeriod);
-      const endDateTime = combineDateTime(quizData.endDate, quizData.endTime, quizData.endTimePeriod);
+      const startDateTime = combineDateTime(
+        quizData.startDate,
+        quizData.startTime,
+        quizData.startTimePeriod,
+      );
+      const endDateTime = combineDateTime(
+        quizData.endDate,
+        quizData.endTime,
+        quizData.endTimePeriod,
+      );
 
       // Update quiz data
       const quizRef = doc(db, "quizzes", id);

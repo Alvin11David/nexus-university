@@ -26,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, and, or } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, and, or, addDoc } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
@@ -201,36 +201,37 @@ export default function StudentQuiz() {
   };
 
   const submitQuiz = async () => {
-    if (!takingQuiz || !quizStartTime) return;
+    if (!takingQuiz || !quizStartTime || !user) return;
 
     try {
       const timeTaken = Math.floor(
         (new Date().getTime() - quizStartTime.getTime()) / 1000
       );
-      let totalScore = 0;
 
-      // Calculate score
-      quizQuestions.forEach((question) => {
-        const userAnswer = answers[question.id];
-        if (userAnswer === question.correct_answer) {
-          totalScore += question.points;
-        }
+      // Save quiz attempt to database for lecturer grading
+      await addDoc(collection(db, "quiz_attempts"), {
+        quiz_id: takingQuiz.id,
+        student_id: user.uid,
+        answers: answers,
+        attempt_number: 1, // TODO: Calculate actual attempt number
+        started_at: quizStartTime.toISOString(),
+        completed_at: new Date().toISOString(),
+        score: null, // Will be set by lecturer after grading
+        status: "submitted", // submitted, graded
+        time_taken: timeTaken,
       });
 
-      setQuizScore(totalScore);
       setShowResults(true);
 
-      // Here you would save the attempt to the database
-      // For now, we'll just show the results
-
       toast({
-        title: "Quiz Completed!",
-        description: `You scored ${totalScore} out of 10 points`,
+        title: "Quiz Submitted!",
+        description: "Your quiz has been submitted for grading. You will receive your results once graded.",
       });
     } catch (error: any) {
+      console.error("Error submitting quiz:", error);
       toast({
         title: "Error",
-        description: "Failed to submit quiz",
+        description: "Failed to submit quiz. Please try again.",
         variant: "destructive",
       });
     }
@@ -728,76 +729,39 @@ export default function StudentQuiz() {
                       </span>
                     </div>
                   </div>
-                  y i
                 </>
               ) : (
                 /* Results */
                 <div className="text-center space-y-8">
                   {/* Result icon */}
                   <div className="relative">
-                    <div className={`text-8xl ${quizScore >= takingQuiz.passing_score ? 'animate-bounce' : 'animate-pulse'}`}>
-                      {quizScore >= takingQuiz.passing_score ? "🎉" : "💪"}
+                    <div className="text-8xl animate-pulse">
+                      📝
                     </div>
                     <div className="absolute -top-2 -right-2">
-                      <Star className={`h-8 w-8 ${quizScore >= takingQuiz.passing_score ? 'text-yellow-400' : 'text-gray-400'}`} />
+                      <CheckCircle2 className="h-8 w-8 text-green-500" />
                     </div>
                   </div>
 
                   <div>
                     <h3 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                      {quizScore >= takingQuiz.passing_score ? "Congratulations!" : "Keep Trying!"}
+                      Quiz Submitted!
                     </h3>
                     <p className="text-muted-foreground text-lg">
-                      You scored <span className="font-bold text-foreground">{quizScore}</span> out of <span className="font-bold text-foreground">10</span> points
+                      Your quiz has been submitted for grading. You will receive your results once your lecturer has reviewed it.
                     </p>
                   </div>
 
-                  {/* Score breakdown */}
+                  {/* Submission details */}
                   <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
-                    <div className="grid grid-cols-2 gap-6 mb-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-primary mb-1">{quizScore}</div>
-                        <div className="text-sm text-muted-foreground">Your Score</div>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-center gap-2 text-primary">
+                        <Clock className="h-5 w-5" />
+                        <span className="font-medium">Submitted for Grading</span>
                       </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-muted-foreground mb-1">{takingQuiz.passing_score}</div>
-                        <div className="text-sm text-muted-foreground">Passing Score</div>
-                      </div>
-                    </div>
-
-                    {/* Progress bar */}
-                    <div className="mb-4">
-                      <div className="flex justify-between text-sm mb-2">
-                        <span>Progress</span>
-                        <span>{Math.round((quizScore / 10) * 100)}%</span>
-                      </div>
-                      <div className="w-full bg-muted rounded-full h-3">
-                        <div
-                          className={`h-3 rounded-full transition-all duration-1000 ${quizScore >= takingQuiz.passing_score
-                            ? 'bg-gradient-to-r from-green-400 to-green-500'
-                            : 'bg-gradient-to-r from-orange-400 to-orange-500'
-                            }`}
-                          style={{ width: `${(quizScore / 10) * 100}%` }}
-                        ></div>
-                      </div>
-                    </div>
-
-                    {/* Result badge */}
-                    <div className={`inline-flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold ${quizScore >= takingQuiz.passing_score
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
-                      : 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                      }`}>
-                      {quizScore >= takingQuiz.passing_score ? (
-                        <>
-                          <Trophy className="h-4 w-4" />
-                          Passed Successfully!
-                        </>
-                      ) : (
-                        <>
-                          <TrendingUp className="h-4 w-4" />
-                          Keep Practicing
-                        </>
-                      )}
+                      <p className="text-sm text-muted-foreground">
+                        Your lecturer will review your answers and provide feedback. Check back later for your results.
+                      </p>
                     </div>
                   </div>
 
@@ -805,7 +769,7 @@ export default function StudentQuiz() {
                   <div className="flex flex-col sm:flex-row gap-3 justify-center">
                     <Button onClick={resetQuiz} size="lg" className="gap-2">
                       <BarChart3 className="h-4 w-4" />
-                      View Results
+                      View All Quizzes
                     </Button>
                     <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
                       <Play className="h-4 w-4" />
