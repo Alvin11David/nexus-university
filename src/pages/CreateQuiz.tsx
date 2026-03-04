@@ -99,6 +99,52 @@ export default function CreateQuiz() {
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Document analysis handlers
+  const handleAnalysisComplete = (result: DocumentAnalysisResult) => {
+    setAnalysisResult(result);
+    setExtractedQuestions(result.questions);
+    setUploadError(null);
+    
+    // Auto-fill form data based on analysis
+    if (result.questions.length > 0) {
+      setFormData((prev) => ({
+        ...prev,
+        totalQuestions: result.questions.length,
+        totalPoints: result.questions.reduce((sum, q) => sum + q.points, 0),
+      }));
+    }
+    
+    setCurrentStep("review");
+    toast({
+      title: "Success",
+      description: `Extracted ${result.questions.length} questions from document`,
+    });
+  };
+
+  const handleAnalysisError = (error: string) => {
+    setUploadError(error);
+    setAnalysisResult(null);
+    setExtractedQuestions([]);
+    toast({
+      title: "Analysis Error",
+      description: error,
+      variant: "destructive",
+    });
+  };
+
+  const handleQuestionsUpdate = (questions: ExtractedQuestion[]) => {
+    setExtractedQuestions(questions);
+    
+    // Update total questions and points
+    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    setFormData((prev) => ({
+      ...prev,
+      totalQuestions: questions.length,
+      totalPoints: totalPoints,
+      passingScore: Math.ceil(totalPoints * 0.6), // 60% passing score
+    }));
+  };
+
   // Helper function to combine date, time, and AM/PM into ISO string
   const combineDateTime = (
     date: string,
