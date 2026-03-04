@@ -41,6 +41,29 @@ interface CourseOption {
   code: string;
 }
 
+interface EditingFormData {
+  title: string;
+  description: string;
+  courseId: string;
+  totalQuestions: number;
+  totalPoints: number;
+  timeLimit: number;
+  passingScore: number;
+  startDate: string;
+  startTime: string;
+  startTimePeriod: "AM" | "PM";
+  endDate: string;
+  endTime: string;
+  endTimePeriod: "AM" | "PM";
+  status: "draft" | "active" | "closed";
+  attemptsAllowed: number;
+  shuffleQuestions: boolean;
+  showAnswers: boolean;
+  autoDeactivate: boolean;
+}
+
+type QuizCreationStep = "upload" | "review" | "settings" | "confirm";
+
 export default function CreateQuiz() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -48,8 +71,12 @@ export default function CreateQuiz() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [currentStep, setCurrentStep] = useState<QuizCreationStep>("upload");
+  const [analysisResult, setAnalysisResult] = useState<DocumentAnalysisResult | null>(null);
+  const [extractedQuestions, setExtractedQuestions] = useState<ExtractedQuestion[]>([]);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<EditingFormData>({
     title: "",
     description: "",
     courseId: "",
