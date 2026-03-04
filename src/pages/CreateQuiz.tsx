@@ -481,7 +481,13 @@ export default function CreateQuiz() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => navigate("/lecturer/quiz")}
+              onClick={() => {
+                if (currentStep !== "upload") {
+                  setCurrentStep("upload");
+                } else {
+                  navigate("/lecturer/quiz");
+                }
+              }}
               className="rounded-lg"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -489,16 +495,34 @@ export default function CreateQuiz() {
             <div>
               <h1 className="text-3xl font-bold">Create New Quiz</h1>
               <p className="text-muted-foreground">
-                Set up a new quiz for your course
+                Upload documents and set up your quiz
               </p>
             </div>
           </div>
 
-          {/* Form */}
-          <motion.form
+          {/* Step Indicator */}
+          <div className="mb-8 flex items-center justify-center gap-2">
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "upload" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              <FileUpload className="h-4 w-4" />
+              <span className="text-sm font-medium">Upload</span>
+            </div>
+            <div className="h-1 w-8 bg-muted rounded"></div>
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "review" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="text-sm font-medium">Review</span>
+            </div>
+            <div className="h-1 w-8 bg-muted rounded"></div>
+            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "settings" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+              <Award className="h-4 w-4" />
+              <span className="text-sm font-medium">Settings</span>
+            </div>
+          </div>
+
+          {/* Step Content */}
+          <motion.div
+            key={currentStep}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            onSubmit={handleCreateQuiz}
             className="space-y-6"
           >
             {/* Basic Information */}
