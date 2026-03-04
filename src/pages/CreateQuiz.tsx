@@ -12,7 +12,7 @@ import {
   Award,
   Users,
   Sparkles,
-  FileUpload,
+  Upload,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
