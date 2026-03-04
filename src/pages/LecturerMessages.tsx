@@ -15,6 +15,8 @@ import {
   Star,
   Clock,
   Paperclip,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -30,6 +32,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
@@ -441,13 +444,13 @@ export default function LecturerMessages() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-lg">
                 <Mail className="h-6 w-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-3xl font-bold">Messages</h1>
+                <h1 className="text-2xl md:text-3xl font-bold">Messages</h1>
                 <p className="text-sm text-muted-foreground">
                   Manage your inbox and communications
                 </p>
@@ -455,14 +458,14 @@ export default function LecturerMessages() {
             </div>
             <Button
               onClick={() => setIsComposeOpen(true)}
-              className="bg-gradient-to-r from-primary to-secondary gap-2"
+              className="bg-gradient-to-r from-primary to-secondary gap-2 w-full sm:w-auto"
             >
               <Send className="h-4 w-4" /> New Message
             </Button>
           </div>
 
           {/* Quick Stats */}
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-2 md:gap-4">
             <Badge variant="outline" className="px-3 py-1.5">
               <Mail className="h-3 w-3 mr-1" />
               {messages.length} Messages
@@ -481,7 +484,7 @@ export default function LecturerMessages() {
           className="space-y-4"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex-1 min-w-64">
+            <div className="flex-1 min-w-0">
               <label className="text-sm font-medium block mb-2">
                 Search Messages
               </label>
@@ -491,7 +494,7 @@ export default function LecturerMessages() {
                   placeholder="Search by sender, subject..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-12"
                 />
               </div>
             </div>
@@ -503,7 +506,7 @@ export default function LecturerMessages() {
               <button
                 key={view}
                 onClick={() => setSelectedView(view)}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-all text-sm md:text-base ${
                   selectedView === view
                     ? "bg-primary text-primary-foreground"
                     : "bg-muted/60 text-foreground hover:bg-muted"
@@ -567,7 +570,7 @@ export default function LecturerMessages() {
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <Avatar className="h-10 w-10">
+                          <Avatar className="h-10 w-10 flex-shrink-0">
                             <AvatarImage src={displayProfile?.avatar_url} />
                             <AvatarFallback>
                               {displayProfile?.full_name
@@ -578,7 +581,7 @@ export default function LecturerMessages() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
                               <p
-                                className={`font-semibold truncate ${
+                                className={`font-semibold truncate text-sm md:text-base ${
                                   !message.is_read &&
                                   message.to_user_id === user?.uid
                                     ? "font-bold text-foreground"
@@ -589,7 +592,7 @@ export default function LecturerMessages() {
                               </p>
                               {!message.is_read &&
                                 message.to_user_id === user?.uid && (
-                                  <div className="h-2 w-2 rounded-full bg-primary" />
+                                  <div className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />
                                 )}
                             </div>
                             <p className="text-sm text-foreground font-medium truncate">
@@ -608,13 +611,13 @@ export default function LecturerMessages() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex flex-col gap-2">
+                        <div className="flex flex-col gap-1 flex-shrink-0">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleToggleStar(message.id, message.is_starred);
                             }}
-                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors"
+                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors touch-manipulation"
                             title={message.is_starred ? "Unstar" : "Star"}
                           >
                             <Star
@@ -630,7 +633,7 @@ export default function LecturerMessages() {
                               e.stopPropagation();
                               handleDelete(message.id);
                             }}
-                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors text-muted-foreground"
+                            className="p-2 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors text-muted-foreground touch-manipulation"
                             title="Delete message"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -648,13 +651,20 @@ export default function LecturerMessages() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>New Message to Student</DialogTitle>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto mx-2 md:mx-auto p-4 md:p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl md:text-2xl font-semibold">
+              New Message to Student
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send a message to your students
+            </p>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">To:</label>
+          <div className="space-y-6">
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                To
+              </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
                 <select
@@ -666,7 +676,7 @@ export default function LecturerMessages() {
                     setComposeToId(e.target.value);
                     setComposeTo(selectedStudent?.email || "");
                   }}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full pl-10 pr-4 py-3 border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-primary h-12 text-base"
                 >
                   <option value="">Select a student...</option>
                   {students.map((student) => (
@@ -677,62 +687,75 @@ export default function LecturerMessages() {
                 </select>
               </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Subject:</label>
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Subject
+              </label>
               <Input
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
-                placeholder="Enter subject..."
+                placeholder="Enter message subject..."
+                className="h-12 text-base"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Message:</label>
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Message
+              </label>
               <Textarea
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
                 rows={8}
+                className="min-h-[200px] md:min-h-[300px] resize-none text-base leading-relaxed"
               />
             </div>
 
             {/* Attachment Section */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Attachment (Optional):
+            <div>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Attachment (Optional)
               </label>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    document
-                      .getElementById("lecturer-attachment-upload")
-                      ?.click()
-                  }
-                  disabled={uploadingAttachment}
-                >
-                  <Paperclip className="h-4 w-4 mr-2" />
-                  {attachmentFile ? "Change File" : "Attach File"}
-                </Button>
-                <input
-                  id="lecturer-attachment-upload"
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 10485760) {
-                        alert("File size must be less than 10MB");
-                        return;
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <input
+                    id="lecturer-attachment-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10485760) {
+                          alert("File size must be less than 10MB");
+                          return;
+                        }
+                        setAttachmentFile(file);
                       }
-                      setAttachmentFile(file);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document
+                        .getElementById("lecturer-attachment-upload")
+                        ?.click()
                     }
-                  }}
-                />
+                    disabled={uploadingAttachment}
+                    className="flex items-center gap-2 h-12 px-4 text-base"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                    {attachmentFile ? "Change File" : "Attach File"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground self-center">
+                    Max 10MB
+                  </p>
+                </div>
                 {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-sm text-muted-foreground truncate">
+                  <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm truncate max-w-[200px] sm:max-w-[300px]">
                       {attachmentFile.name} (
                       {(attachmentFile.size / 1024).toFixed(1)} KB)
                     </span>
@@ -741,29 +764,53 @@ export default function LecturerMessages() {
                       variant="ghost"
                       size="sm"
                       onClick={() => setAttachmentFile(null)}
+                      className="h-6 w-6 p-0 hover:bg-destructive hover:text-destructive-foreground flex-shrink-0"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-3 w-3" />
                     </Button>
                   </div>
                 )}
+                <p className="text-xs text-muted-foreground">
+                  Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
-              </p>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-3 pt-6 border-t">
             <Button
               variant="outline"
-              onClick={() => setIsComposeOpen(false)}
+              onClick={() => {
+                setIsComposeOpen(false);
+                setComposeTo("");
+              }}
               disabled={sending}
+              className="w-full sm:w-auto h-12 text-base order-2 sm:order-1"
             >
               Cancel
             </Button>
-            <Button onClick={handleSendMessage} disabled={sending}>
-              {sending ? "Sending..." : "Send Message"}
+            <Button
+              onClick={handleSendMessage}
+              disabled={
+                sending ||
+                !composeToId ||
+                !composeSubject.trim() ||
+                !composeBody.trim()
+              }
+              className="w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary text-base order-1 sm:order-2"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send Message
+                </>
+              )}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -776,14 +823,16 @@ export default function LecturerMessages() {
               if (!open) setSelectedMessage(null);
             }}
           >
-            <DialogContent className="sm:max-w-[700px]">
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
               <DialogHeader>
-                <DialogTitle>{selectedMessage.subject}</DialogTitle>
+                <DialogTitle className="text-lg md:text-xl pr-8">
+                  {selectedMessage.subject}
+                </DialogTitle>
               </DialogHeader>
-              <ScrollArea className="max-h-[400px] pr-4">
+              <ScrollArea className="max-h-[60vh] md:max-h-[400px] pr-4">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 pb-4 border-b">
-                    <Avatar className="h-12 w-12">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pb-4 border-b">
+                    <Avatar className="h-12 w-12 flex-shrink-0">
                       <AvatarImage
                         src={
                           selectedView === "sent"
@@ -803,26 +852,26 @@ export default function LecturerMessages() {
                             : "?"}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex-1">
-                      <p className="font-semibold">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm md:text-base">
                         {selectedView === "sent"
                           ? selectedMessage.to_profile?.full_name
                           : selectedMessage.from_profile?.full_name}
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground truncate">
                         {selectedView === "sent"
                           ? selectedMessage.to_profile?.email
                           : selectedMessage.from_profile?.email}
                       </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground flex-shrink-0">
                       {formatDistanceToNow(
                         new Date(selectedMessage.created_at),
                         { addSuffix: true },
                       )}
                     </p>
                   </div>
-                  <div className="prose max-w-none whitespace-pre-wrap">
+                  <div className="prose max-w-none whitespace-pre-wrap text-sm md:text-base leading-relaxed">
                     {selectedMessage.body}
                   </div>
 
@@ -838,7 +887,7 @@ export default function LecturerMessages() {
                             selectedMessage.attachment_name || "attachment",
                           )
                         }
-                        className="gap-2"
+                        className="gap-2 w-full sm:w-auto justify-start h-12"
                       >
                         <Paperclip className="h-4 w-4" />
                         {selectedMessage.attachment_name}{" "}
@@ -851,14 +900,14 @@ export default function LecturerMessages() {
                   )}
                 </div>
               </ScrollArea>
-              <div className="flex justify-end gap-2 pt-4">
+              <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
                 {selectedView === "inbox" && (
                   <Button
                     onClick={() => {
                       handleReply(selectedMessage);
                       setSelectedMessage(null);
                     }}
-                    className="gap-2"
+                    className="gap-2 w-full sm:w-auto h-12 bg-gradient-to-r from-primary to-secondary"
                   >
                     <Send className="h-4 w-4" /> Reply
                   </Button>
@@ -866,6 +915,7 @@ export default function LecturerMessages() {
                 <Button
                   variant="outline"
                   onClick={() => setSelectedMessage(null)}
+                  className="w-full sm:w-auto h-12"
                 >
                   Close
                 </Button>

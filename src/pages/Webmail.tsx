@@ -70,6 +70,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Message {
   id: string;
@@ -208,16 +213,89 @@ export default function Webmail() {
         .map((d) => ({ id: d.id, ...d.data() }) as any)
         .filter((u) => u.id !== user?.uid);
 
-      const lecturers = allUsers.filter(
-        (u) => u.role && u.role.toLowerCase() === "lecturer",
-      );
+      // Role-based recipient filtering
+      let recipients;
+      if (profile?.role?.toLowerCase() === "lecturer") {
+        // Lecturers can message students enrolled in their courses
+        try {
+          // Get courses taught by this lecturer
+          const lecturerCoursesQuery = query(
+            collection(db, "lecturer_courses"),
+            where("lecturer_id", "==", user?.uid),
+          );
+          const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
+          const courseIds = lecturerCoursesSnap.docs.map(
+            (doc) => doc.data().course_id,
+          );
 
-      if (lecturers.length > 0) {
-        setUsers(lecturers);
+          // Also check direct instructor assignments
+          const directCoursesQuery = query(
+            collection(db, "courses"),
+            where("instructor_id", "==", user?.uid),
+          );
+          const directCoursesSnap = await getDocs(directCoursesQuery);
+          const directCourseIds = directCoursesSnap.docs.map((doc) => doc.id);
+
+          // Combine all course IDs
+          const allCourseIds = [...courseIds, ...directCourseIds];
+
+          if (allCourseIds.length > 0) {
+            // Get enrollments for these courses
+            const enrollmentsQuery = query(
+              collection(db, "enrollments"),
+              where("course_id", "in", allCourseIds.slice(0, 10)), // Firestore 'in' limit is 10
+            );
+            const enrollmentsSnap = await getDocs(enrollmentsQuery);
+
+            // Get unique student IDs
+            const studentIds = [
+              ...new Set(
+                enrollmentsSnap.docs.map((doc) => doc.data().student_id),
+              ),
+            ];
+
+            if (studentIds.length > 0) {
+              // Get student profiles
+              recipients = allUsers.filter(
+                (u) =>
+                  u.role?.toLowerCase() === "student" &&
+                  studentIds.includes(u.id),
+              );
+            } else {
+              // Fallback to all students if no enrollments found
+              recipients = allUsers.filter(
+                (u) => u.role?.toLowerCase() === "student",
+              );
+            }
+          } else {
+            // Fallback to all students if no courses assigned
+            recipients = allUsers.filter(
+              (u) => u.role?.toLowerCase() === "student",
+            );
+          }
+        } catch (error) {
+          console.error("Error fetching enrolled students:", error);
+          // Fallback to all students
+          recipients = allUsers.filter(
+            (u) => u.role?.toLowerCase() === "student",
+          );
+        }
         setShowingAllUsers(false);
       } else {
+        // Students can message lecturers
+        recipients = allUsers.filter(
+          (u) => u.role && u.role.toLowerCase() === "lecturer",
+        );
+        setShowingAllUsers(false);
+      }
+
+      // Fallback to all users if no role-specific recipients found
+      if (recipients.length === 0) {
         setUsers(allUsers);
         setShowingAllUsers(true);
+      } else {
+        setUsers(recipients);
+        setShowingAllUsers(false);
       }
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -506,17 +584,35 @@ export default function Webmail() {
   };
 
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
+    // Immediate UI update for better UX
+    setMessages((prevMessages) =>
+      prevMessages.map((msg) =>
+        msg.id === messageId ? { ...msg, is_starred: !currentValue } : msg,
+      ),
+    );
+
+    if (selectedMessage?.id === messageId) {
+      setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
+    }
+
     try {
       await updateDoc(doc(db, "messages", messageId), {
         is_starred: !currentValue,
         updated_at: serverTimestamp(),
       });
+      // Refresh messages to ensure consistency
       fetchMessages();
-      if (selectedMessage?.id === messageId) {
-        setSelectedMessage({ ...selectedMessage, is_starred: !currentValue });
-      }
     } catch (error) {
       console.error("Error toggling star:", error);
+      // Revert the optimistic update on error
+      setMessages((prevMessages) =>
+        prevMessages.map((msg) =>
+          msg.id === messageId ? { ...msg, is_starred: currentValue } : msg,
+        ),
+      );
+      if (selectedMessage?.id === messageId) {
+        setSelectedMessage({ ...selectedMessage, is_starred: currentValue });
+      }
     }
   };
 
@@ -637,6 +733,8 @@ export default function Webmail() {
     (m) => !m.is_read && m.to_user_id === user?.uid,
   ).length;
 
+  const starredCount = messages.filter((m) => m.is_starred).length;
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -696,7 +794,9 @@ export default function Webmail() {
               {selectedView === "drafts" && "Drafts"}
               {selectedView === "starred" && "Starred"}
               {selectedView === "archived" && "Archived"}
-              <ChevronLeft className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? 'rotate-90' : '-rotate-90'}`} />
+              <ChevronLeft
+                className={`h-4 w-4 ml-auto transition-transform ${sidebarOpen ? "rotate-90" : "-rotate-90"}`}
+              />
             </Button>
           </motion.div>
 
@@ -722,10 +822,10 @@ export default function Webmail() {
               animate={{
                 opacity: 1,
                 x: 0,
-                height: sidebarOpen ? 'auto' : '0',
-                overflow: 'hidden'
+                height: sidebarOpen ? "auto" : "0",
+                overflow: "hidden",
               }}
-              className={`lg:col-span-1 ${sidebarOpen ? 'block' : 'hidden lg:block'}`}
+              className={`lg:col-span-1 ${sidebarOpen ? "block" : "hidden lg:block"}`}
             >
               <Card className="border-0 shadow-lg">
                 <CardContent className="p-3 md:p-4 space-y-1">
@@ -784,20 +884,35 @@ export default function Webmail() {
                     )}
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setSelectedView("starred");
-                      setSidebarOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
-                      selectedView === "starred"
-                        ? "bg-secondary text-secondary-foreground shadow-md"
-                        : "hover:bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Star className="h-5 w-5 flex-shrink-0" />
-                    <span className="font-medium">Starred</span>
-                  </button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => {
+                          setSelectedView("starred");
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 md:px-4 py-3 rounded-xl transition-all text-left ${
+                          selectedView === "starred"
+                            ? "bg-secondary text-secondary-foreground shadow-md"
+                            : "hover:bg-muted text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Star className="h-5 w-5 flex-shrink-0" />
+                        <span className="font-medium">Starred</span>
+                        {starredCount > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto text-xs"
+                          >
+                            {starredCount}
+                          </Badge>
+                        )}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>View starred messages</p>
+                    </TooltipContent>
+                  </Tooltip>
 
                   <button
                     onClick={() => {
@@ -934,7 +1049,11 @@ export default function Webmail() {
                           </div>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-10 w-10 md:h-8 md:w-8">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-10 w-10 md:h-8 md:w-8"
+                              >
                                 <MoreVertical className="h-5 w-5" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -1005,7 +1124,8 @@ export default function Webmail() {
                                       "Unknown"}
                                   </span>
                                   <span className="text-muted-foreground text-sm hidden sm:inline">
-                                    &lt;{selectedMessage.from_profile?.email}&gt;
+                                    &lt;{selectedMessage.from_profile?.email}
+                                    &gt;
                                   </span>
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -1017,30 +1137,41 @@ export default function Webmail() {
                                   )
                                     ? formatDistanceToNow(
                                         new Date(selectedMessage.created_at),
-                                        { addSuffix: true }
+                                        { addSuffix: true },
                                       )
                                     : "Unknown time"}
                                 </p>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() =>
-                                  handleToggleStar(
-                                    selectedMessage.id,
-                                    selectedMessage.is_starred,
-                                  )
-                                }
-                                className="h-8 w-8 flex-shrink-0"
-                              >
-                                <Star
-                                  className={`h-5 w-5 ${
-                                    selectedMessage.is_starred
-                                      ? "fill-amber-500 text-amber-500"
-                                      : ""
-                                  }`}
-                                />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleToggleStar(
+                                        selectedMessage.id,
+                                        selectedMessage.is_starred,
+                                      )
+                                    }
+                                    className="h-8 w-8 flex-shrink-0 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                                  >
+                                    <Star
+                                      className={`h-5 w-5 transition-colors ${
+                                        selectedMessage.is_starred
+                                          ? "fill-amber-500 text-amber-500"
+                                          : "text-muted-foreground hover:text-amber-400"
+                                      }`}
+                                    />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>
+                                    {selectedMessage.is_starred
+                                      ? "Unstar message"
+                                      : "Star message"}
+                                  </p>
+                                </TooltipContent>
+                              </Tooltip>
                             </div>
                           </div>
 
@@ -1188,26 +1319,37 @@ export default function Webmail() {
                                           </p>
                                         </div>
                                         <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                                          <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-8 w-8 md:h-8 md:w-8 touch-manipulation"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleToggleStar(
-                                                message.id,
-                                                message.is_starred,
-                                              );
-                                            }}
-                                          >
-                                            <Star
-                                              className={`h-4 w-4 ${
-                                                message.is_starred
-                                                  ? "fill-amber-500 text-amber-500"
-                                                  : ""
-                                              }`}
-                                            />
-                                          </Button>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 md:h-8 md:w-8 touch-manipulation hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleStar(
+                                                    message.id,
+                                                    message.is_starred,
+                                                  );
+                                                }}
+                                              >
+                                                <Star
+                                                  className={`h-4 w-4 transition-colors ${
+                                                    message.is_starred
+                                                      ? "fill-amber-500 text-amber-500"
+                                                      : "text-muted-foreground hover:text-amber-400"
+                                                  }`}
+                                                />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p>
+                                                {message.is_starred
+                                                  ? "Unstar message"
+                                                  : "Star message"}
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
                                           <Button
                                             variant="ghost"
                                             size="icon"
@@ -1240,14 +1382,21 @@ export default function Webmail() {
 
       {/* Compose Dialog */}
       <Dialog open={isComposeOpen} onOpenChange={setIsComposeOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto mx-4 md:mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg md:text-xl">Compose Message</DialogTitle>
+        <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto mx-2 md:mx-auto p-4 md:p-6">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl md:text-2xl font-semibold">
+              Compose Message
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Send a message to lecturers or students
+            </p>
           </DialogHeader>
-          <div className="space-y-4 md:space-y-4">
+          <div className="space-y-6">
             <div>
-              <label className="text-sm font-medium mb-2 block">To</label>
-              <div className="space-y-2">
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                To
+              </label>
+              <div className="space-y-3">
                 <Input
                   placeholder="Type name or email to search..."
                   value={composeTo}
@@ -1263,23 +1412,30 @@ export default function Webmail() {
                     );
                     setComposeToId(foundUser?.id || null);
                   }}
-                  className={`h-12 ${composeToId ? "border-green-500" : ""}`}
+                  className={`h-12 text-base ${composeToId ? "border-green-500 focus:border-green-500" : ""}`}
                 />
                 {composeTo && !composeToId && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
                     No user found. Please select from the list below.
                   </p>
                 )}
                 {composeToId && (
-                  <p className="text-xs text-green-600">✓ Recipient selected</p>
+                  <p className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    Recipient selected
+                  </p>
                 )}
                 {showingAllUsers && (
-                  <p className="text-xs text-amber-600">
-                    No lecturers found yet. Showing all users as fallback.
+                  <p className="text-xs text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {profile?.role?.toLowerCase() === "lecturer"
+                      ? "No enrolled students found. Showing all students as fallback."
+                      : "No lecturers found yet. Showing all users as fallback."}
                   </p>
                 )}
                 {composeTo && (
-                  <ScrollArea className="max-h-32 rounded-md border">
+                  <ScrollArea className="max-h-40 md:max-h-32 rounded-md border">
                     <div className="p-2 space-y-1">
                       {users
                         .filter(
@@ -1300,9 +1456,11 @@ export default function Webmail() {
                               setComposeTo(user.email);
                               setComposeToId(user.id);
                             }}
-                            className="w-full text-left px-3 py-3 rounded hover:bg-muted transition-colors"
+                            className="w-full text-left px-3 py-3 md:py-2 rounded hover:bg-muted transition-colors touch-manipulation"
                           >
-                            <div className="font-medium">{user.full_name}</div>
+                            <div className="font-medium text-sm md:text-base">
+                              {user.full_name}
+                            </div>
                             <div className="text-xs text-muted-foreground">
                               {user.email}
                             </div>
@@ -1315,88 +1473,99 @@ export default function Webmail() {
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Subject</label>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Subject
+              </label>
               <Input
                 value={composeSubject}
                 onChange={(e) => setComposeSubject(e.target.value)}
-                placeholder="Subject..."
-                className="h-12"
+                placeholder="Enter message subject..."
+                className="h-12 text-base"
               />
             </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">Message</label>
+              <label className="text-sm font-medium mb-3 block text-foreground">
+                Message
+              </label>
               <Textarea
                 value={composeBody}
                 onChange={(e) => setComposeBody(e.target.value)}
                 placeholder="Type your message here..."
-                className="min-h-[200px] md:min-h-[300px] resize-none text-sm md:text-base"
+                className="min-h-[200px] md:min-h-[300px] resize-none text-base leading-relaxed"
+                rows={8}
               />
             </div>
 
             {/* Attachment Section */}
             <div>
-              <label className="text-sm font-medium mb-2 block">
+              <label className="text-sm font-medium mb-3 block text-foreground">
                 Attachment (Optional)
               </label>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    document.getElementById("attachment-upload")?.click()
-                  }
-                  disabled={uploadingAttachment}
-                  className="w-full sm:w-auto h-12"
-                >
-                  <Paperclip className="h-4 w-4 mr-2" />
-                  {attachmentFile ? "Change File" : "Attach File"}
-                </Button>
-                <input
-                  id="attachment-upload"
-                  type="file"
-                  className="hidden"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      if (file.size > 10485760) {
-                        alert("File size must be less than 10MB");
-                        return;
-                      }
-                      setAttachmentFile(file);
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      document.getElementById("attachment-upload")?.click()
                     }
-                  }}
-                />
-                {attachmentFile && (
-                  <div className="flex items-center gap-2 flex-1 w-full sm:w-auto">
-                    <span className="text-sm text-muted-foreground truncate flex-1">
-                      {attachmentFile.name} (
-                      {(attachmentFile.size / 1024).toFixed(1)} KB)
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setAttachmentFile(null)}
-                      className="flex-shrink-0"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                    disabled={uploadingAttachment}
+                    className="w-full sm:w-auto h-12 flex-shrink-0"
+                  >
+                    <Paperclip className="h-4 w-4 mr-2" />
+                    {attachmentFile ? "Change File" : "Attach File"}
+                  </Button>
+                  <input
+                    id="attachment-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.jpg,.jpeg,.png,.gif"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        if (file.size > 10485760) {
+                          alert("File size must be less than 10MB");
+                          return;
+                        }
+                        setAttachmentFile(file);
+                      }
+                    }}
+                  />
+                  {attachmentFile && (
+                    <div className="flex items-center gap-2 flex-1 min-w-0 bg-muted/50 rounded-md p-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {attachmentFile.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {(attachmentFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setAttachmentFile(null)}
+                        className="flex-shrink-0 h-8 w-8 p-0"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Supported: PDF, Word, Excel, Images, ZIP (Max 10MB)
-              </p>
             </div>
 
-            <div className="flex flex-col sm:flex-row justify-end gap-2 pt-4 border-t">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-6 border-t">
               <Button
                 variant="outline"
                 onClick={handleSaveDraft}
                 disabled={savingDraft}
-                className="w-full sm:w-auto h-12 order-2 sm:order-1"
+                className="w-full sm:w-auto h-12 order-2 sm:order-1 border-2"
               >
                 {savingDraft ? (
                   <>
@@ -1415,7 +1584,7 @@ export default function Webmail() {
                   !composeBody.trim() ||
                   sending
                 }
-                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2"
+                className="w-full sm:w-auto h-12 bg-gradient-to-r from-secondary to-accent hover:from-secondary/90 hover:to-accent/90 order-1 sm:order-2 shadow-lg"
               >
                 {sending ? (
                   <>
@@ -1425,7 +1594,7 @@ export default function Webmail() {
                 ) : (
                   <>
                     <Send className="h-4 w-4 mr-2" />
-                    Send
+                    Send Message
                   </>
                 )}
               </Button>

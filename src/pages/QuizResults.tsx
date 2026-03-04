@@ -25,8 +25,7 @@ import {
   getDoc,
   getDocs,
   doc,
-  orderBy,
-} from "firebase/firestore";
+  orderBy,  updateDoc,} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
 interface QuizAttempt {
@@ -34,12 +33,14 @@ interface QuizAttempt {
   student_id: string;
   student_name: string;
   student_email: string;
-  score: number;
+  score: number | null;
   total_points: number;
-  percentage: number;
+  percentage: number | null;
   time_taken: number;
   completed_at: string;
-  passed: boolean;
+  passed: boolean | null;
+  status: "submitted" | "graded";
+  answers: any;
 }
 
 interface QuizStats {
@@ -61,6 +62,9 @@ export default function QuizResults() {
   const [loading, setLoading] = useState(true);
   const [quiz, setQuiz] = useState<any>(null);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [gradingAttempt, setGradingAttempt] = useState<QuizAttempt | null>(null);
+  const [gradingScore, setGradingScore] = useState("");
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [stats, setStats] = useState<QuizStats>({
     totalAttempts: 0,
     averageScore: 0,
@@ -157,18 +161,19 @@ export default function QuizResults() {
             student_id: attempt.student_id,
             student_name: profile?.full_name || "Unknown Student",
             student_email: profile?.email || "",
-            score: attempt.score || 0,
+            score: attempt.score,
             total_points: quiz?.total_points || 0,
-            percentage:
-              quiz?.total_points && quiz.total_points > 0
-                ? Math.round((attempt.score / quiz.total_points) * 100)
-                : 0,
+            percentage: attempt.score !== null && quiz?.total_points && quiz.total_points > 0
+              ? Math.round((attempt.score / quiz.total_points) * 100)
+              : null,
             time_taken: timeTaken,
             completed_at:
               attempt.completed_at ||
               attempt.started_at ||
               new Date().toISOString(),
-            passed: (attempt.score || 0) >= (quiz?.passing_score || 0),
+            passed: attempt.score !== null ? attempt.score >= (quiz?.passing_score || 0) : null,
+            status: attempt.score !== null ? "graded" : "submitted",
+            answers: attempt.answers || {},
           };
         },
       );
@@ -176,20 +181,28 @@ export default function QuizResults() {
       // Calculate stats
       if (formattedAttempts.length > 0) {
         const totalAttempts = formattedAttempts.length;
-        const averageScore =
-          formattedAttempts.reduce((sum, a) => sum + a.score, 0) /
-          totalAttempts;
-        const averagePercentage =
-          formattedAttempts.reduce((sum, a) => sum + a.percentage, 0) /
-          totalAttempts;
-        const highestScore = Math.max(...formattedAttempts.map((a) => a.score));
-        const lowestScore = Math.min(...formattedAttempts.map((a) => a.score));
+        const gradedAttempts = formattedAttempts.filter(a => a.score !== null);
+
+        // Only calculate averages for graded attempts
+        const averageScore = gradedAttempts.length > 0
+          ? gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) / gradedAttempts.length
+          : 0;
+        const averagePercentage = gradedAttempts.length > 0
+          ? gradedAttempts.reduce((sum, a) => sum + (a.percentage || 0), 0) / gradedAttempts.length
+          : 0;
+        const highestScore = gradedAttempts.length > 0
+          ? Math.max(...gradedAttempts.map((a) => a.score || 0))
+          : 0;
+        const lowestScore = gradedAttempts.length > 0
+          ? Math.min(...gradedAttempts.map((a) => a.score || 0))
+          : 0;
         const averageTime =
           formattedAttempts.reduce((sum, a) => sum + a.time_taken, 0) /
           totalAttempts;
-        const passRate =
-          (formattedAttempts.filter((a) => a.passed).length / totalAttempts) *
-          100;
+        const passRate = gradedAttempts.length > 0
+          ? (gradedAttempts.filter((a) => a.passed).length / gradedAttempts.length) * 100
+          : 0;
+
         setStats({
           totalAttempts,
           averageScore: Math.round(averageScore * 10) / 10,
@@ -210,6 +223,75 @@ export default function QuizResults() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGradeAttempt = async (attempt: QuizAttempt) => {
+    setGradingAttempt(attempt);
+    setGradingScore("");
+
+    // Load quiz questions for grading reference
+    try {
+      const questionsQuery = query(
+        collection(db, "questions"),
+        where("quiz_id", "==", id),
+        orderBy("order", "asc"),
+      );
+      const questionsSnapshot = await getDocs(questionsQuery);
+      const questionsData = questionsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setQuizQuestions(questionsData);
+    } catch (error) {
+      console.error("Error loading questions:", error);
+    }
+  };
+
+  const handleViewAttempt = (attempt: QuizAttempt) => {
+    setGradingAttempt(attempt);
+    setGradingScore(attempt.score?.toString() || "");
+
+    // Load quiz questions for viewing
+    // (same as handleGradeAttempt)
+    handleGradeAttempt(attempt);
+  };
+
+  const submitGrade = async () => {
+    if (!gradingAttempt || !gradingScore.trim()) return;
+
+    try {
+      const score = parseFloat(gradingScore);
+      if (isNaN(score) || score < 0 || score > gradingAttempt.total_points) {
+        toast({
+          title: "Invalid Score",
+          description: `Score must be between 0 and ${gradingAttempt.total_points}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update the attempt with the grade
+      await updateDoc(doc(db, "quiz_attempts", gradingAttempt.id), {
+        score: score,
+        status: "graded",
+      });
+
+      toast({
+        title: "Grade Submitted",
+        description: `Successfully graded ${gradingAttempt.student_name}'s attempt`,
+      });
+
+      // Close modal and reload results
+      setGradingAttempt(null);
+      loadResults();
+    } catch (error: any) {
+      console.error("Error submitting grade:", error);
+      toast({
+        title: "Error",
+        description: "Failed to submit grade",
+        variant: "destructive",
+      });
     }
   };
 
@@ -365,6 +447,9 @@ export default function QuizResults() {
                         <th className="text-left py-3 px-4 font-semibold">
                           Completed
                         </th>
+                        <th className="text-left py-3 px-4 font-semibold">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -385,21 +470,25 @@ export default function QuizResults() {
                           </td>
                           <td className="py-3 px-4">
                             <span className="font-medium">
-                              {attempt.score}/{attempt.total_points}
+                              {attempt.score !== null ? `${attempt.score}/${attempt.total_points}` : "Not graded"}
                             </span>
                           </td>
                           <td className="py-3 px-4">
-                            <span
-                              className={`font-medium ${
-                                attempt.percentage >= 70
-                                  ? "text-emerald-600"
-                                  : attempt.percentage >= 50
-                                    ? "text-amber-600"
-                                    : "text-red-600"
-                              }`}
-                            >
-                              {attempt.percentage}%
-                            </span>
+                            {attempt.percentage !== null ? (
+                              <span
+                                className={`font-medium ${
+                                  attempt.percentage >= 70
+                                    ? "text-emerald-600"
+                                    : attempt.percentage >= 50
+                                      ? "text-amber-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {attempt.percentage}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <span className="text-muted-foreground">
@@ -408,16 +497,19 @@ export default function QuizResults() {
                           </td>
                           <td className="py-3 px-4">
                             <Badge
-                              variant={
-                                attempt.passed ? "default" : "destructive"
-                              }
+                              variant={attempt.status === "graded" ? "default" : "secondary"}
                               className={
-                                attempt.passed
-                                  ? "bg-emerald-500/20 text-emerald-700"
-                                  : ""
+                                attempt.status === "graded"
+                                  ? attempt.passed
+                                    ? "bg-emerald-500/20 text-emerald-700"
+                                    : "bg-red-500/20 text-red-700"
+                                  : "bg-blue-500/20 text-blue-700"
                               }
                             >
-                              {attempt.passed ? "Passed" : "Failed"}
+                              {attempt.status === "graded"
+                                ? (attempt.passed ? "Passed" : "Failed")
+                                : "Submitted"
+                              }
                             </Badge>
                           </td>
                           <td className="py-3 px-4">
@@ -426,6 +518,25 @@ export default function QuizResults() {
                                 attempt.completed_at,
                               ).toLocaleDateString()}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {attempt.status === "submitted" ? (
+                              <Button
+                                size="sm"
+                                onClick={() => handleGradeAttempt(attempt)}
+                                className="bg-primary hover:bg-primary/90"
+                              >
+                                Grade
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleViewAttempt(attempt)}
+                              >
+                                View
+                              </Button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -447,6 +558,160 @@ export default function QuizResults() {
           </Card>
         </div>
       </main>
+
+      {/* Grading Modal */}
+      {gradingAttempt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">
+                  {gradingAttempt.status === "submitted" ? "Grade" : "View"} Attempt
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setGradingAttempt(null)}
+                >
+                  ✕
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {gradingAttempt.student_name} - {gradingAttempt.student_email}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Student Answers Review */}
+              <div className="space-y-4">
+                <h4 className="font-medium">Student Answers</h4>
+                {quizQuestions.map((question, index) => {
+                  const studentAnswer = gradingAttempt.answers?.[question.id];
+                  return (
+                    <Card key={question.id} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <span className="bg-primary/10 text-primary px-2 py-1 rounded text-sm font-medium">
+                            Q{index + 1}
+                          </span>
+                          <div className="flex-1">
+                            <p className="font-medium">{question.question_text}</p>
+                            {question.question_type === "multiple_choice" && question.options && (
+                              <div className="mt-2 space-y-1">
+                                {question.options.map((option: string, optIndex: number) => (
+                                  <div
+                                    key={optIndex}
+                                    className={`p-2 rounded text-sm ${
+                                      studentAnswer === optIndex
+                                        ? "bg-blue-100 text-blue-800"
+                                        : optIndex === question.correct_answer
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-muted"
+                                    }`}
+                                  >
+                                    {option}
+                                    {studentAnswer === optIndex && " (Student's Answer)"}
+                                    {optIndex === question.correct_answer && " (Correct Answer)"}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {question.question_type === "true_false" && (
+                              <div className="mt-2 space-y-1">
+                                {["True", "False"].map((option, optIndex) => (
+                                  <div
+                                    key={optIndex}
+                                    className={`p-2 rounded text-sm ${
+                                      studentAnswer === optIndex
+                                        ? "bg-blue-100 text-blue-800"
+                                        : optIndex === question.correct_answer
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-muted"
+                                    }`}
+                                  >
+                                    {option}
+                                    {studentAnswer === optIndex && " (Student's Answer)"}
+                                    {optIndex === question.correct_answer && " (Correct Answer)"}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {question.question_type === "short_answer" && (
+                              <div className="mt-2 p-3 bg-muted rounded text-sm">
+                                <p className="font-medium mb-1">Student's Answer:</p>
+                                <p>{studentAnswer || "No answer provided"}</p>
+                                <p className="font-medium mt-2 mb-1">Correct Answer:</p>
+                                <p>{question.correct_answer}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+
+              {/* Grading Section */}
+              {gradingAttempt.status === "submitted" && (
+                <div className="border-t border-border pt-6">
+                  <h4 className="font-medium mb-4">Assign Grade</h4>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium mb-2">
+                        Score (out of {gradingAttempt.total_points})
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={gradingAttempt.total_points}
+                        value={gradingScore}
+                        onChange={(e) => setGradingScore(e.target.value)}
+                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        placeholder="Enter score"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-8">
+                      <Button
+                        onClick={() => setGradingAttempt(null)}
+                        variant="outline"
+                      >
+                        Cancel
+                      </Button>
+                      <Button onClick={submitGrade} className="bg-primary">
+                        Submit Grade
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {gradingAttempt.status === "graded" && (
+                <div className="border-t border-border pt-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">Final Grade</h4>
+                      <p className="text-2xl font-bold text-primary">
+                        {gradingAttempt.score}/{gradingAttempt.total_points} ({gradingAttempt.percentage}%)
+                      </p>
+                    </div>
+                    <Badge
+                      variant={gradingAttempt.passed ? "default" : "destructive"}
+                      className={
+                        gradingAttempt.passed
+                          ? "bg-emerald-500/20 text-emerald-700"
+                          : ""
+                      }
+                    >
+                      {gradingAttempt.passed ? "Passed" : "Failed"}
+                    </Badge>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <LecturerBottomNav />
     </div>
