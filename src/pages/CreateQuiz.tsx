@@ -371,6 +371,15 @@ export default function CreateQuiz() {
       return;
     }
 
+    if (extractedQuestions.length === 0) {
+      toast({
+        title: "Error",
+        description: "Cannot create quiz without questions. Please upload and review questions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       if (!user?.uid) throw new Error("User UID not found");
@@ -390,7 +399,7 @@ export default function CreateQuiz() {
       );
 
       // Save quiz to Firestore 'quizzes' collection
-      await addDoc(collection(db, "quizzes"), {
+      const quizRef = await addDoc(collection(db, "quizzes"), {
         title: formData.title,
         description: formData.description,
         course_id: formData.courseId,
@@ -415,11 +424,28 @@ export default function CreateQuiz() {
         completion_rate: 0,
         highest_score: 0,
         lowest_score: 0,
+        question_count: extractedQuestions.length,
       });
+
+      // Save questions to a subcollection
+      for (const question of extractedQuestions) {
+        await addDoc(collection(db, "quizzes", quizRef.id, "questions"), {
+          question: question.question,
+          type: question.type,
+          options: question.options || [],
+          correct_answer: question.correct_answer,
+          explanation: question.explanation || "",
+          points: question.points,
+          difficulty: question.difficulty,
+          confidence: question.confidence,
+          original_text: question.originalText,
+          created_at: Timestamp.now(),
+        });
+      }
 
       toast({
         title: "Success",
-        description: "Quiz created successfully!",
+        description: `Quiz created successfully with ${extractedQuestions.length} questions!`,
       });
 
       navigate("/lecturer/quiz");
