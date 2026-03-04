@@ -525,8 +525,61 @@ export default function CreateQuiz() {
             animate={{ opacity: 1, y: 0 }}
             className="space-y-6"
           >
-            {/* Basic Information */}
-            <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
+            {currentStep === "upload" && (
+              <>
+                {uploadError && (
+                  <Card className="border-destructive/50 bg-destructive/10">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center gap-3">
+                        <AlertCircle className="h-5 w-5 text-destructive" />
+                        <div>
+                          <p className="font-medium text-destructive">Upload Error</p>
+                          <p className="text-sm text-destructive/80">{uploadError}</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                
+                <DocumentUpload
+                  onAnalysisComplete={handleAnalysisComplete}
+                  onAnalysisError={handleAnalysisError}
+                />
+              </>
+            )}
+
+            {currentStep === "review" && analysisResult && (
+              <>
+                <QuestionReview
+                  questions={extractedQuestions}
+                  onQuestionsUpdate={handleQuestionsUpdate}
+                  analysisResult={analysisResult}
+                />
+                
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setCurrentStep("upload")}
+                  >
+                    Back to Upload
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => setCurrentStep("settings")}
+                    disabled={extractedQuestions.length === 0}
+                    className="bg-gradient-to-r from-primary to-secondary text-primary-foreground"
+                  >
+                    Continue to Settings
+                  </Button>
+                </div>
+              </>
+            )}
+
+            {currentStep === "settings" && (
+              <form onSubmit={handleCreateQuiz} className="space-y-6">
+                {/* Basic Information */}
+                <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <BookOpen className="h-5 w-5 text-primary" />
