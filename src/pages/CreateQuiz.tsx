@@ -33,7 +33,10 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { QuestionReview } from "@/components/QuestionReview";
-import { DocumentAnalysisResult, ExtractedQuestion } from "@/lib/documentAnalyzer";
+import {
+  DocumentAnalysisResult,
+  ExtractedQuestion,
+} from "@/lib/documentAnalyzer";
 
 interface CourseOption {
   id: string;
@@ -72,8 +75,11 @@ export default function CreateQuiz() {
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [currentStep, setCurrentStep] = useState<QuizCreationStep>("upload");
-  const [analysisResult, setAnalysisResult] = useState<DocumentAnalysisResult | null>(null);
-  const [extractedQuestions, setExtractedQuestions] = useState<ExtractedQuestion[]>([]);
+  const [analysisResult, setAnalysisResult] =
+    useState<DocumentAnalysisResult | null>(null);
+  const [extractedQuestions, setExtractedQuestions] = useState<
+    ExtractedQuestion[]
+  >([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<EditingFormData>({
@@ -104,7 +110,7 @@ export default function CreateQuiz() {
     setAnalysisResult(result);
     setExtractedQuestions(result.questions);
     setUploadError(null);
-    
+
     // Auto-fill form data based on analysis
     if (result.questions.length > 0) {
       setFormData((prev) => ({
@@ -113,7 +119,7 @@ export default function CreateQuiz() {
         totalPoints: result.questions.reduce((sum, q) => sum + q.points, 0),
       }));
     }
-    
+
     setCurrentStep("review");
     toast({
       title: "Success",
@@ -134,7 +140,7 @@ export default function CreateQuiz() {
 
   const handleQuestionsUpdate = (questions: ExtractedQuestion[]) => {
     setExtractedQuestions(questions);
-    
+
     // Update total questions and points
     const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
     setFormData((prev) => ({
@@ -374,7 +380,8 @@ export default function CreateQuiz() {
     if (extractedQuestions.length === 0) {
       toast({
         title: "Error",
-        description: "Cannot create quiz without questions. Please upload and review questions.",
+        description:
+          "Cannot create quiz without questions. Please upload and review questions.",
         variant: "destructive",
       });
       return;
@@ -502,17 +509,23 @@ export default function CreateQuiz() {
 
           {/* Step Indicator */}
           <div className="mb-8 flex items-center justify-center gap-2">
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "upload" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            <div
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "upload" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            >
               <Upload className="h-4 w-4" />
               <span className="text-sm font-medium">Upload</span>
             </div>
             <div className="h-1 w-8 bg-muted rounded"></div>
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "review" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            <div
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "review" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            >
               <CheckCircle2 className="h-4 w-4" />
               <span className="text-sm font-medium">Review</span>
             </div>
             <div className="h-1 w-8 bg-muted rounded"></div>
-            <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "settings" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+            <div
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg ${currentStep === "settings" ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            >
               <Award className="h-4 w-4" />
               <span className="text-sm font-medium">Settings</span>
             </div>
@@ -533,14 +546,18 @@ export default function CreateQuiz() {
                       <div className="flex items-center gap-3">
                         <AlertCircle className="h-5 w-5 text-destructive" />
                         <div>
-                          <p className="font-medium text-destructive">Upload Error</p>
-                          <p className="text-sm text-destructive/80">{uploadError}</p>
+                          <p className="font-medium text-destructive">
+                            Upload Error
+                          </p>
+                          <p className="text-sm text-destructive/80">
+                            {uploadError}
+                          </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 )}
-                
+
                 <DocumentUpload
                   onAnalysisComplete={handleAnalysisComplete}
                   onAnalysisError={handleAnalysisError}
@@ -555,7 +572,7 @@ export default function CreateQuiz() {
                   onQuestionsUpdate={handleQuestionsUpdate}
                   analysisResult={analysisResult}
                 />
-                
+
                 <div className="flex gap-3 justify-end">
                   <Button
                     type="button"
@@ -580,504 +597,524 @@ export default function CreateQuiz() {
               <form onSubmit={handleCreateQuiz} className="space-y-6">
                 {/* Basic Information */}
                 <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <BookOpen className="h-5 w-5 text-primary" />
-                  <CardTitle>Basic Information</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Quiz Title *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => handleInputChange("title", e.target.value)}
-                    placeholder="e.g., Chapter 5 Quiz - Data Structures"
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  {errors.title && (
-                    <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.title}
-                    </p>
-                  )}
-                </div>
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-5 w-5 text-primary" />
+                      <CardTitle>Basic Information</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Quiz Title *
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.title}
+                        onChange={(e) =>
+                          handleInputChange("title", e.target.value)
+                        }
+                        placeholder="e.g., Chapter 5 Quiz - Data Structures"
+                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                      {errors.title && (
+                        <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {errors.title}
+                        </p>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Description *
-                  </label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) =>
-                      handleInputChange("description", e.target.value)
-                    }
-                    placeholder="Describe what this quiz covers..."
-                    rows={3}
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                  {errors.description && (
-                    <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.description}
-                    </p>
-                  )}
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Description *
+                      </label>
+                      <textarea
+                        value={formData.description}
+                        onChange={(e) =>
+                          handleInputChange("description", e.target.value)
+                        }
+                        placeholder="Describe what this quiz covers..."
+                        rows={3}
+                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                      {errors.description && (
+                        <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {errors.description}
+                        </p>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Course *
-                  </label>
-                  <select
-                    value={formData.courseId}
-                    onChange={(e) =>
-                      handleInputChange("courseId", e.target.value)
-                    }
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  >
-                    <option value="">
-                      {courses.length === 0
-                        ? formData.courseId
-                          ? "Loading course details..."
-                          : "Loading courses..."
-                        : "Select a course"}
-                    </option>
-                    {courses.map((course) => (
-                      <option key={course.id} value={course.id}>
-                        {course.code} - {course.title}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.courseId && (
-                    <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                      <AlertCircle className="h-4 w-4" />
-                      {errors.courseId}
-                    </p>
-                  )}
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Course *
+                      </label>
+                      <select
+                        value={formData.courseId}
+                        onChange={(e) =>
+                          handleInputChange("courseId", e.target.value)
+                        }
+                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      >
+                        <option value="">
+                          {courses.length === 0
+                            ? formData.courseId
+                              ? "Loading course details..."
+                              : "Loading courses..."
+                            : "Select a course"}
+                        </option>
+                        {courses.map((course) => (
+                          <option key={course.id} value={course.id}>
+                            {course.code} - {course.title}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.courseId && (
+                        <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
+                          {errors.courseId}
+                        </p>
+                      )}
+                    </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Start Date & Time *
-                    </label>
-                    <div className="grid gap-2 md:grid-cols-3">
+                    <div className="grid gap-4 md:grid-cols-2">
                       <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Start Date & Time *
+                        </label>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <div>
+                            <input
+                              type="date"
+                              value={formData.startDate}
+                              onChange={(e) =>
+                                handleInputChange("startDate", e.target.value)
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="time"
+                              value={formData.startTime}
+                              onChange={(e) =>
+                                handleInputChange("startTime", e.target.value)
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                          </div>
+                          <div>
+                            <select
+                              value={formData.startTimePeriod}
+                              onChange={(e) =>
+                                handleInputChange(
+                                  "startTimePeriod",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        </div>
+                        {errors.startDate && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.startDate}
+                          </p>
+                        )}
+                        {errors.startTime && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.startTime}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          End Date & Time *
+                        </label>
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <div>
+                            <input
+                              type="date"
+                              value={formData.endDate}
+                              onChange={(e) =>
+                                handleInputChange("endDate", e.target.value)
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="time"
+                              value={formData.endTime}
+                              onChange={(e) =>
+                                handleInputChange("endTime", e.target.value)
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                          </div>
+                          <div>
+                            <select
+                              value={formData.endTimePeriod}
+                              onChange={(e) =>
+                                handleInputChange(
+                                  "endTimePeriod",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            >
+                              <option value="AM">AM</option>
+                              <option value="PM">PM</option>
+                            </select>
+                          </div>
+                        </div>
+                        {errors.endDate && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.endDate}
+                          </p>
+                        )}
+                        {errors.endTime && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.endTime}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Quiz Settings */}
+                <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Award className="h-5 w-5 text-primary" />
+                      <CardTitle>Quiz Settings</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Total Questions *
+                        </label>
                         <input
-                          type="date"
-                          value={formData.startDate}
+                          type="number"
+                          min="1"
+                          value={formData.totalQuestions}
                           onChange={(e) =>
-                            handleInputChange("startDate", e.target.value)
+                            handleInputChange(
+                              "totalQuestions",
+                              parseInt(e.target.value),
+                            )
                           }
                           className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
+                        {errors.totalQuestions && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.totalQuestions}
+                          </p>
+                        )}
                       </div>
+
                       <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Total Points *
+                        </label>
                         <input
-                          type="time"
-                          value={formData.startTime}
+                          type="number"
+                          min="1"
+                          value={formData.totalPoints}
                           onChange={(e) =>
-                            handleInputChange("startTime", e.target.value)
+                            handleInputChange(
+                              "totalPoints",
+                              parseInt(e.target.value),
+                            )
                           }
                           className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                         />
+                        {errors.totalPoints && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.totalPoints}
+                          </p>
+                        )}
                       </div>
+
                       <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Time Limit (minutes) *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={formData.timeLimit}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "timeLimit",
+                              parseInt(e.target.value),
+                            )
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        {errors.timeLimit && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.timeLimit}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Passing Score *
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={formData.totalPoints}
+                          value={formData.passingScore}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "passingScore",
+                              parseInt(e.target.value),
+                            )
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        {errors.passingScore && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.passingScore}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Attempts Allowed *
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={formData.attemptsAllowed}
+                          onChange={(e) =>
+                            handleInputChange(
+                              "attemptsAllowed",
+                              parseInt(e.target.value),
+                            )
+                          }
+                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                        />
+                        {errors.attemptsAllowed && (
+                          <p className="text-sm text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="h-4 w-4" />
+                            {errors.attemptsAllowed}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Status
+                        </label>
                         <select
-                          value={formData.startTimePeriod}
+                          value={formData.status}
                           onChange={(e) =>
-                            handleInputChange("startTimePeriod", e.target.value)
+                            handleInputChange(
+                              "status",
+                              e.target.value as "draft" | "active" | "closed",
+                            )
                           }
                           className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                         >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
+                          <option value="draft">Draft</option>
+                          <option value="active">Active</option>
+                          <option value="closed">Closed</option>
                         </select>
                       </div>
                     </div>
-                    {errors.startDate && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.startDate}
-                      </p>
-                    )}
-                    {errors.startTime && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.startTime}
-                      </p>
-                    )}
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      End Date & Time *
+                {/* Options */}
+                <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-5 w-5 text-primary" />
+                      <CardTitle>Options</CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.shuffleQuestions}
+                        onChange={(e) =>
+                          handleInputChange(
+                            "shuffleQuestions",
+                            e.target.checked,
+                          )
+                        }
+                        className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <p className="font-medium">Shuffle Questions</p>
+                        <p className="text-sm text-muted-foreground">
+                          Randomize question order for each student
+                        </p>
+                      </div>
                     </label>
-                    <div className="grid gap-2 md:grid-cols-3">
+
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.showAnswers}
+                        onChange={(e) =>
+                          handleInputChange("showAnswers", e.target.checked)
+                        }
+                        className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+                      />
                       <div>
-                        <input
-                          type="date"
-                          value={formData.endDate}
-                          onChange={(e) =>
-                            handleInputChange("endDate", e.target.value)
-                          }
-                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
+                        <p className="font-medium">
+                          Show Answers After Submission
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Allow students to see correct answers
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={formData.autoDeactivate}
+                        onChange={(e) =>
+                          handleInputChange("autoDeactivate", e.target.checked)
+                        }
+                        className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <div>
+                        <p className="font-medium">
+                          Auto-Deactivate on End Date
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Automatically close the quiz when the end date and
+                          time is reached
+                        </p>
+                      </div>
+                    </label>
+                  </CardContent>
+                </Card>
+
+                {/* AI Question Generation */}
+                <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
+                  <CardHeader>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      <CardTitle>AI Question Generation</CardTitle>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Generate questions automatically using AI based on your
+                      course content
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">
+                          Difficulty Level
+                        </label>
+                        <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
+                          <option value="easy">Easy</option>
+                          <option value="medium">Medium</option>
+                          <option value="hard">Hard</option>
+                          <option value="mixed">Mixed</option>
+                        </select>
                       </div>
                       <div>
-                        <input
-                          type="time"
-                          value={formData.endTime}
-                          onChange={(e) =>
-                            handleInputChange("endTime", e.target.value)
-                          }
-                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        />
-                      </div>
-                      <div>
-                        <select
-                          value={formData.endTimePeriod}
-                          onChange={(e) =>
-                            handleInputChange("endTimePeriod", e.target.value)
-                          }
-                          className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        >
-                          <option value="AM">AM</option>
-                          <option value="PM">PM</option>
+                        <label className="block text-sm font-medium mb-2">
+                          Question Types
+                        </label>
+                        <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
+                          <option value="mixed">Mixed Types</option>
+                          <option value="multiple_choice">
+                            Multiple Choice Only
+                          </option>
+                          <option value="true_false">True/False Only</option>
+                          <option value="short_answer">
+                            Short Answer Only
+                          </option>
                         </select>
                       </div>
                     </div>
-                    {errors.endDate && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.endDate}
-                      </p>
-                    )}
-                    {errors.endTime && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.endTime}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            {/* Quiz Settings */}
-            <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Award className="h-5 w-5 text-primary" />
-                  <CardTitle>Quiz Settings</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Total Questions *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.totalQuestions}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "totalQuestions",
-                          parseInt(e.target.value),
-                        )
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {errors.totalQuestions && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.totalQuestions}
-                      </p>
-                    )}
-                  </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">
+                        Topic Focus (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g., Data Structures, Algorithms, Programming Fundamentals"
+                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Total Points *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.totalPoints}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "totalPoints",
-                          parseInt(e.target.value),
-                        )
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {errors.totalPoints && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.totalPoints}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Time Limit (minutes) *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.timeLimit}
-                      onChange={(e) =>
-                        handleInputChange("timeLimit", parseInt(e.target.value))
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {errors.timeLimit && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.timeLimit}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Passing Score *
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max={formData.totalPoints}
-                      value={formData.passingScore}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "passingScore",
-                          parseInt(e.target.value),
-                        )
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {errors.passingScore && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.passingScore}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Attempts Allowed *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={formData.attemptsAllowed}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "attemptsAllowed",
-                          parseInt(e.target.value),
-                        )
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    />
-                    {errors.attemptsAllowed && (
-                      <p className="text-sm text-destructive mt-1 flex items-center gap-1">
-                        <AlertCircle className="h-4 w-4" />
-                        {errors.attemptsAllowed}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Status
-                    </label>
-                    <select
-                      value={formData.status}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "status",
-                          e.target.value as "draft" | "active" | "closed",
-                        )
-                      }
-                      className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    <Button
+                      type="button"
+                      className="w-full bg-gradient-to-r from-primary to-secondary text-primary-foreground"
+                      onClick={() => {
+                        // TODO: Implement AI question generation
+                        toast({
+                          title: "AI Generation",
+                          description:
+                            "AI question generation will be available soon!",
+                        });
+                      }}
                     >
-                      <option value="draft">Draft</option>
-                      <option value="active">Active</option>
-                      <option value="closed">Closed</option>
-                    </select>
-                  </div>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Generate Questions with AI
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate("/lecturer/quiz")}
+                    className="px-6"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="bg-gradient-to-r from-primary to-secondary text-primary-foreground px-6"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-5 w-5 mr-2" />
+                        Create Quiz
+                      </>
+                    )}
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Options */}
-            <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  <CardTitle>Options</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={formData.shuffleQuestions}
-                    onChange={(e) =>
-                      handleInputChange("shuffleQuestions", e.target.checked)
-                    }
-                    className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <p className="font-medium">Shuffle Questions</p>
-                    <p className="text-sm text-muted-foreground">
-                      Randomize question order for each student
-                    </p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={formData.showAnswers}
-                    onChange={(e) =>
-                      handleInputChange("showAnswers", e.target.checked)
-                    }
-                    className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <p className="font-medium">Show Answers After Submission</p>
-                    <p className="text-sm text-muted-foreground">
-                      Allow students to see correct answers
-                    </p>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer p-3 rounded-lg hover:bg-muted/30 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={formData.autoDeactivate}
-                    onChange={(e) =>
-                      handleInputChange("autoDeactivate", e.target.checked)
-                    }
-                    className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
-                  />
-                  <div>
-                    <p className="font-medium">Auto-Deactivate on End Date</p>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically close the quiz when the end date and time is
-                      reached
-                    </p>
-                  </div>
-                </label>
-              </CardContent>
-            </Card>
-
-            {/* AI Question Generation */}
-            <Card className="border-border/60 bg-gradient-to-br from-card/90 to-card/70 backdrop-blur-lg">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" />
-                  <CardTitle>AI Question Generation</CardTitle>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Generate questions automatically using AI based on your course
-                  content
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Difficulty Level
-                    </label>
-                    <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
-                      <option value="easy">Easy</option>
-                      <option value="medium">Medium</option>
-                      <option value="hard">Hard</option>
-                      <option value="mixed">Mixed</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Question Types
-                    </label>
-                    <select className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50">
-                      <option value="mixed">Mixed Types</option>
-                      <option value="multiple_choice">
-                        Multiple Choice Only
-                      </option>
-                      <option value="true_false">True/False Only</option>
-                      <option value="short_answer">Short Answer Only</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Topic Focus (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g., Data Structures, Algorithms, Programming Fundamentals"
-                    className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                  />
-                </div>
-
-                <Button
-                  type="button"
-                  className="w-full bg-gradient-to-r from-primary to-secondary text-primary-foreground"
-                  onClick={() => {
-                    // TODO: Implement AI question generation
-                    toast({
-                      title: "AI Generation",
-                      description:
-                        "AI question generation will be available soon!",
-                    });
-                  }}
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Generate Questions with AI
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => navigate("/lecturer/quiz")}
-                className="px-6"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={loading}
-                className="bg-gradient-to-r from-primary to-secondary text-primary-foreground px-6"
-              >
-                {loading ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-5 w-5 mr-2" />
-                    Create Quiz
-                  </>
-                )}
-              </Button>
-            </div>
               </form>
             )}
           </motion.div>
