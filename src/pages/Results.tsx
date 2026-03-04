@@ -424,7 +424,7 @@ export default function Results() {
                 size="sm"
                 className="gap-2"
                 onClick={handleDownloadPDF}
-                disabled={isDownloading || resultsLoading || termResults.length === 0}
+                disabled={isDownloading || termResults.length === 0}
               >
                 <Download className={`h-4 w-4 ${isDownloading ? "animate-bounce" : ""}`} />
                 <span className="hidden sm:inline">
