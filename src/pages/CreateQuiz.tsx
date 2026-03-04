@@ -1078,7 +1078,9 @@ export default function CreateQuiz() {
                 )}
               </Button>
             </div>
-          </motion.form>
+              </form>
+            )}
+          </motion.div>
         </div>
       </main>
 
