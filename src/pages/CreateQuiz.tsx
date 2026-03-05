@@ -452,7 +452,10 @@ export default function CreateQuiz() {
       for (const question of extractedQuestions) {
         // Ensure correct_answer is a number
         let correctAnswerValue: string | number = question.correct_answer;
-        if (typeof correctAnswerValue === "string" && /^\d+$/.test(correctAnswerValue)) {
+        if (
+          typeof correctAnswerValue === "string" &&
+          /^\d+$/.test(correctAnswerValue)
+        ) {
           correctAnswerValue = parseInt(correctAnswerValue, 10);
         }
 

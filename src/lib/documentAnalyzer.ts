@@ -50,6 +50,14 @@ export class DocumentAnalyzer {
       "b)",
       "c)",
       "d)",
+      "a.",
+      "b.",
+      "c.",
+      "d.",
+      "A.",
+      "B.",
+      "C.",
+      "D.",
       "1)",
       "2)",
       "3)",
@@ -303,17 +311,20 @@ export class DocumentAnalyzer {
     // Extract options for multiple choice
     let options: string[] | undefined;
     let correctAnswerIndex: string | number = "";
-    
+
     if (questionType === "multiple_choice") {
       options = this.extractOptions(buffer);
-      
+
       // Convert correct answer from letter format (e.g., "B. Queue") to index (1)
-      const answerStr = (question.correct_answer || "").toString().trim().toUpperCase();
+      const answerStr = (question.correct_answer || "")
+        .toString()
+        .trim()
+        .toUpperCase();
       const letterMatch = answerStr.match(/^([A-D])/);
       if (letterMatch && options.length > 0) {
         const letter = letterMatch[1];
         // Convert letter to index: A=0, B=1, C=2, D=3
-        correctAnswerIndex = letter.charCodeAt(0) - 'A'.charCodeAt(0);
+        correctAnswerIndex = letter.charCodeAt(0) - "A".charCodeAt(0);
       } else {
         correctAnswerIndex = "";
       }
@@ -372,24 +383,27 @@ export class DocumentAnalyzer {
     const options: string[] = [];
 
     for (const line of lines) {
-      // Check if line contains option labels (A., B., C., D. or A), B), etc.)
-      if (/[A-D][\).]/.test(line)) {
-        // Split concatenated options like "A. StackB. QueueC. TreeD. Graph"
-        // Using regex to split at option boundaries
-        const parts = line.split(/([A-D][\).]\s*)/);
-        
-        for (let i = 1; i < parts.length; i += 2) {
-          const optionText = (parts[i] + (parts[i + 1] || "")).trim();
-          // Extract just the option content (remove the label)
-          const content = optionText.replace(/^[A-D][\).]\s*/, "").trim();
-          if (content.length > 0) {
-            options.push(content);
-          }
+      // Never treat explicit answer lines as options.
+      if (/^\s*(Answer|Correct):/i.test(line)) {
+        continue;
+      }
+
+      // Handle concatenated options like "A. StackB. QueueC. TreeD. Graph".
+      const segments = line
+        .split(/(?=[A-D][\).]\s*)/)
+        .map((segment) => segment.trim())
+        .filter((segment) => /^[A-D][\).]\s*/.test(segment));
+
+      for (const segment of segments) {
+        const content = segment.replace(/^[A-D][\).]\s*/, "").trim();
+        if (content.length > 0) {
+          options.push(content);
         }
       }
     }
 
-    return options;
+    // Keep only the first four options (A-D) to avoid accidental over-capture.
+    return options.slice(0, 4);
   }
 
   private static estimateQuestionDifficulty(
