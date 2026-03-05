@@ -450,11 +450,17 @@ export default function CreateQuiz() {
 
       // Save questions to a subcollection
       for (const question of extractedQuestions) {
+        // Ensure correct_answer is a number
+        let correctAnswerValue: string | number = question.correct_answer;
+        if (typeof correctAnswerValue === "string" && /^\d+$/.test(correctAnswerValue)) {
+          correctAnswerValue = parseInt(correctAnswerValue, 10);
+        }
+
         await addDoc(collection(db, "quizzes", quizRef.id, "questions"), {
           question: question.question,
           type: question.type,
           options: question.options || [],
-          correct_answer: question.correct_answer,
+          correct_answer: correctAnswerValue,
           explanation: question.explanation || "",
           points: question.points,
           difficulty: question.difficulty,
