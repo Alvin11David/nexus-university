@@ -924,27 +924,14 @@ export default function StudentQuiz() {
 
                   {/* Navigation */}
                   <div className="bg-muted/30 rounded-xl p-6 border border-border/50">
-                    <div className="flex items-center justify-between mb-4">
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          setCurrentQuestionIndex((prev) =>
-                            Math.max(0, prev - 1),
-                          )
-                        }
-                        disabled={currentQuestionIndex === 0}
-                        className="gap-2"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
+                    <div className="mb-4 space-y-4">
+                      <div className="text-sm font-medium text-muted-foreground text-center">
+                        Question {currentQuestionIndex + 1} of{" "}
+                        {quizQuestions.length}
+                      </div>
 
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="text-sm font-medium text-muted-foreground">
-                          Question {currentQuestionIndex + 1} of{" "}
-                          {quizQuestions.length}
-                        </div>
-                        <div className="flex gap-1">
+                      <div className="overflow-x-auto pb-1">
+                        <div className="flex gap-1 min-w-max mx-auto w-fit">
                           {quizQuestions.map((_, index) => {
                             const isAnswered =
                               answers[quizQuestions[index].id] !== undefined;
@@ -968,28 +955,44 @@ export default function StudentQuiz() {
                         </div>
                       </div>
 
-                      {currentQuestionIndex === quizQuestions.length - 1 ? (
+                      <div className="grid grid-cols-2 gap-3">
                         <Button
-                          onClick={submitQuiz}
-                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
-                          size="lg"
-                        >
-                          <Trophy className="h-4 w-4" />
-                          Submit Quiz
-                        </Button>
-                      ) : (
-                        <Button
+                          variant="outline"
                           onClick={() =>
                             setCurrentQuestionIndex((prev) =>
-                              Math.min(quizQuestions.length - 1, prev + 1),
+                              Math.max(0, prev - 1),
                             )
                           }
+                          disabled={currentQuestionIndex === 0}
                           className="gap-2"
                         >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
                         </Button>
-                      )}
+
+                        {currentQuestionIndex === quizQuestions.length - 1 ? (
+                          <Button
+                            onClick={submitQuiz}
+                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
+                            size="lg"
+                          >
+                            <Trophy className="h-4 w-4" />
+                            Submit Quiz
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() =>
+                              setCurrentQuestionIndex((prev) =>
+                                Math.min(quizQuestions.length - 1, prev + 1),
+                              )
+                            }
+                            className="gap-2"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Progress summary */}
