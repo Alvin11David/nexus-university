@@ -587,7 +587,7 @@ export default function StudentQuiz() {
                           <Timer className="h-4 w-4 text-blue-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-blue-700 dark:text-blue-300">
-                              {quiz.time_limit_minutes} min
+                              {(quiz.time_limit || quiz.time_limit_minutes || 30)} min
                             </div>
                             <div className="text-blue-600/70 dark:text-blue-400/70">
                               Time Limit
