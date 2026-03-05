@@ -202,57 +202,55 @@ export default function StudentQuiz() {
         return;
       }
 
-      // For now, we'll simulate quiz questions since the questions table might not exist yet
-      // In a real implementation, you'd fetch questions from a quiz_questions table
-      const mockQuestions: QuizQuestion[] = [
-        {
-          id: "1",
+      // Fetch actual questions from Firestore
+      try {
+        const questionsRef = collection(db, "quizzes", quiz.id, "questions");
+        const questionsQuery = query(questionsRef);
+        const questionsSnapshot = await getDocs(questionsQuery);
+        
+        const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => ({
+          id: doc.id,
           quiz_id: quiz.id,
-          question: "What is the capital of France?",
-          options: ["London", "Berlin", "Paris", "Madrid"],
-          correct_answer: 2,
-          points: 10,
-          explanation: "Paris is the capital and most populous city of France.",
-        },
-        {
-          id: "2",
-          quiz_id: quiz.id,
-          question:
-            "Which programming language is known as the 'mother of all languages'?",
-          options: ["Python", "C", "Java", "JavaScript"],
-          correct_answer: 1,
-          points: 10,
-          explanation:
-            "C is often called the mother of all languages because many modern languages are derived from it.",
-        },
-        {
-          id: "3",
-          quiz_id: quiz.id,
-          question: "What does CPU stand for?",
-          options: [
-            "Central Processing Unit",
-            "Computer Personal Unit",
-            "Central Program Utility",
-            "Computer Processing Utility",
-          ],
-          correct_answer: 0,
-          points: 10,
-          explanation:
-            "CPU stands for Central Processing Unit, which is the brain of the computer.",
-        },
-      ];
+          question: doc.data().question || "",
+          options: doc.data().options || [],
+          correct_answer: doc.data().correct_answer ?? 0,
+          points: doc.data().points || 1,
+          explanation: doc.data().explanation || "",
+        }));
 
-      setQuizQuestions(mockQuestions);
+        if (questions.length === 0) {
+          toast({
+            title: "No Questions Found",
+            description: "This quiz has no questions yet",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setQuizQuestions(questions);
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load quiz questions",
+          variant: "destructive",
+        });
+        return;
+      }
+
       setTakingQuiz(quiz);
       setCurrentQuestionIndex(0);
       setAnswers({});
       setQuizStartTime(new Date());
-      setTimeLeft(quiz.time_limit_minutes * 60); // Convert minutes to seconds
+      
+      // Handle both time_limit and time_limit_minutes
+      const timeLimit = quiz.time_limit || quiz.time_limit_minutes || 30;
+      setTimeLeft(timeLimit * 60); // Convert minutes to seconds
       setShowResults(false);
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to start quiz",
+        description: "Failed to start quiz. Please try again.",
         variant: "destructive",
       });
     }
