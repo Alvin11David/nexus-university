@@ -346,6 +346,22 @@ export default function StudentQuiz() {
     return new Date(dateString).toLocaleString();
   };
 
+  const getQuizStatus = (quiz: Quiz): { status: string; label: string; color: string } => {
+    const now = new Date();
+    const startDate = quiz.start_date ? new Date(quiz.start_date) : null;
+    const endDate = quiz.end_date ? new Date(quiz.end_date) : null;
+
+    if (endDate && now > endDate) {
+      return { status: "closed", label: "Closed", color: "bg-red-500/10 text-red-600 border-red-200/50" };
+    }
+
+    if (startDate && now < startDate) {
+      return { status: "upcoming", label: "Upcoming", color: "bg-blue-500/10 text-blue-600 border-blue-200/50" };
+    }
+
+    return { status: "active", label: "Active", color: "bg-green-500/10 text-green-600 border-green-200/50" };
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
