@@ -877,8 +877,11 @@ export default function StudentQuiz() {
                       {/* Score Summary */}
                       <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl p-8 border border-primary/20">
                         <div className="space-y-4">
-                          <div className="text-6xl font-bold text-primary">
-                            {quizScore}
+                          <div>
+                            <div className="text-6xl font-bold text-primary">
+                              {quizScore}
+                              <span className="text-3xl text-muted-foreground ml-2">/ {totalPoints}</span>
+                            </div>
                           </div>
                           <div>
                             <h3 className="text-2xl font-bold mb-2">
@@ -887,6 +890,11 @@ export default function StudentQuiz() {
                             <p className="text-muted-foreground">
                               Here are your results with detailed answer review
                             </p>
+                            <div className="mt-4 pt-4 border-t border-primary/20">
+                              <p className="text-sm text-muted-foreground">
+                                Percentage Score: <span className="font-semibold text-primary">{totalPoints > 0 ? Math.round((quizScore / totalPoints) * 100) : 0}%</span>
+                              </p>
+                            </div>
                           </div>
                         </div>
                       </div>
