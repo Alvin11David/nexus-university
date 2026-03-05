@@ -14,7 +14,7 @@ export interface ExtractedQuestion {
   question: string;
   type: "multiple_choice" | "true_false" | "short_answer";
   options?: string[];
-  correct_answer: string;
+  correct_answer: string | number;
   explanation?: string;
   points: number;
   difficulty: "easy" | "medium" | "hard";
