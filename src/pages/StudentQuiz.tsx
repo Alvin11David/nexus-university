@@ -258,6 +258,8 @@ export default function StudentQuiz() {
         total += question.points;
       });
 
+      setTotalPoints(total);
+
       // Save quiz attempt to database for lecturer grading
       const attemptRef = await addDoc(collection(db, "quiz_attempts"), {
         quiz_id: takingQuiz.id,
