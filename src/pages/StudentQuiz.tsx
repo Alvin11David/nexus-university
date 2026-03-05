@@ -176,6 +176,29 @@ export default function StudentQuiz() {
 
   const takeQuiz = async (quiz: Quiz) => {
     try {
+      // Check if quiz has started
+      const now = new Date();
+      const startDate = quiz.start_date ? new Date(quiz.start_date) : null;
+      const endDate = quiz.end_date ? new Date(quiz.end_date) : null;
+
+      if (startDate && now < startDate) {
+        toast({
+          title: "Quiz Not Available Yet",
+          description: `This quiz will be available on ${startDate.toLocaleString()}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (endDate && now > endDate) {
+        toast({
+          title: "Quiz Closed",
+          description: "This quiz is no longer available",
+          variant: "destructive",
+        });
+        return;
+      }
+
       // For now, we'll simulate quiz questions since the questions table might not exist yet
       // In a real implementation, you'd fetch questions from a quiz_questions table
       const mockQuestions: QuizQuestion[] = [
