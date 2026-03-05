@@ -131,10 +131,9 @@ export class DocumentAnalyzer {
     try {
       // Dynamically import pdfjs-dist
       const pdfjs = await import("pdfjs-dist");
-      const pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.min");
 
-      // Configure the worker
-      pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+      // Configure the worker - use the CDN version for browser compatibility
+      pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
 
       // Read file as ArrayBuffer
       const arrayBuffer = await this.readFileAsArrayBuffer(file);
