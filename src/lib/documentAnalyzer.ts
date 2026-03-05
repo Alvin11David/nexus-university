@@ -302,8 +302,23 @@ export class DocumentAnalyzer {
 
     // Extract options for multiple choice
     let options: string[] | undefined;
+    let correctAnswerIndex: string | number = "";
+    
     if (questionType === "multiple_choice") {
       options = this.extractOptions(buffer);
+      
+      // Convert correct answer from letter format (e.g., "B. Queue") to index (1)
+      const answerStr = (question.correct_answer || "").toString().trim().toUpperCase();
+      const letterMatch = answerStr.match(/^([A-D])/);
+      if (letterMatch && options.length > 0) {
+        const letter = letterMatch[1];
+        // Convert letter to index: A=0, B=1, C=2, D=3
+        correctAnswerIndex = letter.charCodeAt(0) - 'A'.charCodeAt(0);
+      } else {
+        correctAnswerIndex = "";
+      }
+    } else {
+      correctAnswerIndex = question.correct_answer || "";
     }
 
     // Estimate difficulty
@@ -317,7 +332,7 @@ export class DocumentAnalyzer {
       question: question.question || "",
       type: questionType,
       options,
-      correct_answer: question.correct_answer || "",
+      correct_answer: correctAnswerIndex,
       explanation: "",
       points: difficulty === "easy" ? 1 : difficulty === "medium" ? 2 : 3,
       difficulty,
