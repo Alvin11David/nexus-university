@@ -228,7 +228,7 @@ export default function StudentQuiz() {
             question: data.question || "",
             options: options,
             correct_answer: data.correct_answer ?? 0,
-            points: data.points || 1,
+            points: 1,
             explanation: data.explanation || "",
           };
         });
