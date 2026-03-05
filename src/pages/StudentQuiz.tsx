@@ -92,7 +92,9 @@ export default function StudentQuiz() {
   const [quizStartTime, setQuizStartTime] = useState<Date | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
-  const [quizAttempts, setQuizAttempts] = useState<Record<string, QuizAttempt>>({});
+  const [quizAttempts, setQuizAttempts] = useState<Record<string, QuizAttempt>>(
+    {},
+  );
   const [totalPoints, setTotalPoints] = useState(0);
 
   useEffect(() => {
@@ -129,7 +131,6 @@ export default function StudentQuiz() {
         quizzesRef,
         and(
           where("status", "==", "active"),
-          where("start_date", "<=", now),
           or(where("end_date", "==", null), where("end_date", ">=", now)),
         ),
         orderBy("created_at", "desc"),
@@ -146,7 +147,7 @@ export default function StudentQuiz() {
         const attemptsRef = collection(db, "quiz_attempts");
         const attemptsQuery = query(
           attemptsRef,
-          where("student_id", "==", user.uid)
+          where("student_id", "==", user.uid),
         );
         const attemptsSnapshot = await getDocs(attemptsQuery);
         const attemptsMap: Record<string, QuizAttempt> = {};
@@ -275,7 +276,7 @@ export default function StudentQuiz() {
       });
 
       // Update attempts state
-      setQuizAttempts(prev => ({
+      setQuizAttempts((prev) => ({
         ...prev,
         [takingQuiz.id]: {
           id: attemptRef.id,
@@ -285,8 +286,8 @@ export default function StudentQuiz() {
           score: takingQuiz.show_answers ? totalScore : 0,
           total_points: total,
           completed_at: new Date().toISOString(),
-          time_taken: timeTaken
-        }
+          time_taken: timeTaken,
+        },
       }));
 
       setShowResults(true);
@@ -489,9 +490,13 @@ export default function StudentQuiz() {
                               Active Quiz
                             </Badge>
                             {quizAttempts[quiz.id] && (
-                              <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                              <Badge
+                                variant="default"
+                                className="bg-green-500 hover:bg-green-600"
+                              >
                                 <Trophy className="h-3 w-3 mr-1" />
-                                {quizAttempts[quiz.id].score}/{quizAttempts[quiz.id].total_points}
+                                {quizAttempts[quiz.id].score}/
+                                {quizAttempts[quiz.id].total_points}
                               </Badge>
                             )}
                           </div>
@@ -884,7 +889,9 @@ export default function StudentQuiz() {
                           <div>
                             <div className="text-6xl font-bold text-primary">
                               {quizScore}
-                              <span className="text-3xl text-muted-foreground ml-2">/ {totalPoints}</span>
+                              <span className="text-3xl text-muted-foreground ml-2">
+                                / {totalPoints}
+                              </span>
                             </div>
                           </div>
                           <div>
@@ -896,7 +903,15 @@ export default function StudentQuiz() {
                             </p>
                             <div className="mt-4 pt-4 border-t border-primary/20">
                               <p className="text-sm text-muted-foreground">
-                                Percentage Score: <span className="font-semibold text-primary">{totalPoints > 0 ? Math.round((quizScore / totalPoints) * 100) : 0}%</span>
+                                Percentage Score:{" "}
+                                <span className="font-semibold text-primary">
+                                  {totalPoints > 0
+                                    ? Math.round(
+                                        (quizScore / totalPoints) * 100,
+                                      )
+                                    : 0}
+                                  %
+                                </span>
                               </p>
                             </div>
                           </div>
