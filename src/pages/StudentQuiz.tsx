@@ -43,6 +43,7 @@ interface Quiz {
   start_date: string | null;
   end_date: string | null;
   created_at: string;
+  show_answers?: boolean;
 }
 
 interface QuizQuestion {
@@ -208,6 +209,16 @@ export default function StudentQuiz() {
         (new Date().getTime() - quizStartTime.getTime()) / 1000
       );
 
+      // Calculate score
+      let totalScore = 0;
+      quizQuestions.forEach((question) => {
+        if (answers[question.id] !== undefined && answers[question.id] === question.correct_answer) {
+          totalScore += question.points;
+        }
+      });
+
+      setQuizScore(totalScore);
+
       // Save quiz attempt to database for lecturer grading
       await addDoc(collection(db, "quiz_attempts"), {
         quiz_id: takingQuiz.id,
@@ -216,8 +227,8 @@ export default function StudentQuiz() {
         attempt_number: 1, // TODO: Calculate actual attempt number
         started_at: quizStartTime.toISOString(),
         completed_at: new Date().toISOString(),
-        score: null, // Will be set by lecturer after grading
-        status: "submitted", // submitted, graded
+        score: takingQuiz.show_answers ? totalScore : null, // Set score if showing answers, otherwise null
+        status: takingQuiz.show_answers ? "graded" : "submitted",
         time_taken: timeTaken,
       });
 
@@ -225,7 +236,9 @@ export default function StudentQuiz() {
 
       toast({
         title: "Quiz Submitted!",
-        description: "Your quiz has been submitted for grading. You will receive your results once graded.",
+        description: takingQuiz.show_answers 
+          ? "Your answers have been reviewed!" 
+          : "Your quiz has been submitted for grading. You will receive your results once graded.",
       });
     } catch (error: any) {
       console.error("Error submitting quiz:", error);
@@ -733,49 +746,178 @@ export default function StudentQuiz() {
               ) : (
                 /* Results */
                 <div className="text-center space-y-8">
-                  {/* Result icon */}
-                  <div className="relative">
-                    <div className="text-8xl animate-pulse">
-                      📝
-                    </div>
-                    <div className="absolute -top-2 -right-2">
-                      <CheckCircle2 className="h-8 w-8 text-green-500" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                      Quiz Submitted!
-                    </h3>
-                    <p className="text-muted-foreground text-lg">
-                      Your quiz has been submitted for grading. You will receive your results once your lecturer has reviewed it.
-                    </p>
-                  </div>
-
-                  {/* Submission details */}
-                  <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-center gap-2 text-primary">
-                        <Clock className="h-5 w-5" />
-                        <span className="font-medium">Submitted for Grading</span>
+                  {takingQuiz?.show_answers ? (
+                    // Show answers view
+                    <div className="space-y-6">
+                      {/* Score Summary */}
+                      <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl p-8 border border-primary/20">
+                        <div className="space-y-4">
+                          <div className="text-6xl font-bold text-primary">
+                            {quizScore}
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold mb-2">
+                              Quiz Completed!
+                            </h3>
+                            <p className="text-muted-foreground">
+                              Here are your results with detailed answer review
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Your lecturer will review your answers and provide feedback. Check back later for your results.
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Button onClick={resetQuiz} size="lg" className="gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      View All Quizzes
-                    </Button>
-                    <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
-                      <Play className="h-4 w-4" />
-                      Take Another Quiz
-                    </Button>
-                  </div>
+                      {/* Question Review */}
+                      <div className="space-y-4 text-left">
+                        <h3 className="text-xl font-bold">Answer Review</h3>
+                        {quizQuestions.map((question, index) => {
+                          const studentAnswerIndex = answers[question.id];
+                          const isCorrect = studentAnswerIndex === question.correct_answer;
+                          const studentAnswer = studentAnswerIndex !== undefined ? question.options[studentAnswerIndex] : "Not answered";
+                          const correctAnswer = question.options[question.correct_answer];
+
+                          return (
+                            <Card 
+                              key={question.id} 
+                              className={`p-6 border-2 transition-all ${
+                                isCorrect
+                                  ? "border-green-500/30 bg-green-50/30 dark:bg-green-950/20"
+                                  : "border-red-500/30 bg-red-50/30 dark:bg-red-950/20"
+                              }`}
+                            >
+                              <div className="space-y-4">
+                                <div className="flex items-start gap-3">
+                                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">
+                                    Q{index + 1}
+                                  </span>
+                                  {isCorrect ? (
+                                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-1" />
+                                  ) : (
+                                    <X className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" />
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <p className="font-semibold">{question.question}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Points: {question.points}
+                                  </p>
+                                </div>
+
+                                {/* Options Display */}
+                                <div className="space-y-2 mt-4">
+                                  {question.options.map((option, optIndex) => {
+                                    const isStudentAnswer = studentAnswerIndex === optIndex;
+                                    const isCorrectOption = optIndex === question.correct_answer;
+
+                                    return (
+                                      <div
+                                        key={optIndex}
+                                        className={`p-3 rounded-lg border-2 text-sm transition-all ${
+                                          isCorrectOption
+                                            ? "border-green-500 bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-100 font-medium"
+                                            : isStudentAnswer
+                                            ? "border-red-500 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 font-medium"
+                                            : "border-border bg-muted/30 text-muted-foreground"
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold">
+                                            {String.fromCharCode(65 + optIndex)}.
+                                          </span>
+                                          <span>{option}</span>
+                                          {isCorrectOption && (
+                                            <Badge variant="default" className="ml-auto">
+                                              Correct
+                                            </Badge>
+                                          )}
+                                          {isStudentAnswer && !isCorrectOption && (
+                                            <Badge variant="destructive" className="ml-auto">
+                                              Your Answer
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Explanation */}
+                                {question.explanation && (
+                                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                      Explanation:
+                                    </p>
+                                    <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                                      {question.explanation}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center pt-6">
+                        <Button onClick={resetQuiz} size="lg" className="gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          View All Quizzes
+                        </Button>
+                        <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
+                          <Play className="h-4 w-4" />
+                          Take Another Quiz
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Submitted for grading view
+                    <div className="space-y-8">
+                      {/* Result icon */}
+                      <div className="relative">
+                        <div className="text-8xl animate-pulse">
+                          📝
+                        </div>
+                        <div className="absolute -top-2 -right-2">
+                          <CheckCircle2 className="h-8 w-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                          Quiz Submitted!
+                        </h3>
+                        <p className="text-muted-foreground text-lg">
+                          Your quiz has been submitted for grading. You will receive your results once your lecturer has reviewed it.
+                        </p>
+                      </div>
+
+                      {/* Submission details */}
+                      <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-2 text-primary">
+                            <Clock className="h-5 w-5" />
+                            <span className="font-medium">Submitted for Grading</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Your lecturer will review your answers and provide feedback. Check back later for your results.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button onClick={resetQuiz} size="lg" className="gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          View All Quizzes
+                        </Button>
+                        <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
+                          <Play className="h-4 w-4" />
+                          Take Another Quiz
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
