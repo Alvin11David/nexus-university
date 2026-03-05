@@ -107,6 +107,19 @@ export default function CreateQuiz() {
 
   // Document analysis handlers
   const handleAnalysisComplete = (result: DocumentAnalysisResult) => {
+    console.log("📊 Document Analysis Complete:", result);
+    console.log("Questions extracted:", result.questions.length);
+    result.questions.forEach((q, idx) => {
+      console.log(`Question ${idx + 1}:`, {
+        question: q.question,
+        type: q.type,
+        options: q.options,
+        optionsCount: q.options?.length || 0,
+        correct_answer: q.correct_answer,
+        confidence: q.confidence,
+      });
+    });
+
     setAnalysisResult(result);
     setExtractedQuestions(result.questions);
     setUploadError(null);

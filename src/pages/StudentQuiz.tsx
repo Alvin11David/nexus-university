@@ -207,16 +207,35 @@ export default function StudentQuiz() {
         const questionsRef = collection(db, "quizzes", quiz.id, "questions");
         const questionsQuery = query(questionsRef);
         const questionsSnapshot = await getDocs(questionsQuery);
-        
-        const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => ({
-          id: doc.id,
-          quiz_id: quiz.id,
-          question: doc.data().question || "",
-          options: doc.data().options || [],
-          correct_answer: doc.data().correct_answer ?? 0,
-          points: doc.data().points || 1,
-          explanation: doc.data().explanation || "",
-        }));
+
+        const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          console.log("Question data:", data); // Debug log
+
+          // Ensure options is an array
+          let options = data.options || [];
+          if (!Array.isArray(options)) {
+            console.warn("Options is not an array:", options);
+            // Try to split if it's a string
+            if (typeof options === "string") {
+              options = options.split(",").map((opt: string) => opt.trim());
+            } else {
+              options = [];
+            }
+          }
+
+          return {
+            id: doc.id,
+            quiz_id: quiz.id,
+            question: data.question || "",
+            options: options,
+            correct_answer: data.correct_answer ?? 0,
+            points: data.points || 1,
+            explanation: data.explanation || "",
+          };
+        });
+
+        console.log("Loaded questions:", questions); // Debug log
 
         if (questions.length === 0) {
           toast({
@@ -242,7 +261,7 @@ export default function StudentQuiz() {
       setCurrentQuestionIndex(0);
       setAnswers({});
       setQuizStartTime(new Date());
-      
+
       // Handle both time_limit and time_limit_minutes
       const timeLimit = quiz.time_limit || quiz.time_limit_minutes || 30;
       setTimeLeft(timeLimit * 60); // Convert minutes to seconds
@@ -587,7 +606,8 @@ export default function StudentQuiz() {
                           <Timer className="h-4 w-4 text-blue-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-blue-700 dark:text-blue-300">
-                              {(quiz.time_limit || quiz.time_limit_minutes || 30)} min
+                              {quiz.time_limit || quiz.time_limit_minutes || 30}{" "}
+                              min
                             </div>
                             <div className="text-blue-600/70 dark:text-blue-400/70">
                               Time Limit
@@ -827,59 +847,80 @@ export default function StudentQuiz() {
                       </div>
 
                       <div className="space-y-3">
-                        {quizQuestions[currentQuestionIndex].options.map(
-                          (option, index) => {
-                            const isSelected =
-                              answers[
-                                quizQuestions[currentQuestionIndex].id
-                              ] === index;
-                            return (
-                              <label
-                                key={index}
-                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                                  isSelected
-                                    ? "border-primary bg-primary/5 shadow-md"
-                                    : "border-border hover:border-primary/50 hover:bg-accent/50"
-                                }`}
-                              >
-                                <div
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                        {quizQuestions[currentQuestionIndex]?.options &&
+                        Array.isArray(
+                          quizQuestions[currentQuestionIndex].options,
+                        ) &&
+                        quizQuestions[currentQuestionIndex].options.length >
+                          0 ? (
+                          quizQuestions[currentQuestionIndex].options.map(
+                            (option, index) => {
+                              const isSelected =
+                                answers[
+                                  quizQuestions[currentQuestionIndex].id
+                                ] === index;
+                              return (
+                                <label
+                                  key={index}
+                                  className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                                     isSelected
-                                      ? "border-primary bg-primary"
-                                      : "border-muted-foreground group-hover:border-primary"
+                                      ? "border-primary bg-primary/5 shadow-md"
+                                      : "border-border hover:border-primary/50 hover:bg-accent/50"
                                   }`}
                                 >
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      isSelected
+                                        ? "border-primary bg-primary"
+                                        : "border-muted-foreground group-hover:border-primary"
+                                    }`}
+                                  >
+                                    {isSelected && (
+                                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="radio"
+                                    name={`question-${quizQuestions[currentQuestionIndex].id}`}
+                                    value={index}
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      setAnswers((prev) => ({
+                                        ...prev,
+                                        [quizQuestions[currentQuestionIndex]
+                                          .id]: index,
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  <span
+                                    className={`flex-1 text-sm leading-relaxed ${
+                                      isSelected
+                                        ? "font-medium text-primary"
+                                        : ""
+                                    }`}
+                                  >
+                                    {option}
+                                  </span>
                                   {isSelected && (
-                                    <div className="w-3 h-3 bg-white rounded-full"></div>
+                                    <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
                                   )}
-                                </div>
-                                <input
-                                  type="radio"
-                                  name={`question-${quizQuestions[currentQuestionIndex].id}`}
-                                  value={index}
-                                  checked={isSelected}
-                                  onChange={() =>
-                                    setAnswers((prev) => ({
-                                      ...prev,
-                                      [quizQuestions[currentQuestionIndex].id]:
-                                        index,
-                                    }))
-                                  }
-                                  className="sr-only"
-                                />
-                                <span
-                                  className={`flex-1 text-sm leading-relaxed ${
-                                    isSelected ? "font-medium text-primary" : ""
-                                  }`}
-                                >
-                                  {option}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                                )}
-                              </label>
-                            );
-                          },
+                                </label>
+                              );
+                            },
+                          )
+                        ) : (
+                          <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <p className="text-red-700 dark:text-red-300 font-medium">
+                              No answer options found for this question
+                            </p>
+                            <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                              Options:{" "}
+                              {JSON.stringify(
+                                quizQuestions[currentQuestionIndex]?.options,
+                              )}
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
