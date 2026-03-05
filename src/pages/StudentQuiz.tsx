@@ -405,6 +405,16 @@ export default function StudentQuiz() {
     }
   };
 
+  const correctAnswersCount = quizQuestions.reduce((count, question) => {
+    if (
+      answers[question.id] !== undefined &&
+      answers[question.id] === question.correct_answer
+    ) {
+      return count + 1;
+    }
+    return count;
+  }, 0);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
       {/* Animated Background */}
@@ -748,7 +758,7 @@ export default function StudentQuiz() {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-background rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            className="bg-background rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
           >
             {/* Quiz Header */}
             <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white p-6 relative overflow-hidden">
@@ -816,7 +826,7 @@ export default function StudentQuiz() {
             </div>
 
             {/* Quiz Content */}
-            <div className="p-6">
+            <div className="p-6 flex-1 overflow-y-auto">
               {!showResults ? (
                 <>
                   {/* Question */}
@@ -1024,7 +1034,7 @@ export default function StudentQuiz() {
                             <div className="text-6xl font-bold text-primary">
                               {quizScore}
                               <span className="text-3xl text-muted-foreground ml-2">
-                                / {totalPoints}
+                                / {totalPoints} pts
                               </span>
                             </div>
                           </div>
@@ -1036,6 +1046,12 @@ export default function StudentQuiz() {
                               Here are your results with detailed answer review
                             </p>
                             <div className="mt-4 pt-4 border-t border-primary/20">
+                              <p className="text-sm text-muted-foreground">
+                                Correct Answers:{" "}
+                                <span className="font-semibold text-primary">
+                                  {correctAnswersCount} / {quizQuestions.length}
+                                </span>
+                              </p>
                               <p className="text-sm text-muted-foreground">
                                 Percentage Score:{" "}
                                 <span className="font-semibold text-primary">

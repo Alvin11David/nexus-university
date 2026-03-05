@@ -116,7 +116,8 @@ export default function CreateQuiz() {
       setFormData((prev) => ({
         ...prev,
         totalQuestions: result.questions.length,
-        totalPoints: result.questions.reduce((sum, q) => sum + q.points, 0),
+        totalPoints: result.questions.length,
+        passingScore: Math.ceil(result.questions.length * 0.6),
       }));
     }
 
@@ -142,7 +143,7 @@ export default function CreateQuiz() {
     setExtractedQuestions(questions);
 
     // Update total questions and points
-    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    const totalPoints = questions.length;
     setFormData((prev) => ({
       ...prev,
       totalQuestions: questions.length,
@@ -451,7 +452,7 @@ export default function CreateQuiz() {
           options: question.options || [],
           correct_answer: correctAnswerValue,
           explanation: question.explanation || "",
-          points: question.points,
+          points: 1,
           difficulty: question.difficulty,
           confidence: question.confidence,
           original_text: question.originalText,
