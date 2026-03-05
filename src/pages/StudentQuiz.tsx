@@ -485,6 +485,12 @@ export default function StudentQuiz() {
                             >
                               Active Quiz
                             </Badge>
+                            {quizAttempts[quiz.id] && (
+                              <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                                <Trophy className="h-3 w-3 mr-1" />
+                                {quizAttempts[quiz.id].score}/{quizAttempts[quiz.id].total_points}
+                              </Badge>
+                            )}
                           </div>
                           <CardTitle className="text-lg line-clamp-2 group-hover:text-primary transition-colors">
                             {quiz.title}
