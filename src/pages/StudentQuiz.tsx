@@ -522,12 +522,17 @@ export default function StudentQuiz() {
                             <div className="p-2 bg-primary/10 rounded-lg">
                               <Target className="h-4 w-4 text-primary" />
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/10 text-primary border-primary/20"
-                            >
-                              Active Quiz
-                            </Badge>
+                            {(() => {
+                              const status = getQuizStatus(quiz);
+                              return (
+                                <Badge
+                                  variant="secondary"
+                                  className={`border ${status.color}`}
+                                >
+                                  {status.label}
+                                </Badge>
+                              );
+                            })()}
                             {quizAttempts[quiz.id] && (
                               <Badge
                                 variant="default"
