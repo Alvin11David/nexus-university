@@ -14,7 +14,7 @@ export interface ExtractedQuestion {
   question: string;
   type: "multiple_choice" | "true_false" | "short_answer";
   options?: string[];
-  correct_answer: string;
+  correct_answer: string | number;
   explanation?: string;
   points: number;
   difficulty: "easy" | "medium" | "hard";
@@ -50,6 +50,14 @@ export class DocumentAnalyzer {
       "b)",
       "c)",
       "d)",
+      "a.",
+      "b.",
+      "c.",
+      "d.",
+      "A.",
+      "B.",
+      "C.",
+      "D.",
       "1)",
       "2)",
       "3)",
@@ -302,8 +310,26 @@ export class DocumentAnalyzer {
 
     // Extract options for multiple choice
     let options: string[] | undefined;
+    let correctAnswerIndex: string | number = "";
+
     if (questionType === "multiple_choice") {
       options = this.extractOptions(buffer);
+
+      // Convert correct answer from letter format (e.g., "B. Queue") to index (1)
+      const answerStr = (question.correct_answer || "")
+        .toString()
+        .trim()
+        .toUpperCase();
+      const letterMatch = answerStr.match(/^([A-D])/);
+      if (letterMatch && options.length > 0) {
+        const letter = letterMatch[1];
+        // Convert letter to index: A=0, B=1, C=2, D=3
+        correctAnswerIndex = letter.charCodeAt(0) - "A".charCodeAt(0);
+      } else {
+        correctAnswerIndex = "";
+      }
+    } else {
+      correctAnswerIndex = question.correct_answer || "";
     }
 
     // Estimate difficulty
@@ -317,9 +343,9 @@ export class DocumentAnalyzer {
       question: question.question || "",
       type: questionType,
       options,
-      correct_answer: question.correct_answer || "",
+      correct_answer: correctAnswerIndex,
       explanation: "",
-      points: difficulty === "easy" ? 1 : difficulty === "medium" ? 2 : 3,
+      points: 1,
       difficulty,
       confidence,
       originalText: question.originalText || fullText,
@@ -357,13 +383,27 @@ export class DocumentAnalyzer {
     const options: string[] = [];
 
     for (const line of lines) {
-      const match = line.match(/^\s*[a-dA-D1-4][\).\s]\s*(.+)/);
-      if (match) {
-        options.push(match[1].trim());
+      // Never treat explicit answer lines as options.
+      if (/^\s*(Answer|Correct):/i.test(line)) {
+        continue;
+      }
+
+      // Handle concatenated options like "A. StackB. QueueC. TreeD. Graph".
+      const segments = line
+        .split(/(?=[A-D][\).]\s*)/)
+        .map((segment) => segment.trim())
+        .filter((segment) => /^[A-D][\).]\s*/.test(segment));
+
+      for (const segment of segments) {
+        const content = segment.replace(/^[A-D][\).]\s*/, "").trim();
+        if (content.length > 0) {
+          options.push(content);
+        }
       }
     }
 
-    return options;
+    // Keep only the first four options (A-D) to avoid accidental over-capture.
+    return options.slice(0, 4);
   }
 
   private static estimateQuestionDifficulty(
@@ -400,7 +440,7 @@ export class DocumentAnalyzer {
       type: "short_answer" as const,
       correct_answer: "",
       explanation: "",
-      points: 2,
+      points: 1,
       difficulty: "medium" as const,
       confidence: 0.3,
       originalText: block,

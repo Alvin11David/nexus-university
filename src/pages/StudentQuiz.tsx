@@ -210,12 +210,10 @@ export default function StudentQuiz() {
 
         const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => {
           const data = doc.data();
-          console.log("Question data:", data); // Debug log
 
           // Ensure options is an array
           let options = data.options || [];
           if (!Array.isArray(options)) {
-            console.warn("Options is not an array:", options);
             // Try to split if it's a string
             if (typeof options === "string") {
               options = options.split(",").map((opt: string) => opt.trim());
@@ -230,12 +228,10 @@ export default function StudentQuiz() {
             question: data.question || "",
             options: options,
             correct_answer: data.correct_answer ?? 0,
-            points: data.points || 1,
+            points: 1,
             explanation: data.explanation || "",
           };
         });
-
-        console.log("Loaded questions:", questions); // Debug log
 
         if (questions.length === 0) {
           toast({
@@ -408,6 +404,16 @@ export default function StudentQuiz() {
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  const correctAnswersCount = quizQuestions.reduce((count, question) => {
+    if (
+      answers[question.id] !== undefined &&
+      answers[question.id] === question.correct_answer
+    ) {
+      return count + 1;
+    }
+    return count;
+  }, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
@@ -752,7 +758,7 @@ export default function StudentQuiz() {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-background rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            className="bg-background rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
           >
             {/* Quiz Header */}
             <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white p-6 relative overflow-hidden">
@@ -820,7 +826,7 @@ export default function StudentQuiz() {
             </div>
 
             {/* Quiz Content */}
-            <div className="p-6">
+            <div className="p-6 flex-1 overflow-y-auto">
               {!showResults ? (
                 <>
                   {/* Question */}
@@ -928,27 +934,14 @@ export default function StudentQuiz() {
 
                   {/* Navigation */}
                   <div className="bg-muted/30 rounded-xl p-6 border border-border/50">
-                    <div className="flex items-center justify-between mb-4">
-                      <Button
-                        variant="outline"
-                        onClick={() =>
-                          setCurrentQuestionIndex((prev) =>
-                            Math.max(0, prev - 1),
-                          )
-                        }
-                        disabled={currentQuestionIndex === 0}
-                        className="gap-2"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
+                    <div className="mb-4 space-y-4">
+                      <div className="text-sm font-medium text-muted-foreground text-center">
+                        Question {currentQuestionIndex + 1} of{" "}
+                        {quizQuestions.length}
+                      </div>
 
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="text-sm font-medium text-muted-foreground">
-                          Question {currentQuestionIndex + 1} of{" "}
-                          {quizQuestions.length}
-                        </div>
-                        <div className="flex gap-1">
+                      <div className="overflow-x-auto pb-1">
+                        <div className="flex gap-1 min-w-max mx-auto w-fit">
                           {quizQuestions.map((_, index) => {
                             const isAnswered =
                               answers[quizQuestions[index].id] !== undefined;
@@ -972,28 +965,44 @@ export default function StudentQuiz() {
                         </div>
                       </div>
 
-                      {currentQuestionIndex === quizQuestions.length - 1 ? (
+                      <div className="grid grid-cols-2 gap-3">
                         <Button
-                          onClick={submitQuiz}
-                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
-                          size="lg"
-                        >
-                          <Trophy className="h-4 w-4" />
-                          Submit Quiz
-                        </Button>
-                      ) : (
-                        <Button
+                          variant="outline"
                           onClick={() =>
                             setCurrentQuestionIndex((prev) =>
-                              Math.min(quizQuestions.length - 1, prev + 1),
+                              Math.max(0, prev - 1),
                             )
                           }
+                          disabled={currentQuestionIndex === 0}
                           className="gap-2"
                         >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
                         </Button>
-                      )}
+
+                        {currentQuestionIndex === quizQuestions.length - 1 ? (
+                          <Button
+                            onClick={submitQuiz}
+                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 gap-2 shadow-lg"
+                            size="lg"
+                          >
+                            <Trophy className="h-4 w-4" />
+                            Submit Quiz
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() =>
+                              setCurrentQuestionIndex((prev) =>
+                                Math.min(quizQuestions.length - 1, prev + 1),
+                              )
+                            }
+                            className="gap-2"
+                          >
+                            Next
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
 
                     {/* Progress summary */}
@@ -1025,7 +1034,7 @@ export default function StudentQuiz() {
                             <div className="text-6xl font-bold text-primary">
                               {quizScore}
                               <span className="text-3xl text-muted-foreground ml-2">
-                                / {totalPoints}
+                                / {totalPoints} pts
                               </span>
                             </div>
                           </div>
@@ -1037,6 +1046,12 @@ export default function StudentQuiz() {
                               Here are your results with detailed answer review
                             </p>
                             <div className="mt-4 pt-4 border-t border-primary/20">
+                              <p className="text-sm text-muted-foreground">
+                                Correct Answers:{" "}
+                                <span className="font-semibold text-primary">
+                                  {correctAnswersCount} / {quizQuestions.length}
+                                </span>
+                              </p>
                               <p className="text-sm text-muted-foreground">
                                 Percentage Score:{" "}
                                 <span className="font-semibold text-primary">

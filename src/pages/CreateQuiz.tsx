@@ -107,20 +107,6 @@ export default function CreateQuiz() {
 
   // Document analysis handlers
   const handleAnalysisComplete = (result: DocumentAnalysisResult) => {
-    console.log("📊 Document Analysis Complete:", result);
-    console.log("Questions extracted:", result.questions.length);
-    console.log("\n===== FULL RAW TEXT FROM PDF =====");
-    console.log(result.rawText);
-    console.log("===== END RAW TEXT =====\n");
-
-    result.questions.slice(0, 2).forEach((q, idx) => {
-      console.log(`\n=== Question ${idx + 1} ===`);
-      console.log("Question:", q.question);
-      console.log("Type:", q.type);
-      console.log("Options:", q.options);
-      console.log("Correct Answer:", q.correct_answer);
-    });
-
     setAnalysisResult(result);
     setExtractedQuestions(result.questions);
     setUploadError(null);
@@ -130,7 +116,8 @@ export default function CreateQuiz() {
       setFormData((prev) => ({
         ...prev,
         totalQuestions: result.questions.length,
-        totalPoints: result.questions.reduce((sum, q) => sum + q.points, 0),
+        totalPoints: result.questions.length,
+        passingScore: Math.ceil(result.questions.length * 0.6),
       }));
     }
 
@@ -156,7 +143,7 @@ export default function CreateQuiz() {
     setExtractedQuestions(questions);
 
     // Update total questions and points
-    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    const totalPoints = questions.length;
     setFormData((prev) => ({
       ...prev,
       totalQuestions: questions.length,
@@ -450,13 +437,22 @@ export default function CreateQuiz() {
 
       // Save questions to a subcollection
       for (const question of extractedQuestions) {
+        // Ensure correct_answer is a number
+        let correctAnswerValue: string | number = question.correct_answer;
+        if (
+          typeof correctAnswerValue === "string" &&
+          /^\d+$/.test(correctAnswerValue)
+        ) {
+          correctAnswerValue = parseInt(correctAnswerValue, 10);
+        }
+
         await addDoc(collection(db, "quizzes", quizRef.id, "questions"), {
           question: question.question,
           type: question.type,
           options: question.options || [],
-          correct_answer: question.correct_answer,
+          correct_answer: correctAnswerValue,
           explanation: question.explanation || "",
-          points: question.points,
+          points: 1,
           difficulty: question.difficulty,
           confidence: question.confidence,
           original_text: question.originalText,
