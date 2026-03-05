@@ -48,14 +48,17 @@ interface Quiz {
   title: string;
   description: string | null;
   course_id: string | null;
-  time_limit_minutes: number | null;
-  max_attempts: number;
+  time_limit?: number;
+  time_limit_minutes?: number | null;
+  max_attempts?: number;
   passing_score: number | null;
   status: "draft" | "active" | "closed";
   start_date: string | null;
   end_date: string | null;
   created_at: string;
   show_answers?: boolean;
+  total_questions?: number;
+  total_points?: number;
 }
 
 interface QuizQuestion {
@@ -346,20 +349,34 @@ export default function StudentQuiz() {
     return new Date(dateString).toLocaleString();
   };
 
-  const getQuizStatus = (quiz: Quiz): { status: string; label: string; color: string } => {
+  const getQuizStatus = (
+    quiz: Quiz,
+  ): { status: string; label: string; color: string } => {
     const now = new Date();
     const startDate = quiz.start_date ? new Date(quiz.start_date) : null;
     const endDate = quiz.end_date ? new Date(quiz.end_date) : null;
 
     if (endDate && now > endDate) {
-      return { status: "closed", label: "Closed", color: "bg-red-500/10 text-red-600 border-red-200/50" };
+      return {
+        status: "closed",
+        label: "Closed",
+        color: "bg-red-500/10 text-red-600 border-red-200/50",
+      };
     }
 
     if (startDate && now < startDate) {
-      return { status: "upcoming", label: "Upcoming", color: "bg-blue-500/10 text-blue-600 border-blue-200/50" };
+      return {
+        status: "upcoming",
+        label: "Upcoming",
+        color: "bg-blue-500/10 text-blue-600 border-blue-200/50",
+      };
     }
 
-    return { status: "active", label: "Active", color: "bg-green-500/10 text-green-600 border-green-200/50" };
+    return {
+      status: "active",
+      label: "Active",
+      color: "bg-green-500/10 text-green-600 border-green-200/50",
+    };
   };
 
   const getStatusColor = (status: string) => {
@@ -649,47 +666,52 @@ export default function StudentQuiz() {
                           View Score
                           <Trophy className="h-3 w-3 ml-2 opacity-70" />
                         </Button>
-                      ) : (() => {
-                        const quizStatus = getQuizStatus(quiz);
-                        if (quizStatus.status === "upcoming") {
+                      ) : (
+                        (() => {
+                          const quizStatus = getQuizStatus(quiz);
+                          if (quizStatus.status === "upcoming") {
+                            return (
+                              <Button
+                                className="w-full opacity-60 cursor-not-allowed"
+                                size="sm"
+                                disabled
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Coming Soon
+                                <span className="text-xs ml-auto">
+                                  {quiz.start_date &&
+                                    new Date(
+                                      quiz.start_date,
+                                    ).toLocaleDateString()}
+                                </span>
+                              </Button>
+                            );
+                          }
+                          if (quizStatus.status === "closed") {
+                            return (
+                              <Button
+                                className="w-full opacity-60 cursor-not-allowed"
+                                size="sm"
+                                disabled
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Quiz Closed
+                              </Button>
+                            );
+                          }
                           return (
                             <Button
-                              className="w-full opacity-60 cursor-not-allowed"
+                              className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
                               size="sm"
-                              disabled
+                              onClick={() => takeQuiz(quiz)}
                             >
-                              <Clock className="h-4 w-4 mr-2" />
-                              Coming Soon
-                              <span className="text-xs ml-auto">
-                                {quiz.start_date && new Date(quiz.start_date).toLocaleDateString()}
-                              </span>
+                              <Play className="h-4 w-4 mr-2" />
+                              Start Quiz
+                              <Zap className="h-3 w-3 ml-2 opacity-70" />
                             </Button>
                           );
-                        }
-                        if (quizStatus.status === "closed") {
-                          return (
-                            <Button
-                              className="w-full opacity-60 cursor-not-allowed"
-                              size="sm"
-                              disabled
-                            >
-                              <X className="h-4 w-4 mr-2" />
-                              Quiz Closed
-                            </Button>
-                          );
-                        }
-                        return (
-                          <Button
-                            className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
-                            size="sm"
-                            onClick={() => takeQuiz(quiz)}
-                          >
-                            <Play className="h-4 w-4 mr-2" />
-                            Start Quiz
-                            <Zap className="h-3 w-3 ml-2 opacity-70" />
-                          </Button>
-                        );
-                      })()}
+                        })()
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
