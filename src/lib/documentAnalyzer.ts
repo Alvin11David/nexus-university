@@ -105,22 +105,58 @@ export class DocumentAnalyzer {
   }
 
   private static async extractTextFromPDF(file: File): Promise<string> {
-    // For now, return a placeholder. In production, you'd use a library like pdf-parse
-    // For this demo, we'll assume the PDF content is text-based
     try {
-      return await this.readTextFile(file);
-    } catch {
-      throw new Error('PDF parsing requires additional libraries. Please upload a text file for now.');
+      // Dynamically import pdfjs-dist
+      const pdfjs = await import('pdfjs-dist');
+      
+      // Read file as ArrayBuffer
+      const arrayBuffer = await this.readFileAsArrayBuffer(file);
+      
+      // Load PDF document
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+      
+      let fullText = '';
+      
+      // Extract text from each page
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str || '')
+          .join(' ');
+        fullText += pageText + '\n';
+      }
+      
+      return fullText.trim();
+    } catch (error) {
+      throw new Error(`PDF parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
   private static async extractTextFromWord(file: File): Promise<string> {
-    // For now, return a placeholder. In production, you'd use mammoth.js or similar
     try {
-      return await this.readTextFile(file);
-    } catch {
-      throw new Error('Word document parsing requires additional libraries. Please upload a text file for now.');
+      // Dynamically import mammoth
+      const mammoth = await import('mammoth');
+      
+      // Read file as ArrayBuffer
+      const arrayBuffer = await this.readFileAsArrayBuffer(file);
+      
+      // Extract text from Word document
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      
+      return result.value.trim();
+    } catch (error) {
+      throw new Error(`Word document parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  private static async readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsArrayBuffer(file);
+    });
   }
 
   private static extractQuestions(text: string): ExtractedQuestion[] {
