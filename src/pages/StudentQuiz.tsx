@@ -315,6 +315,7 @@ export default function StudentQuiz() {
     setQuizStartTime(null);
     setShowResults(false);
     setQuizScore(0);
+    setTotalPoints(0);
   };
 
   const formatDateTime = (dateString: string) => {
