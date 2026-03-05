@@ -26,7 +26,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, and, or, addDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  and,
+  or,
+  addDoc,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
@@ -80,6 +92,8 @@ export default function StudentQuiz() {
   const [quizStartTime, setQuizStartTime] = useState<Date | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  const [quizAttempts, setQuizAttempts] = useState<Record<string, QuizAttempt>>({});
+  const [totalPoints, setTotalPoints] = useState(0);
 
   useEffect(() => {
     fetchQuizzes();
@@ -116,16 +130,32 @@ export default function StudentQuiz() {
         and(
           where("status", "==", "active"),
           where("start_date", "<=", now),
-          or(
-            where("end_date", "==", null),
-            where("end_date", ">=", now)
-          )
+          or(where("end_date", "==", null), where("end_date", ">=", now)),
         ),
-        orderBy("created_at", "desc")
+        orderBy("created_at", "desc"),
       );
 
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Quiz[];
+      const data = querySnapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Quiz[];
+
+      // Load student's quiz attempts
+      if (user?.uid) {
+        const attemptsRef = collection(db, "quiz_attempts");
+        const attemptsQuery = query(
+          attemptsRef,
+          where("student_id", "==", user.uid)
+        );
+        const attemptsSnapshot = await getDocs(attemptsQuery);
+        const attemptsMap: Record<string, QuizAttempt> = {};
+        attemptsSnapshot.docs.forEach((doc) => {
+          const attempt = doc.data() as QuizAttempt;
+          attemptsMap[attempt.quiz_id] = attempt;
+        });
+        setQuizAttempts(attemptsMap);
+      }
 
       // Check for any expired active quizzes and auto-close them
       await autoCloseExpiredQuizzes();
@@ -206,21 +236,30 @@ export default function StudentQuiz() {
 
     try {
       const timeTaken = Math.floor(
-        (new Date().getTime() - quizStartTime.getTime()) / 1000
+        (new Date().getTime() - quizStartTime.getTime()) / 1000,
       );
 
       // Calculate score
       let totalScore = 0;
       quizQuestions.forEach((question) => {
-        if (answers[question.id] !== undefined && answers[question.id] === question.correct_answer) {
+        if (
+          answers[question.id] !== undefined &&
+          answers[question.id] === question.correct_answer
+        ) {
           totalScore += question.points;
         }
       });
 
       setQuizScore(totalScore);
 
+      // Calculate total points
+      let total = 0;
+      quizQuestions.forEach((question) => {
+        total += question.points;
+      });
+
       // Save quiz attempt to database for lecturer grading
-      await addDoc(collection(db, "quiz_attempts"), {
+      const attemptRef = await addDoc(collection(db, "quiz_attempts"), {
         quiz_id: takingQuiz.id,
         student_id: user.uid,
         answers: answers,
@@ -228,16 +267,32 @@ export default function StudentQuiz() {
         started_at: quizStartTime.toISOString(),
         completed_at: new Date().toISOString(),
         score: takingQuiz.show_answers ? totalScore : null, // Set score if showing answers, otherwise null
+        total_points: total,
         status: takingQuiz.show_answers ? "graded" : "submitted",
         time_taken: timeTaken,
       });
+
+      // Update attempts state
+      setQuizAttempts(prev => ({
+        ...prev,
+        [takingQuiz.id]: {
+          id: attemptRef.id,
+          quiz_id: takingQuiz.id,
+          student_id: user.uid,
+          answers: answers,
+          score: takingQuiz.show_answers ? totalScore : 0,
+          total_points: total,
+          completed_at: new Date().toISOString(),
+          time_taken: timeTaken
+        }
+      }));
 
       setShowResults(true);
 
       toast({
         title: "Quiz Submitted!",
-        description: takingQuiz.show_answers 
-          ? "Your answers have been reviewed!" 
+        description: takingQuiz.show_answers
+          ? "Your answers have been reviewed!"
           : "Your quiz has been submitted for grading. You will receive your results once graded.",
       });
     } catch (error: any) {
@@ -299,7 +354,8 @@ export default function StudentQuiz() {
               Available Quizzes
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
-              Test your knowledge and track your progress with interactive quizzes designed by your instructors
+              Test your knowledge and track your progress with interactive
+              quizzes designed by your instructors
             </p>
           </div>
 
@@ -314,11 +370,19 @@ export default function StudentQuiz() {
               </div>
               <div className="text-center space-y-3">
                 <h3 className="text-xl font-semibold">Loading Quizzes</h3>
-                <p className="text-muted-foreground">Fetching available quizzes...</p>
+                <p className="text-muted-foreground">
+                  Fetching available quizzes...
+                </p>
                 <div className="flex justify-center gap-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div
+                    className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: "0.1s" }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: "0.2s" }}
+                  ></div>
                 </div>
               </div>
             </div>
@@ -342,7 +406,8 @@ export default function StudentQuiz() {
                 No Active Quizzes Yet
               </h3>
               <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-                Your lecturers haven't published any quizzes yet. Check back later or contact your instructor.
+                Your lecturers haven't published any quizzes yet. Check back
+                later or contact your instructor.
               </p>
 
               <div className="bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl p-6 mb-8 max-w-lg mx-auto border border-border/50">
@@ -558,12 +623,23 @@ export default function StudentQuiz() {
                 </div>
                 <div className="flex items-center gap-3">
                   {timeLeft !== null && (
-                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${timeLeft < 300 ? 'bg-red-500/20 border border-red-400/30' : 'bg-white/20'
-                      }`}>
-                      <Timer className={`h-4 w-4 ${timeLeft < 300 ? 'text-red-300' : ''}`} />
-                      <span className={`font-mono text-sm font-semibold ${timeLeft < 300 ? 'text-red-200' : ''
-                        }`}>
-                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${
+                        timeLeft < 300
+                          ? "bg-red-500/20 border border-red-400/30"
+                          : "bg-white/20"
+                      }`}
+                    >
+                      <Timer
+                        className={`h-4 w-4 ${timeLeft < 300 ? "text-red-300" : ""}`}
+                      />
+                      <span
+                        className={`font-mono text-sm font-semibold ${
+                          timeLeft < 300 ? "text-red-200" : ""
+                        }`}
+                      >
+                        {Math.floor(timeLeft / 60)}:
+                        {(timeLeft % 60).toString().padStart(2, "0")}
                       </span>
                     </div>
                   )}
@@ -582,12 +658,16 @@ export default function StudentQuiz() {
               <div className="relative mt-4">
                 <div className="flex items-center justify-between text-xs text-blue-100 mb-2">
                   <span>Progress</span>
-                  <span>{currentQuestionIndex + 1} of {quizQuestions.length}</span>
+                  <span>
+                    {currentQuestionIndex + 1} of {quizQuestions.length}
+                  </span>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-2">
                   <div
                     className="bg-white rounded-full h-2 transition-all duration-500 ease-out"
-                    style={{ width: `${((currentQuestionIndex + 1) / quizQuestions.length) * 100}%` }}
+                    style={{
+                      width: `${((currentQuestionIndex + 1) / quizQuestions.length) * 100}%`,
+                    }}
                   ></div>
                 </div>
               </div>
@@ -611,7 +691,10 @@ export default function StudentQuiz() {
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Award className="h-4 w-4" />
-                              <span>{quizQuestions[currentQuestionIndex].points} points</span>
+                              <span>
+                                {quizQuestions[currentQuestionIndex].points}{" "}
+                                points
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -620,19 +703,26 @@ export default function StudentQuiz() {
                       <div className="space-y-3">
                         {quizQuestions[currentQuestionIndex].options.map(
                           (option, index) => {
-                            const isSelected = answers[quizQuestions[currentQuestionIndex].id] === index;
+                            const isSelected =
+                              answers[
+                                quizQuestions[currentQuestionIndex].id
+                              ] === index;
                             return (
                               <label
                                 key={index}
-                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${isSelected
-                                  ? 'border-primary bg-primary/5 shadow-md'
-                                  : 'border-border hover:border-primary/50 hover:bg-accent/50'
-                                  }`}
+                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                                  isSelected
+                                    ? "border-primary bg-primary/5 shadow-md"
+                                    : "border-border hover:border-primary/50 hover:bg-accent/50"
+                                }`}
                               >
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
-                                  ? 'border-primary bg-primary'
-                                  : 'border-muted-foreground group-hover:border-primary'
-                                  }`}>
+                                <div
+                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                    isSelected
+                                      ? "border-primary bg-primary"
+                                      : "border-muted-foreground group-hover:border-primary"
+                                  }`}
+                                >
                                   {isSelected && (
                                     <div className="w-3 h-3 bg-white rounded-full"></div>
                                   )}
@@ -645,13 +735,17 @@ export default function StudentQuiz() {
                                   onChange={() =>
                                     setAnswers((prev) => ({
                                       ...prev,
-                                      [quizQuestions[currentQuestionIndex].id]: index,
+                                      [quizQuestions[currentQuestionIndex].id]:
+                                        index,
                                     }))
                                   }
                                   className="sr-only"
                                 />
-                                <span className={`flex-1 text-sm leading-relaxed ${isSelected ? 'font-medium text-primary' : ''
-                                  }`}>
+                                <span
+                                  className={`flex-1 text-sm leading-relaxed ${
+                                    isSelected ? "font-medium text-primary" : ""
+                                  }`}
+                                >
                                   {option}
                                 </span>
                                 {isSelected && (
@@ -659,7 +753,7 @@ export default function StudentQuiz() {
                                 )}
                               </label>
                             );
-                          }
+                          },
                         )}
                       </div>
                     </div>
@@ -672,7 +766,7 @@ export default function StudentQuiz() {
                         variant="outline"
                         onClick={() =>
                           setCurrentQuestionIndex((prev) =>
-                            Math.max(0, prev - 1)
+                            Math.max(0, prev - 1),
                           )
                         }
                         disabled={currentQuestionIndex === 0}
@@ -684,22 +778,25 @@ export default function StudentQuiz() {
 
                       <div className="flex flex-col items-center gap-2">
                         <div className="text-sm font-medium text-muted-foreground">
-                          Question {currentQuestionIndex + 1} of {quizQuestions.length}
+                          Question {currentQuestionIndex + 1} of{" "}
+                          {quizQuestions.length}
                         </div>
                         <div className="flex gap-1">
                           {quizQuestions.map((_, index) => {
-                            const isAnswered = answers[quizQuestions[index].id] !== undefined;
+                            const isAnswered =
+                              answers[quizQuestions[index].id] !== undefined;
                             const isCurrent = index === currentQuestionIndex;
                             return (
                               <button
                                 key={index}
                                 onClick={() => setCurrentQuestionIndex(index)}
-                                className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${isCurrent
-                                  ? 'bg-primary text-white shadow-lg scale-110'
-                                  : isAnswered
-                                    ? 'bg-green-500 text-white hover:bg-green-600'
-                                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                                  }`}
+                                className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${
+                                  isCurrent
+                                    ? "bg-primary text-white shadow-lg scale-110"
+                                    : isAnswered
+                                      ? "bg-green-500 text-white hover:bg-green-600"
+                                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                                }`}
                               >
                                 {index + 1}
                               </button>
@@ -721,7 +818,7 @@ export default function StudentQuiz() {
                         <Button
                           onClick={() =>
                             setCurrentQuestionIndex((prev) =>
-                              Math.min(quizQuestions.length - 1, prev + 1)
+                              Math.min(quizQuestions.length - 1, prev + 1),
                             )
                           }
                           className="gap-2"
@@ -735,10 +832,15 @@ export default function StudentQuiz() {
                     {/* Progress summary */}
                     <div className="flex items-center justify-between text-sm text-muted-foreground pt-4 border-t border-border/50">
                       <span>
-                        Answered: {Object.keys(answers).length} of {quizQuestions.length}
+                        Answered: {Object.keys(answers).length} of{" "}
+                        {quizQuestions.length}
                       </span>
                       <span>
-                        {Math.round((Object.keys(answers).length / quizQuestions.length) * 100)}% complete
+                        {Math.round(
+                          (Object.keys(answers).length / quizQuestions.length) *
+                            100,
+                        )}
+                        % complete
                       </span>
                     </div>
                   </div>
@@ -771,13 +873,18 @@ export default function StudentQuiz() {
                         <h3 className="text-xl font-bold">Answer Review</h3>
                         {quizQuestions.map((question, index) => {
                           const studentAnswerIndex = answers[question.id];
-                          const isCorrect = studentAnswerIndex === question.correct_answer;
-                          const studentAnswer = studentAnswerIndex !== undefined ? question.options[studentAnswerIndex] : "Not answered";
-                          const correctAnswer = question.options[question.correct_answer];
+                          const isCorrect =
+                            studentAnswerIndex === question.correct_answer;
+                          const studentAnswer =
+                            studentAnswerIndex !== undefined
+                              ? question.options[studentAnswerIndex]
+                              : "Not answered";
+                          const correctAnswer =
+                            question.options[question.correct_answer];
 
                           return (
-                            <Card 
-                              key={question.id} 
+                            <Card
+                              key={question.id}
                               className={`p-6 border-2 transition-all ${
                                 isCorrect
                                   ? "border-green-500/30 bg-green-50/30 dark:bg-green-950/20"
@@ -797,7 +904,9 @@ export default function StudentQuiz() {
                                 </div>
 
                                 <div className="space-y-2">
-                                  <p className="font-semibold">{question.question}</p>
+                                  <p className="font-semibold">
+                                    {question.question}
+                                  </p>
                                   <p className="text-sm text-muted-foreground">
                                     Points: {question.points}
                                   </p>
@@ -806,8 +915,10 @@ export default function StudentQuiz() {
                                 {/* Options Display */}
                                 <div className="space-y-2 mt-4">
                                   {question.options.map((option, optIndex) => {
-                                    const isStudentAnswer = studentAnswerIndex === optIndex;
-                                    const isCorrectOption = optIndex === question.correct_answer;
+                                    const isStudentAnswer =
+                                      studentAnswerIndex === optIndex;
+                                    const isCorrectOption =
+                                      optIndex === question.correct_answer;
 
                                     return (
                                       <div
@@ -816,25 +927,33 @@ export default function StudentQuiz() {
                                           isCorrectOption
                                             ? "border-green-500 bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-100 font-medium"
                                             : isStudentAnswer
-                                            ? "border-red-500 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 font-medium"
-                                            : "border-border bg-muted/30 text-muted-foreground"
+                                              ? "border-red-500 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 font-medium"
+                                              : "border-border bg-muted/30 text-muted-foreground"
                                         }`}
                                       >
                                         <div className="flex items-center gap-2">
                                           <span className="font-semibold">
-                                            {String.fromCharCode(65 + optIndex)}.
+                                            {String.fromCharCode(65 + optIndex)}
+                                            .
                                           </span>
                                           <span>{option}</span>
                                           {isCorrectOption && (
-                                            <Badge variant="default" className="ml-auto">
+                                            <Badge
+                                              variant="default"
+                                              className="ml-auto"
+                                            >
                                               Correct
                                             </Badge>
                                           )}
-                                          {isStudentAnswer && !isCorrectOption && (
-                                            <Badge variant="destructive" className="ml-auto">
-                                              Your Answer
-                                            </Badge>
-                                          )}
+                                          {isStudentAnswer &&
+                                            !isCorrectOption && (
+                                              <Badge
+                                                variant="destructive"
+                                                className="ml-auto"
+                                              >
+                                                Your Answer
+                                              </Badge>
+                                            )}
                                         </div>
                                       </div>
                                     );
@@ -864,7 +983,12 @@ export default function StudentQuiz() {
                           <BarChart3 className="h-4 w-4" />
                           View All Quizzes
                         </Button>
-                        <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={resetQuiz}
+                          size="lg"
+                          className="gap-2"
+                        >
                           <Play className="h-4 w-4" />
                           Take Another Quiz
                         </Button>
@@ -875,9 +999,7 @@ export default function StudentQuiz() {
                     <div className="space-y-8">
                       {/* Result icon */}
                       <div className="relative">
-                        <div className="text-8xl animate-pulse">
-                          📝
-                        </div>
+                        <div className="text-8xl animate-pulse">📝</div>
                         <div className="absolute -top-2 -right-2">
                           <CheckCircle2 className="h-8 w-8 text-green-500" />
                         </div>
@@ -888,7 +1010,9 @@ export default function StudentQuiz() {
                           Quiz Submitted!
                         </h3>
                         <p className="text-muted-foreground text-lg">
-                          Your quiz has been submitted for grading. You will receive your results once your lecturer has reviewed it.
+                          Your quiz has been submitted for grading. You will
+                          receive your results once your lecturer has reviewed
+                          it.
                         </p>
                       </div>
 
@@ -897,10 +1021,13 @@ export default function StudentQuiz() {
                         <div className="space-y-4">
                           <div className="flex items-center justify-center gap-2 text-primary">
                             <Clock className="h-5 w-5" />
-                            <span className="font-medium">Submitted for Grading</span>
+                            <span className="font-medium">
+                              Submitted for Grading
+                            </span>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Your lecturer will review your answers and provide feedback. Check back later for your results.
+                            Your lecturer will review your answers and provide
+                            feedback. Check back later for your results.
                           </p>
                         </div>
                       </div>
@@ -911,7 +1038,12 @@ export default function StudentQuiz() {
                           <BarChart3 className="h-4 w-4" />
                           View All Quizzes
                         </Button>
-                        <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={resetQuiz}
+                          size="lg"
+                          className="gap-2"
+                        >
                           <Play className="h-4 w-4" />
                           Take Another Quiz
                         </Button>
