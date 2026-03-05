@@ -649,17 +649,47 @@ export default function StudentQuiz() {
                           View Score
                           <Trophy className="h-3 w-3 ml-2 opacity-70" />
                         </Button>
-                      ) : (
-                        <Button
-                          className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
-                          size="sm"
-                          onClick={() => takeQuiz(quiz)}
-                        >
-                          <Play className="h-4 w-4 mr-2" />
-                          Start Quiz
-                          <Zap className="h-3 w-3 ml-2 opacity-70" />
-                        </Button>
-                      )}
+                      ) : (() => {
+                        const quizStatus = getQuizStatus(quiz);
+                        if (quizStatus.status === "upcoming") {
+                          return (
+                            <Button
+                              className="w-full opacity-60 cursor-not-allowed"
+                              size="sm"
+                              disabled
+                            >
+                              <Clock className="h-4 w-4 mr-2" />
+                              Coming Soon
+                              <span className="text-xs ml-auto">
+                                {quiz.start_date && new Date(quiz.start_date).toLocaleDateString()}
+                              </span>
+                            </Button>
+                          );
+                        }
+                        if (quizStatus.status === "closed") {
+                          return (
+                            <Button
+                              className="w-full opacity-60 cursor-not-allowed"
+                              size="sm"
+                              disabled
+                            >
+                              <X className="h-4 w-4 mr-2" />
+                              Quiz Closed
+                            </Button>
+                          );
+                        }
+                        return (
+                          <Button
+                            className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+                            size="sm"
+                            onClick={() => takeQuiz(quiz)}
+                          >
+                            <Play className="h-4 w-4 mr-2" />
+                            Start Quiz
+                            <Zap className="h-3 w-3 ml-2 opacity-70" />
+                          </Button>
+                        );
+                      })()}
                     </CardContent>
                   </Card>
                 </motion.div>
