@@ -588,10 +588,11 @@ export default function StudentQuiz() {
                           className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
                           size="sm"
                           onClick={() => {
+                            const attempt = quizAttempts[quiz.id];
                             setShowResults(true);
                             setTakingQuiz(quiz);
-                            setQuizScore(quizAttempts[quiz.id].score);
-                            setTotalPoints(quizAttempts[quiz.id].total_points);
+                            setQuizScore(attempt.score);
+                            setTotalPoints(attempt.total_points);
                           }}
                         >
                           <CheckCircle2 className="h-4 w-4 mr-2" />
