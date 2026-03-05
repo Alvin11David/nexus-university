@@ -37,14 +37,33 @@ export class DocumentAnalyzer {
     short_answer: [
       /^(\d+)\.\s*(.+?)\s*\n\s*Answer:\s*(.+?)(?:\n|$)/im,
       /^Question\s*\d*:\s*(.+?)\s*\n\s*Answer:\s*(.+?)(?:\n|$)/im,
-    ]
+    ],
   };
 
   // Keywords that indicate question types
   private static readonly TYPE_INDICATORS = {
-    multiple_choice: ["choose", "select", "which of the following", "a)", "b)", "c)", "d)", "1)", "2)", "3)", "4)"],
+    multiple_choice: [
+      "choose",
+      "select",
+      "which of the following",
+      "a)",
+      "b)",
+      "c)",
+      "d)",
+      "1)",
+      "2)",
+      "3)",
+      "4)",
+    ],
     true_false: ["true or false", "true/false", "t/f", "correct or incorrect"],
-    short_answer: ["explain", "describe", "what is", "define", "how does", "why does"]
+    short_answer: [
+      "explain",
+      "describe",
+      "what is",
+      "define",
+      "how does",
+      "why does",
+    ],
   };
 
   static async analyzeDocument(file: File): Promise<DocumentAnalysisResult> {
@@ -60,37 +79,41 @@ export class DocumentAnalyzer {
       // Generate metadata
       const metadata = {
         totalQuestions: questions.length,
-        questionTypes: [...new Set(questions.map(q => q.type))],
+        questionTypes: [...new Set(questions.map((q) => q.type))],
         estimatedDifficulty: this.estimateDifficulty(questions),
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
       };
 
       return {
         questions,
         metadata,
-        rawText
+        rawText,
       };
     } catch (error) {
       console.error("Document analysis error:", error);
-      throw new Error(`Failed to analyze document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to analyze document: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   private static async extractTextFromFile(file: File): Promise<string> {
     const fileType = file.type.toLowerCase();
 
-    if (fileType === 'text/plain') {
+    if (fileType === "text/plain") {
       return await this.readTextFile(file);
-    } else if (fileType === 'application/pdf') {
+    } else if (fileType === "application/pdf") {
       return await this.extractTextFromPDF(file);
-    } else if (fileType.includes('word') || fileType.includes('document')) {
+    } else if (fileType.includes("word") || fileType.includes("document")) {
       return await this.extractTextFromWord(file);
     } else {
       // Try to read as text for other formats
       try {
         return await this.readTextFile(file);
       } catch {
-        throw new Error(`Unsupported file type: ${fileType}. Please upload PDF, DOCX, or TXT files.`);
+        throw new Error(
+          `Unsupported file type: ${fileType}. Please upload PDF, DOCX, or TXT files.`,
+        );
       }
     }
   }
@@ -99,33 +122,79 @@ export class DocumentAnalyzer {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target?.result as string);
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsText(file);
     });
   }
 
   private static async extractTextFromPDF(file: File): Promise<string> {
-    // For now, return a placeholder. In production, you'd use a library like pdf-parse
-    // For this demo, we'll assume the PDF content is text-based
     try {
-      return await this.readTextFile(file);
-    } catch {
-      throw new Error('PDF parsing requires additional libraries. Please upload a text file for now.');
+      // Dynamically import pdfjs-dist
+      const pdfjs = await import("pdfjs-dist");
+
+      // Configure the worker - use local file from public folder
+      pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await this.readFileAsArrayBuffer(file);
+
+      // Load PDF document
+      const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+      let fullText = "";
+
+      // Extract text from each page
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str || "")
+          .join(" ");
+        fullText += pageText + "\n";
+      }
+
+      return fullText.trim();
+    } catch (error) {
+      throw new Error(
+        `PDF parsing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
   }
 
   private static async extractTextFromWord(file: File): Promise<string> {
-    // For now, return a placeholder. In production, you'd use mammoth.js or similar
     try {
-      return await this.readTextFile(file);
-    } catch {
-      throw new Error('Word document parsing requires additional libraries. Please upload a text file for now.');
+      // Dynamically import mammoth
+      const mammoth = await import("mammoth");
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await this.readFileAsArrayBuffer(file);
+
+      // Extract text from Word document
+      const result = await mammoth.extractRawText({ arrayBuffer });
+
+      return result.value.trim();
+    } catch (error) {
+      throw new Error(
+        `Word document parsing failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     }
+  }
+
+  private static async readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsArrayBuffer(file);
+    });
   }
 
   private static extractQuestions(text: string): ExtractedQuestion[] {
     const questions: ExtractedQuestion[] = [];
-    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
 
     let currentQuestion: Partial<ExtractedQuestion> | null = null;
     let questionBuffer: string[] = [];
@@ -137,7 +206,10 @@ export class DocumentAnalyzer {
       if (this.isQuestionStart(line)) {
         // Save previous question if exists
         if (currentQuestion && questionBuffer.length > 0) {
-          const completedQuestion = this.processQuestionBuffer(questionBuffer, currentQuestion);
+          const completedQuestion = this.processQuestionBuffer(
+            questionBuffer,
+            currentQuestion,
+          );
           if (completedQuestion) {
             questions.push(completedQuestion);
           }
@@ -148,7 +220,7 @@ export class DocumentAnalyzer {
           id: `q_${questions.length + 1}`,
           question: this.cleanQuestionText(line),
           originalText: line,
-          confidence: 0.8
+          confidence: 0.8,
         };
         questionBuffer = [line];
       } else if (currentQuestion) {
@@ -164,7 +236,10 @@ export class DocumentAnalyzer {
 
     // Process the last question
     if (currentQuestion && questionBuffer.length > 0) {
-      const completedQuestion = this.processQuestionBuffer(questionBuffer, currentQuestion);
+      const completedQuestion = this.processQuestionBuffer(
+        questionBuffer,
+        currentQuestion,
+      );
       if (completedQuestion) {
         questions.push(completedQuestion);
       }
@@ -186,7 +261,7 @@ export class DocumentAnalyzer {
     if (/^Question\s*\d*:?/i.test(line)) return true;
 
     // Check for question marks
-    if (line.includes('?') && line.length > 10) return true;
+    if (line.includes("?") && line.length > 10) return true;
 
     return false;
   }
@@ -194,34 +269,40 @@ export class DocumentAnalyzer {
   private static cleanQuestionText(text: string): string {
     // Remove numbering and clean up
     return text
-      .replace(/^\d+\.\s*/, '')
-      .replace(/^Question\s*\d*:?\s*/i, '')
+      .replace(/^\d+\.\s*/, "")
+      .replace(/^Question\s*\d*:?\s*/i, "")
       .trim();
   }
 
   private static isAnswerLine(line: string): boolean {
-    return /^Answer:?\s*/i.test(line) ||
-           /^Correct:?\s*/i.test(line) ||
-           /^\([A-Da-d]\)/.test(line);
+    return (
+      /^Answer:?\s*/i.test(line) ||
+      /^Correct:?\s*/i.test(line) ||
+      /^\([A-Da-d]\)/.test(line)
+    );
   }
 
   private static extractAnswer(line: string): string {
-    const match = line.match(/^Answer:?\s*(.+)/i) ||
-                  line.match(/^Correct:?\s*(.+)/i) ||
-                  line.match(/^\(([A-Da-d])\)/);
+    const match =
+      line.match(/^Answer:?\s*(.+)/i) ||
+      line.match(/^Correct:?\s*(.+)/i) ||
+      line.match(/^\(([A-Da-d])\)/);
 
     return match ? match[1].trim() : line.trim();
   }
 
-  private static processQuestionBuffer(buffer: string[], question: Partial<ExtractedQuestion>): ExtractedQuestion | null {
-    const fullText = buffer.join('\n');
+  private static processQuestionBuffer(
+    buffer: string[],
+    question: Partial<ExtractedQuestion>,
+  ): ExtractedQuestion | null {
+    const fullText = buffer.join("\n");
 
     // Determine question type
     const questionType = this.determineQuestionType(fullText);
 
     // Extract options for multiple choice
     let options: string[] | undefined;
-    if (questionType === 'multiple_choice') {
+    if (questionType === "multiple_choice") {
       options = this.extractOptions(buffer);
     }
 
@@ -233,33 +314,43 @@ export class DocumentAnalyzer {
 
     return {
       id: question.id || `q_${Date.now()}`,
-      question: question.question || '',
+      question: question.question || "",
       type: questionType,
       options,
-      correct_answer: question.correct_answer || '',
-      explanation: '',
-      points: difficulty === 'easy' ? 1 : difficulty === 'medium' ? 2 : 3,
+      correct_answer: question.correct_answer || "",
+      explanation: "",
+      points: difficulty === "easy" ? 1 : difficulty === "medium" ? 2 : 3,
       difficulty,
       confidence,
-      originalText: question.originalText || fullText
+      originalText: question.originalText || fullText,
     };
   }
 
-  private static determineQuestionType(text: string): "multiple_choice" | "true_false" | "short_answer" {
+  private static determineQuestionType(
+    text: string,
+  ): "multiple_choice" | "true_false" | "short_answer" {
     const lowerText = text.toLowerCase();
 
     // Check for multiple choice indicators
-    if (this.TYPE_INDICATORS.multiple_choice.some(indicator => lowerText.includes(indicator))) {
-      return 'multiple_choice';
+    if (
+      this.TYPE_INDICATORS.multiple_choice.some((indicator) =>
+        lowerText.includes(indicator),
+      )
+    ) {
+      return "multiple_choice";
     }
 
     // Check for true/false indicators
-    if (this.TYPE_INDICATORS.true_false.some(indicator => lowerText.includes(indicator))) {
-      return 'true_false';
+    if (
+      this.TYPE_INDICATORS.true_false.some((indicator) =>
+        lowerText.includes(indicator),
+      )
+    ) {
+      return "true_false";
     }
 
     // Default to short answer
-    return 'short_answer';
+    return "short_answer";
   }
 
   private static extractOptions(lines: string[]): string[] {
@@ -275,46 +366,53 @@ export class DocumentAnalyzer {
     return options;
   }
 
-  private static estimateQuestionDifficulty(text: string): "easy" | "medium" | "hard" {
+  private static estimateQuestionDifficulty(
+    text: string,
+  ): "easy" | "medium" | "hard" {
     const words = text.split(/\s+/).length;
 
-    if (words < 20) return 'easy';
-    if (words < 50) return 'medium';
-    return 'hard';
+    if (words < 20) return "easy";
+    if (words < 50) return "medium";
+    return "hard";
   }
 
   private static calculateConfidence(text: string, type: string): number {
     let confidence = 0.5; // Base confidence
 
     // Structured questions get higher confidence
-    if (text.includes('Answer:')) confidence += 0.2;
-    if (text.includes('?')) confidence += 0.1;
-    if (type === 'multiple_choice' && text.match(/[a-dA-D][\).\s]/g)) confidence += 0.2;
+    if (text.includes("Answer:")) confidence += 0.2;
+    if (text.includes("?")) confidence += 0.1;
+    if (type === "multiple_choice" && text.match(/[a-dA-D][\).\s]/g))
+      confidence += 0.2;
 
     return Math.min(confidence, 1.0);
   }
 
   private static fallbackQuestionExtraction(text: string): ExtractedQuestion[] {
     // Simple fallback: split by double newlines and treat each block as a potential question
-    const blocks = text.split(/\n\s*\n/).filter(block => block.trim().length > 10);
+    const blocks = text
+      .split(/\n\s*\n/)
+      .filter((block) => block.trim().length > 10);
 
     return blocks.slice(0, 20).map((block, index) => ({
       id: `q_${index + 1}`,
-      question: block.split('\n')[0].trim(),
-      type: 'short_answer' as const,
-      correct_answer: '',
-      explanation: '',
+      question: block.split("\n")[0].trim(),
+      type: "short_answer" as const,
+      correct_answer: "",
+      explanation: "",
       points: 2,
-      difficulty: 'medium' as const,
+      difficulty: "medium" as const,
       confidence: 0.3,
-      originalText: block
+      originalText: block,
     }));
   }
 
-  private static estimateDifficulty(questions: ExtractedQuestion[]): "easy" | "medium" | "hard" | "mixed" {
-    if (questions.length === 0) return 'medium';
+  private static estimateDifficulty(
+    questions: ExtractedQuestion[],
+  ): "easy" | "medium" | "hard" | "mixed" {
+    if (questions.length === 0) return "medium";
 
-    const difficulties = questions.map(q => q.difficulty);
+    const difficulties = questions.map((q) => q.difficulty);
     const uniqueDifficulties = [...new Set(difficulties)];
 
     if (uniqueDifficulties.length === 1) {
@@ -322,16 +420,19 @@ export class DocumentAnalyzer {
     }
 
     // Check if mostly one difficulty
-    const counts = difficulties.reduce((acc, diff) => {
-      acc[diff] = (acc[diff] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const counts = difficulties.reduce(
+      (acc, diff) => {
+        acc[diff] = (acc[diff] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     const maxCount = Math.max(...Object.values(counts));
     if (maxCount > questions.length * 0.7) {
-      return Object.keys(counts).find(key => counts[key] === maxCount) as any;
+      return Object.keys(counts).find((key) => counts[key] === maxCount) as any;
     }
 
-    return 'mixed';
+    return "mixed";
   }
 }

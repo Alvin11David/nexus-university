@@ -26,7 +26,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, and, or, addDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  and,
+  or,
+  addDoc,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
@@ -36,13 +48,17 @@ interface Quiz {
   title: string;
   description: string | null;
   course_id: string | null;
-  time_limit_minutes: number | null;
-  max_attempts: number;
+  time_limit?: number;
+  time_limit_minutes?: number | null;
+  max_attempts?: number;
   passing_score: number | null;
   status: "draft" | "active" | "closed";
   start_date: string | null;
   end_date: string | null;
   created_at: string;
+  show_answers?: boolean;
+  total_questions?: number;
+  total_points?: number;
 }
 
 interface QuizQuestion {
@@ -79,6 +95,10 @@ export default function StudentQuiz() {
   const [quizStartTime, setQuizStartTime] = useState<Date | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [quizScore, setQuizScore] = useState(0);
+  const [quizAttempts, setQuizAttempts] = useState<Record<string, QuizAttempt>>(
+    {},
+  );
+  const [totalPoints, setTotalPoints] = useState(0);
 
   useEffect(() => {
     fetchQuizzes();
@@ -114,17 +134,32 @@ export default function StudentQuiz() {
         quizzesRef,
         and(
           where("status", "==", "active"),
-          where("start_date", "<=", now),
-          or(
-            where("end_date", "==", null),
-            where("end_date", ">=", now)
-          )
+          or(where("end_date", "==", null), where("end_date", ">=", now)),
         ),
-        orderBy("created_at", "desc")
+        orderBy("created_at", "desc"),
       );
 
       const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Quiz[];
+      const data = querySnapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as Quiz[];
+
+      // Load student's quiz attempts
+      if (user?.uid) {
+        const attemptsRef = collection(db, "quiz_attempts");
+        const attemptsQuery = query(
+          attemptsRef,
+          where("student_id", "==", user.uid),
+        );
+        const attemptsSnapshot = await getDocs(attemptsQuery);
+        const attemptsMap: Record<string, QuizAttempt> = {};
+        attemptsSnapshot.docs.forEach((doc) => {
+          const attempt = doc.data() as QuizAttempt;
+          attemptsMap[attempt.quiz_id] = attempt;
+        });
+        setQuizAttempts(attemptsMap);
+      }
 
       // Check for any expired active quizzes and auto-close them
       await autoCloseExpiredQuizzes();
@@ -144,57 +179,97 @@ export default function StudentQuiz() {
 
   const takeQuiz = async (quiz: Quiz) => {
     try {
-      // For now, we'll simulate quiz questions since the questions table might not exist yet
-      // In a real implementation, you'd fetch questions from a quiz_questions table
-      const mockQuestions: QuizQuestion[] = [
-        {
-          id: "1",
-          quiz_id: quiz.id,
-          question: "What is the capital of France?",
-          options: ["London", "Berlin", "Paris", "Madrid"],
-          correct_answer: 2,
-          points: 10,
-          explanation: "Paris is the capital and most populous city of France.",
-        },
-        {
-          id: "2",
-          quiz_id: quiz.id,
-          question:
-            "Which programming language is known as the 'mother of all languages'?",
-          options: ["Python", "C", "Java", "JavaScript"],
-          correct_answer: 1,
-          points: 10,
-          explanation:
-            "C is often called the mother of all languages because many modern languages are derived from it.",
-        },
-        {
-          id: "3",
-          quiz_id: quiz.id,
-          question: "What does CPU stand for?",
-          options: [
-            "Central Processing Unit",
-            "Computer Personal Unit",
-            "Central Program Utility",
-            "Computer Processing Utility",
-          ],
-          correct_answer: 0,
-          points: 10,
-          explanation:
-            "CPU stands for Central Processing Unit, which is the brain of the computer.",
-        },
-      ];
+      // Check if quiz has started
+      const now = new Date();
+      const startDate = quiz.start_date ? new Date(quiz.start_date) : null;
+      const endDate = quiz.end_date ? new Date(quiz.end_date) : null;
 
-      setQuizQuestions(mockQuestions);
+      if (startDate && now < startDate) {
+        toast({
+          title: "Quiz Not Available Yet",
+          description: `This quiz will be available on ${startDate.toLocaleString()}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (endDate && now > endDate) {
+        toast({
+          title: "Quiz Closed",
+          description: "This quiz is no longer available",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Fetch actual questions from Firestore
+      try {
+        const questionsRef = collection(db, "quizzes", quiz.id, "questions");
+        const questionsQuery = query(questionsRef);
+        const questionsSnapshot = await getDocs(questionsQuery);
+
+        const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          console.log("Question data:", data); // Debug log
+
+          // Ensure options is an array
+          let options = data.options || [];
+          if (!Array.isArray(options)) {
+            console.warn("Options is not an array:", options);
+            // Try to split if it's a string
+            if (typeof options === "string") {
+              options = options.split(",").map((opt: string) => opt.trim());
+            } else {
+              options = [];
+            }
+          }
+
+          return {
+            id: doc.id,
+            quiz_id: quiz.id,
+            question: data.question || "",
+            options: options,
+            correct_answer: data.correct_answer ?? 0,
+            points: data.points || 1,
+            explanation: data.explanation || "",
+          };
+        });
+
+        console.log("Loaded questions:", questions); // Debug log
+
+        if (questions.length === 0) {
+          toast({
+            title: "No Questions Found",
+            description: "This quiz has no questions yet",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        setQuizQuestions(questions);
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load quiz questions",
+          variant: "destructive",
+        });
+        return;
+      }
+
       setTakingQuiz(quiz);
       setCurrentQuestionIndex(0);
       setAnswers({});
       setQuizStartTime(new Date());
-      setTimeLeft(quiz.time_limit_minutes * 60); // Convert minutes to seconds
+
+      // Handle both time_limit and time_limit_minutes
+      const timeLimit = quiz.time_limit || quiz.time_limit_minutes || 30;
+      setTimeLeft(timeLimit * 60); // Convert minutes to seconds
       setShowResults(false);
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to start quiz",
+        description: "Failed to start quiz. Please try again.",
         variant: "destructive",
       });
     }
@@ -205,27 +280,66 @@ export default function StudentQuiz() {
 
     try {
       const timeTaken = Math.floor(
-        (new Date().getTime() - quizStartTime.getTime()) / 1000
+        (new Date().getTime() - quizStartTime.getTime()) / 1000,
       );
 
+      // Calculate score
+      let totalScore = 0;
+      quizQuestions.forEach((question) => {
+        if (
+          answers[question.id] !== undefined &&
+          answers[question.id] === question.correct_answer
+        ) {
+          totalScore += question.points;
+        }
+      });
+
+      setQuizScore(totalScore);
+
+      // Calculate total points
+      let total = 0;
+      quizQuestions.forEach((question) => {
+        total += question.points;
+      });
+
+      setTotalPoints(total);
+
       // Save quiz attempt to database for lecturer grading
-      await addDoc(collection(db, "quiz_attempts"), {
+      const attemptRef = await addDoc(collection(db, "quiz_attempts"), {
         quiz_id: takingQuiz.id,
         student_id: user.uid,
         answers: answers,
         attempt_number: 1, // TODO: Calculate actual attempt number
         started_at: quizStartTime.toISOString(),
         completed_at: new Date().toISOString(),
-        score: null, // Will be set by lecturer after grading
-        status: "submitted", // submitted, graded
+        score: takingQuiz.show_answers ? totalScore : null, // Set score if showing answers, otherwise null
+        total_points: total,
+        status: takingQuiz.show_answers ? "graded" : "submitted",
         time_taken: timeTaken,
       });
+
+      // Update attempts state
+      setQuizAttempts((prev) => ({
+        ...prev,
+        [takingQuiz.id]: {
+          id: attemptRef.id,
+          quiz_id: takingQuiz.id,
+          student_id: user.uid,
+          answers: answers,
+          score: takingQuiz.show_answers ? totalScore : 0,
+          total_points: total,
+          completed_at: new Date().toISOString(),
+          time_taken: timeTaken,
+        },
+      }));
 
       setShowResults(true);
 
       toast({
         title: "Quiz Submitted!",
-        description: "Your quiz has been submitted for grading. You will receive your results once graded.",
+        description: takingQuiz.show_answers
+          ? "Your answers have been reviewed!"
+          : "Your quiz has been submitted for grading. You will receive your results once graded.",
       });
     } catch (error: any) {
       console.error("Error submitting quiz:", error);
@@ -245,10 +359,41 @@ export default function StudentQuiz() {
     setQuizStartTime(null);
     setShowResults(false);
     setQuizScore(0);
+    setTotalPoints(0);
   };
 
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString();
+  };
+
+  const getQuizStatus = (
+    quiz: Quiz,
+  ): { status: string; label: string; color: string } => {
+    const now = new Date();
+    const startDate = quiz.start_date ? new Date(quiz.start_date) : null;
+    const endDate = quiz.end_date ? new Date(quiz.end_date) : null;
+
+    if (endDate && now > endDate) {
+      return {
+        status: "closed",
+        label: "Closed",
+        color: "bg-red-500/10 text-red-600 border-red-200/50",
+      };
+    }
+
+    if (startDate && now < startDate) {
+      return {
+        status: "upcoming",
+        label: "Upcoming",
+        color: "bg-blue-500/10 text-blue-600 border-blue-200/50",
+      };
+    }
+
+    return {
+      status: "active",
+      label: "Active",
+      color: "bg-green-500/10 text-green-600 border-green-200/50",
+    };
   };
 
   const getStatusColor = (status: string) => {
@@ -286,7 +431,8 @@ export default function StudentQuiz() {
               Available Quizzes
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
-              Test your knowledge and track your progress with interactive quizzes designed by your instructors
+              Test your knowledge and track your progress with interactive
+              quizzes designed by your instructors
             </p>
           </div>
 
@@ -301,11 +447,19 @@ export default function StudentQuiz() {
               </div>
               <div className="text-center space-y-3">
                 <h3 className="text-xl font-semibold">Loading Quizzes</h3>
-                <p className="text-muted-foreground">Fetching available quizzes...</p>
+                <p className="text-muted-foreground">
+                  Fetching available quizzes...
+                </p>
                 <div className="flex justify-center gap-1">
                   <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div
+                    className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: "0.1s" }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-primary rounded-full animate-bounce"
+                    style={{ animationDelay: "0.2s" }}
+                  ></div>
                 </div>
               </div>
             </div>
@@ -329,7 +483,8 @@ export default function StudentQuiz() {
                 No Active Quizzes Yet
               </h3>
               <p className="text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-                Your lecturers haven't published any quizzes yet. Check back later or contact your instructor.
+                Your lecturers haven't published any quizzes yet. Check back
+                later or contact your instructor.
               </p>
 
               <div className="bg-gradient-to-r from-muted/50 to-muted/30 rounded-2xl p-6 mb-8 max-w-lg mx-auto border border-border/50">
@@ -401,12 +556,27 @@ export default function StudentQuiz() {
                             <div className="p-2 bg-primary/10 rounded-lg">
                               <Target className="h-4 w-4 text-primary" />
                             </div>
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/10 text-primary border-primary/20"
-                            >
-                              Active Quiz
-                            </Badge>
+                            {(() => {
+                              const status = getQuizStatus(quiz);
+                              return (
+                                <Badge
+                                  variant="secondary"
+                                  className={`border ${status.color}`}
+                                >
+                                  {status.label}
+                                </Badge>
+                              );
+                            })()}
+                            {quizAttempts[quiz.id] && (
+                              <Badge
+                                variant="default"
+                                className="bg-green-500 hover:bg-green-600"
+                              >
+                                <Trophy className="h-3 w-3 mr-1" />
+                                {quizAttempts[quiz.id].score}/
+                                {quizAttempts[quiz.id].total_points}
+                              </Badge>
+                            )}
                           </div>
                           <CardTitle className="text-lg line-clamp-2 group-hover:text-primary transition-colors">
                             {quiz.title}
@@ -436,7 +606,8 @@ export default function StudentQuiz() {
                           <Timer className="h-4 w-4 text-blue-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-blue-700 dark:text-blue-300">
-                              {quiz.time_limit_minutes} min
+                              {quiz.time_limit || quiz.time_limit_minutes || 30}{" "}
+                              min
                             </div>
                             <div className="text-blue-600/70 dark:text-blue-400/70">
                               Time Limit
@@ -460,7 +631,7 @@ export default function StudentQuiz() {
                           <Users className="h-4 w-4 text-purple-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-purple-700 dark:text-purple-300">
-                              {quiz.max_attempts}
+                              {quiz.max_attempts || "Unlimited"}
                             </div>
                             <div className="text-purple-600/70 dark:text-purple-400/70">
                               Attempts
@@ -472,7 +643,7 @@ export default function StudentQuiz() {
                           <Trophy className="h-4 w-4 text-orange-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-orange-700 dark:text-orange-300">
-                              10
+                              {quiz.total_points || 0}
                             </div>
                             <div className="text-orange-600/70 dark:text-orange-400/70">
                               Points
@@ -497,15 +668,68 @@ export default function StudentQuiz() {
                       </div>
 
                       {/* Action button */}
-                      <Button
-                        className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
-                        size="sm"
-                        onClick={() => takeQuiz(quiz)}
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Quiz
-                        <Zap className="h-3 w-3 ml-2 opacity-70" />
-                      </Button>
+                      {quizAttempts[quiz.id] ? (
+                        <Button
+                          className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+                          size="sm"
+                          onClick={() => {
+                            const attempt = quizAttempts[quiz.id];
+                            setShowResults(true);
+                            setTakingQuiz(quiz);
+                            setQuizScore(attempt.score);
+                            setTotalPoints(attempt.total_points);
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          View Score
+                          <Trophy className="h-3 w-3 ml-2 opacity-70" />
+                        </Button>
+                      ) : (
+                        (() => {
+                          const quizStatus = getQuizStatus(quiz);
+                          if (quizStatus.status === "upcoming") {
+                            return (
+                              <Button
+                                className="w-full opacity-60 cursor-not-allowed"
+                                size="sm"
+                                disabled
+                              >
+                                <Clock className="h-4 w-4 mr-2" />
+                                Coming Soon
+                                <span className="text-xs ml-auto">
+                                  {quiz.start_date &&
+                                    new Date(
+                                      quiz.start_date,
+                                    ).toLocaleDateString()}
+                                </span>
+                              </Button>
+                            );
+                          }
+                          if (quizStatus.status === "closed") {
+                            return (
+                              <Button
+                                className="w-full opacity-60 cursor-not-allowed"
+                                size="sm"
+                                disabled
+                              >
+                                <X className="h-4 w-4 mr-2" />
+                                Quiz Closed
+                              </Button>
+                            );
+                          }
+                          return (
+                            <Button
+                              className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+                              size="sm"
+                              onClick={() => takeQuiz(quiz)}
+                            >
+                              <Play className="h-4 w-4 mr-2" />
+                              Start Quiz
+                              <Zap className="h-3 w-3 ml-2 opacity-70" />
+                            </Button>
+                          );
+                        })()
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -545,12 +769,23 @@ export default function StudentQuiz() {
                 </div>
                 <div className="flex items-center gap-3">
                   {timeLeft !== null && (
-                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${timeLeft < 300 ? 'bg-red-500/20 border border-red-400/30' : 'bg-white/20'
-                      }`}>
-                      <Timer className={`h-4 w-4 ${timeLeft < 300 ? 'text-red-300' : ''}`} />
-                      <span className={`font-mono text-sm font-semibold ${timeLeft < 300 ? 'text-red-200' : ''
-                        }`}>
-                        {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                    <div
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg backdrop-blur-sm ${
+                        timeLeft < 300
+                          ? "bg-red-500/20 border border-red-400/30"
+                          : "bg-white/20"
+                      }`}
+                    >
+                      <Timer
+                        className={`h-4 w-4 ${timeLeft < 300 ? "text-red-300" : ""}`}
+                      />
+                      <span
+                        className={`font-mono text-sm font-semibold ${
+                          timeLeft < 300 ? "text-red-200" : ""
+                        }`}
+                      >
+                        {Math.floor(timeLeft / 60)}:
+                        {(timeLeft % 60).toString().padStart(2, "0")}
                       </span>
                     </div>
                   )}
@@ -569,12 +804,16 @@ export default function StudentQuiz() {
               <div className="relative mt-4">
                 <div className="flex items-center justify-between text-xs text-blue-100 mb-2">
                   <span>Progress</span>
-                  <span>{currentQuestionIndex + 1} of {quizQuestions.length}</span>
+                  <span>
+                    {currentQuestionIndex + 1} of {quizQuestions.length}
+                  </span>
                 </div>
                 <div className="w-full bg-white/20 rounded-full h-2">
                   <div
                     className="bg-white rounded-full h-2 transition-all duration-500 ease-out"
-                    style={{ width: `${((currentQuestionIndex + 1) / quizQuestions.length) * 100}%` }}
+                    style={{
+                      width: `${((currentQuestionIndex + 1) / quizQuestions.length) * 100}%`,
+                    }}
                   ></div>
                 </div>
               </div>
@@ -598,55 +837,90 @@ export default function StudentQuiz() {
                             </h3>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Award className="h-4 w-4" />
-                              <span>{quizQuestions[currentQuestionIndex].points} points</span>
+                              <span>
+                                {quizQuestions[currentQuestionIndex].points}{" "}
+                                points
+                              </span>
                             </div>
                           </div>
                         </div>
                       </div>
 
                       <div className="space-y-3">
-                        {quizQuestions[currentQuestionIndex].options.map(
-                          (option, index) => {
-                            const isSelected = answers[quizQuestions[currentQuestionIndex].id] === index;
-                            return (
-                              <label
-                                key={index}
-                                className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${isSelected
-                                  ? 'border-primary bg-primary/5 shadow-md'
-                                  : 'border-border hover:border-primary/50 hover:bg-accent/50'
+                        {quizQuestions[currentQuestionIndex]?.options &&
+                        Array.isArray(
+                          quizQuestions[currentQuestionIndex].options,
+                        ) &&
+                        quizQuestions[currentQuestionIndex].options.length >
+                          0 ? (
+                          quizQuestions[currentQuestionIndex].options.map(
+                            (option, index) => {
+                              const isSelected =
+                                answers[
+                                  quizQuestions[currentQuestionIndex].id
+                                ] === index;
+                              return (
+                                <label
+                                  key={index}
+                                  className={`group flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                                    isSelected
+                                      ? "border-primary bg-primary/5 shadow-md"
+                                      : "border-border hover:border-primary/50 hover:bg-accent/50"
                                   }`}
-                              >
-                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
-                                  ? 'border-primary bg-primary'
-                                  : 'border-muted-foreground group-hover:border-primary'
-                                  }`}>
+                                >
+                                  <div
+                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                      isSelected
+                                        ? "border-primary bg-primary"
+                                        : "border-muted-foreground group-hover:border-primary"
+                                    }`}
+                                  >
+                                    {isSelected && (
+                                      <div className="w-3 h-3 bg-white rounded-full"></div>
+                                    )}
+                                  </div>
+                                  <input
+                                    type="radio"
+                                    name={`question-${quizQuestions[currentQuestionIndex].id}`}
+                                    value={index}
+                                    checked={isSelected}
+                                    onChange={() =>
+                                      setAnswers((prev) => ({
+                                        ...prev,
+                                        [quizQuestions[currentQuestionIndex]
+                                          .id]: index,
+                                      }))
+                                    }
+                                    className="sr-only"
+                                  />
+                                  <span
+                                    className={`flex-1 text-sm leading-relaxed ${
+                                      isSelected
+                                        ? "font-medium text-primary"
+                                        : ""
+                                    }`}
+                                  >
+                                    {option}
+                                  </span>
                                   {isSelected && (
-                                    <div className="w-3 h-3 bg-white rounded-full"></div>
+                                    <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
                                   )}
-                                </div>
-                                <input
-                                  type="radio"
-                                  name={`question-${quizQuestions[currentQuestionIndex].id}`}
-                                  value={index}
-                                  checked={isSelected}
-                                  onChange={() =>
-                                    setAnswers((prev) => ({
-                                      ...prev,
-                                      [quizQuestions[currentQuestionIndex].id]: index,
-                                    }))
-                                  }
-                                  className="sr-only"
-                                />
-                                <span className={`flex-1 text-sm leading-relaxed ${isSelected ? 'font-medium text-primary' : ''
-                                  }`}>
-                                  {option}
-                                </span>
-                                {isSelected && (
-                                  <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
-                                )}
-                              </label>
-                            );
-                          }
+                                </label>
+                              );
+                            },
+                          )
+                        ) : (
+                          <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                            <p className="text-red-700 dark:text-red-300 font-medium">
+                              No answer options found for this question
+                            </p>
+                            <p className="text-red-600 dark:text-red-400 text-sm mt-1">
+                              Options:{" "}
+                              {JSON.stringify(
+                                quizQuestions[currentQuestionIndex]?.options,
+                              )}
+                            </p>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -659,7 +933,7 @@ export default function StudentQuiz() {
                         variant="outline"
                         onClick={() =>
                           setCurrentQuestionIndex((prev) =>
-                            Math.max(0, prev - 1)
+                            Math.max(0, prev - 1),
                           )
                         }
                         disabled={currentQuestionIndex === 0}
@@ -671,22 +945,25 @@ export default function StudentQuiz() {
 
                       <div className="flex flex-col items-center gap-2">
                         <div className="text-sm font-medium text-muted-foreground">
-                          Question {currentQuestionIndex + 1} of {quizQuestions.length}
+                          Question {currentQuestionIndex + 1} of{" "}
+                          {quizQuestions.length}
                         </div>
                         <div className="flex gap-1">
                           {quizQuestions.map((_, index) => {
-                            const isAnswered = answers[quizQuestions[index].id] !== undefined;
+                            const isAnswered =
+                              answers[quizQuestions[index].id] !== undefined;
                             const isCurrent = index === currentQuestionIndex;
                             return (
                               <button
                                 key={index}
                                 onClick={() => setCurrentQuestionIndex(index)}
-                                className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${isCurrent
-                                  ? 'bg-primary text-white shadow-lg scale-110'
-                                  : isAnswered
-                                    ? 'bg-green-500 text-white hover:bg-green-600'
-                                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                                  }`}
+                                className={`w-8 h-8 rounded-full text-xs font-semibold transition-all duration-200 ${
+                                  isCurrent
+                                    ? "bg-primary text-white shadow-lg scale-110"
+                                    : isAnswered
+                                      ? "bg-green-500 text-white hover:bg-green-600"
+                                      : "bg-muted hover:bg-muted/80 text-muted-foreground"
+                                }`}
                               >
                                 {index + 1}
                               </button>
@@ -708,7 +985,7 @@ export default function StudentQuiz() {
                         <Button
                           onClick={() =>
                             setCurrentQuestionIndex((prev) =>
-                              Math.min(quizQuestions.length - 1, prev + 1)
+                              Math.min(quizQuestions.length - 1, prev + 1),
                             )
                           }
                           className="gap-2"
@@ -722,10 +999,15 @@ export default function StudentQuiz() {
                     {/* Progress summary */}
                     <div className="flex items-center justify-between text-sm text-muted-foreground pt-4 border-t border-border/50">
                       <span>
-                        Answered: {Object.keys(answers).length} of {quizQuestions.length}
+                        Answered: {Object.keys(answers).length} of{" "}
+                        {quizQuestions.length}
                       </span>
                       <span>
-                        {Math.round((Object.keys(answers).length / quizQuestions.length) * 100)}% complete
+                        {Math.round(
+                          (Object.keys(answers).length / quizQuestions.length) *
+                            100,
+                        )}
+                        % complete
                       </span>
                     </div>
                   </div>
@@ -733,49 +1015,226 @@ export default function StudentQuiz() {
               ) : (
                 /* Results */
                 <div className="text-center space-y-8">
-                  {/* Result icon */}
-                  <div className="relative">
-                    <div className="text-8xl animate-pulse">
-                      📝
-                    </div>
-                    <div className="absolute -top-2 -right-2">
-                      <CheckCircle2 className="h-8 w-8 text-green-500" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                      Quiz Submitted!
-                    </h3>
-                    <p className="text-muted-foreground text-lg">
-                      Your quiz has been submitted for grading. You will receive your results once your lecturer has reviewed it.
-                    </p>
-                  </div>
-
-                  {/* Submission details */}
-                  <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-center gap-2 text-primary">
-                        <Clock className="h-5 w-5" />
-                        <span className="font-medium">Submitted for Grading</span>
+                  {takingQuiz?.show_answers ? (
+                    // Show answers view
+                    <div className="space-y-6">
+                      {/* Score Summary */}
+                      <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-2xl p-8 border border-primary/20">
+                        <div className="space-y-4">
+                          <div>
+                            <div className="text-6xl font-bold text-primary">
+                              {quizScore}
+                              <span className="text-3xl text-muted-foreground ml-2">
+                                / {totalPoints}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <h3 className="text-2xl font-bold mb-2">
+                              Quiz Completed!
+                            </h3>
+                            <p className="text-muted-foreground">
+                              Here are your results with detailed answer review
+                            </p>
+                            <div className="mt-4 pt-4 border-t border-primary/20">
+                              <p className="text-sm text-muted-foreground">
+                                Percentage Score:{" "}
+                                <span className="font-semibold text-primary">
+                                  {totalPoints > 0
+                                    ? Math.round(
+                                        (quizScore / totalPoints) * 100,
+                                      )
+                                    : 0}
+                                  %
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Your lecturer will review your answers and provide feedback. Check back later for your results.
-                      </p>
-                    </div>
-                  </div>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                    <Button onClick={resetQuiz} size="lg" className="gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      View All Quizzes
-                    </Button>
-                    <Button variant="outline" onClick={resetQuiz} size="lg" className="gap-2">
-                      <Play className="h-4 w-4" />
-                      Take Another Quiz
-                    </Button>
-                  </div>
+                      {/* Question Review */}
+                      <div className="space-y-4 text-left">
+                        <h3 className="text-xl font-bold">Answer Review</h3>
+                        {quizQuestions.map((question, index) => {
+                          const studentAnswerIndex = answers[question.id];
+                          const isCorrect =
+                            studentAnswerIndex === question.correct_answer;
+                          const studentAnswer =
+                            studentAnswerIndex !== undefined
+                              ? question.options[studentAnswerIndex]
+                              : "Not answered";
+                          const correctAnswer =
+                            question.options[question.correct_answer];
+
+                          return (
+                            <Card
+                              key={question.id}
+                              className={`p-6 border-2 transition-all ${
+                                isCorrect
+                                  ? "border-green-500/30 bg-green-50/30 dark:bg-green-950/20"
+                                  : "border-red-500/30 bg-red-50/30 dark:bg-red-950/20"
+                              }`}
+                            >
+                              <div className="space-y-4">
+                                <div className="flex items-start gap-3">
+                                  <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-bold">
+                                    Q{index + 1}
+                                  </span>
+                                  {isCorrect ? (
+                                    <CheckCircle2 className="h-6 w-6 text-green-500 flex-shrink-0 mt-1" />
+                                  ) : (
+                                    <X className="h-6 w-6 text-red-500 flex-shrink-0 mt-1" />
+                                  )}
+                                </div>
+
+                                <div className="space-y-2">
+                                  <p className="font-semibold">
+                                    {question.question}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Points: {question.points}
+                                  </p>
+                                </div>
+
+                                {/* Options Display */}
+                                <div className="space-y-2 mt-4">
+                                  {question.options.map((option, optIndex) => {
+                                    const isStudentAnswer =
+                                      studentAnswerIndex === optIndex;
+                                    const isCorrectOption =
+                                      optIndex === question.correct_answer;
+
+                                    return (
+                                      <div
+                                        key={optIndex}
+                                        className={`p-3 rounded-lg border-2 text-sm transition-all ${
+                                          isCorrectOption
+                                            ? "border-green-500 bg-green-50 dark:bg-green-950 text-green-900 dark:text-green-100 font-medium"
+                                            : isStudentAnswer
+                                              ? "border-red-500 bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 font-medium"
+                                              : "border-border bg-muted/30 text-muted-foreground"
+                                        }`}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold">
+                                            {String.fromCharCode(65 + optIndex)}
+                                            .
+                                          </span>
+                                          <span>{option}</span>
+                                          {isCorrectOption && (
+                                            <Badge
+                                              variant="default"
+                                              className="ml-auto"
+                                            >
+                                              Correct
+                                            </Badge>
+                                          )}
+                                          {isStudentAnswer &&
+                                            !isCorrectOption && (
+                                              <Badge
+                                                variant="destructive"
+                                                className="ml-auto"
+                                              >
+                                                Your Answer
+                                              </Badge>
+                                            )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Explanation */}
+                                {question.explanation && (
+                                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                                      Explanation:
+                                    </p>
+                                    <p className="text-sm text-blue-800 dark:text-blue-200 mt-1">
+                                      {question.explanation}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center pt-6">
+                        <Button onClick={resetQuiz} size="lg" className="gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          View All Quizzes
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={resetQuiz}
+                          size="lg"
+                          className="gap-2"
+                        >
+                          <Play className="h-4 w-4" />
+                          Take Another Quiz
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    // Submitted for grading view
+                    <div className="space-y-8">
+                      {/* Result icon */}
+                      <div className="relative">
+                        <div className="text-8xl animate-pulse">📝</div>
+                        <div className="absolute -top-2 -right-2">
+                          <CheckCircle2 className="h-8 w-8 text-green-500" />
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-3xl font-bold mb-2 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                          Quiz Submitted!
+                        </h3>
+                        <p className="text-muted-foreground text-lg">
+                          Your quiz has been submitted for grading. You will
+                          receive your results once your lecturer has reviewed
+                          it.
+                        </p>
+                      </div>
+
+                      {/* Submission details */}
+                      <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-center gap-2 text-primary">
+                            <Clock className="h-5 w-5" />
+                            <span className="font-medium">
+                              Submitted for Grading
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Your lecturer will review your answers and provide
+                            feedback. Check back later for your results.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <Button onClick={resetQuiz} size="lg" className="gap-2">
+                          <BarChart3 className="h-4 w-4" />
+                          View All Quizzes
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={resetQuiz}
+                          size="lg"
+                          className="gap-2"
+                        >
+                          <Play className="h-4 w-4" />
+                          Take Another Quiz
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
