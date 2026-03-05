@@ -109,15 +109,16 @@ export default function CreateQuiz() {
   const handleAnalysisComplete = (result: DocumentAnalysisResult) => {
     console.log("📊 Document Analysis Complete:", result);
     console.log("Questions extracted:", result.questions.length);
-    result.questions.forEach((q, idx) => {
-      console.log(`Question ${idx + 1}:`, {
-        question: q.question,
-        type: q.type,
-        options: q.options,
-        optionsCount: q.options?.length || 0,
-        correct_answer: q.correct_answer,
-        confidence: q.confidence,
-      });
+    console.log("\n===== FULL RAW TEXT FROM PDF =====");
+    console.log(result.rawText);
+    console.log("===== END RAW TEXT =====\n");
+
+    result.questions.slice(0, 2).forEach((q, idx) => {
+      console.log(`\n=== Question ${idx + 1} ===`);
+      console.log("Question:", q.question);
+      console.log("Type:", q.type);
+      console.log("Options:", q.options);
+      console.log("Correct Answer:", q.correct_answer);
     });
 
     setAnalysisResult(result);
