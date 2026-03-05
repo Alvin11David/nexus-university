@@ -623,7 +623,7 @@ export default function StudentQuiz() {
                           <Trophy className="h-4 w-4 text-orange-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-orange-700 dark:text-orange-300">
-                              10
+                              {quiz.total_points || 0}
                             </div>
                             <div className="text-orange-600/70 dark:text-orange-400/70">
                               Points
