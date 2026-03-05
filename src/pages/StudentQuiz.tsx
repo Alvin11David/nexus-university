@@ -210,12 +210,10 @@ export default function StudentQuiz() {
 
         const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => {
           const data = doc.data();
-          console.log("Question data:", data); // Debug log
 
           // Ensure options is an array
           let options = data.options || [];
           if (!Array.isArray(options)) {
-            console.warn("Options is not an array:", options);
             // Try to split if it's a string
             if (typeof options === "string") {
               options = options.split(",").map((opt: string) => opt.trim());
@@ -234,8 +232,6 @@ export default function StudentQuiz() {
             explanation: data.explanation || "",
           };
         });
-
-        console.log("Loaded questions:", questions); // Debug log
 
         if (questions.length === 0) {
           toast({
