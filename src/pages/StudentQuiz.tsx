@@ -611,7 +611,7 @@ export default function StudentQuiz() {
                           <Users className="h-4 w-4 text-purple-600" />
                           <div className="text-xs">
                             <div className="font-semibold text-purple-700 dark:text-purple-300">
-                              {quiz.max_attempts}
+                              {quiz.max_attempts || "Unlimited"}
                             </div>
                             <div className="text-purple-600/70 dark:text-purple-400/70">
                               Attempts
