@@ -581,15 +581,32 @@ export default function StudentQuiz() {
                       </div>
 
                       {/* Action button */}
-                      <Button
-                        className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
-                        size="sm"
-                        onClick={() => takeQuiz(quiz)}
-                      >
-                        <Play className="h-4 w-4 mr-2" />
-                        Start Quiz
-                        <Zap className="h-3 w-3 ml-2 opacity-70" />
-                      </Button>
+                      {quizAttempts[quiz.id] ? (
+                        <Button
+                          className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+                          size="sm"
+                          onClick={() => {
+                            setShowResults(true);
+                            setTakingQuiz(quiz);
+                            setQuizScore(quizAttempts[quiz.id].score);
+                            setTotalPoints(quizAttempts[quiz.id].total_points);
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          View Score
+                          <Trophy className="h-3 w-3 ml-2 opacity-70" />
+                        </Button>
+                      ) : (
+                        <Button
+                          className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg hover:shadow-xl transition-all duration-300 group-hover:scale-[1.02]"
+                          size="sm"
+                          onClick={() => takeQuiz(quiz)}
+                        >
+                          <Play className="h-4 w-4 mr-2" />
+                          Start Quiz
+                          <Zap className="h-3 w-3 ml-2 opacity-70" />
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
