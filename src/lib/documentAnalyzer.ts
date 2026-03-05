@@ -357,9 +357,20 @@ export class DocumentAnalyzer {
     const options: string[] = [];
 
     for (const line of lines) {
-      const match = line.match(/^\s*[a-dA-D1-4][\).\s]\s*(.+)/);
-      if (match) {
-        options.push(match[1].trim());
+      // Check if line contains option labels (A., B., C., D. or A), B), etc.)
+      if (/[A-D][\).]/.test(line)) {
+        // Split concatenated options like "A. StackB. QueueC. TreeD. Graph"
+        // Using regex to split at option boundaries
+        const parts = line.split(/([A-D][\).]\s*)/);
+        
+        for (let i = 1; i < parts.length; i += 2) {
+          const optionText = (parts[i] + (parts[i + 1] || "")).trim();
+          // Extract just the option content (remove the label)
+          const content = optionText.replace(/^[A-D][\).]\s*/, "").trim();
+          if (content.length > 0) {
+            options.push(content);
+          }
+        }
       }
     }
 
