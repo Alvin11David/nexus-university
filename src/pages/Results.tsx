@@ -104,27 +104,46 @@ export default function Results() {
 
         // Try to fetch from student_grades
         const sgRef = collection(db, "student_grades");
-        const qSg = query(
-          sgRef,
-          where("student_id", "==", studentId),
-          orderBy("academic_year", "desc"),
-          orderBy("semester", "desc"),
-        );
-        const sgSnap = await getDocs(qSg);
-
-        if (!sgSnap.empty) {
-          data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        } else {
-          // Fallback to exam_results
-          const erRef = collection(db, "exam_results");
-          const qEr = query(
-            erRef,
+        try {
+          const qSg = query(
+            sgRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
             orderBy("semester", "desc"),
           );
-          const erSnap = await getDocs(qEr);
-          data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const sgSnap = await getDocs(qSg);
+
+          if (!sgSnap.empty) {
+            data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found student grades:", data.length);
+          } else {
+            console.log("No student grades found, trying exam_results");
+            // Fallback to exam_results
+            const erRef = collection(db, "exam_results");
+            const qEr = query(
+              erRef,
+              where("student_id", "==", studentId),
+              orderBy("academic_year", "desc"),
+              orderBy("semester", "desc"),
+            );
+            const erSnap = await getDocs(qEr);
+            data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found exam results:", data.length);
+          }
+        } catch (error) {
+          console.error("Error querying student_grades with ordering:", error);
+          // Fallback to simple query without ordering
+          try {
+            const qSgSimple = query(
+              sgRef,
+              where("student_id", "==", studentId),
+            );
+            const sgSnapSimple = await getDocs(qSgSimple);
+            data = sgSnapSimple.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found student grades (simple query):", data.length);
+          } catch (simpleError) {
+            console.error("Error with simple query too:", simpleError);
+          }
         }
 
         // Fetch course details
@@ -144,6 +163,7 @@ export default function Results() {
 
         // Normalize data
         const normalized = data.map((row) => {
+          console.log("Processing grade row:", row);
           const course = courseMap.get(row.course_id);
           return {
             ...row,
@@ -165,6 +185,15 @@ export default function Results() {
             final: row.final_exam || 0,
           };
         });
+
+        console.log("Normalized data:", normalized);
+
+        if (normalized.length === 0) {
+          console.log("No grade data found for student");
+          setTermResults([]);
+          setCgpa(0);
+          return;
+        }
 
         const termMap = new Map<string, TermResult>();
         normalized.forEach((row) => {
@@ -209,64 +238,77 @@ export default function Results() {
         setCgpa(computedCgpa);
 
         // Load quiz results
-        const quizAttemptsQuery = query(
-          collection(db, "quiz_attempts"),
-          where("student_id", "==", studentId),
-          orderBy("completed_at", "desc"),
-        );
-        const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
-
-        if (!quizAttemptsSnap.empty) {
-          const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-
-          // Get unique quiz IDs
-          const quizIds = Array.from(
-            new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
+        try {
+          const quizAttemptsQuery = query(
+            collection(db, "quiz_attempts"),
+            where("student_id", "==", studentId),
+            orderBy("completed_at", "desc"),
           );
+          const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
 
-          // Fetch quiz details
-          const quizMap = new Map();
-          for (let i = 0; i < quizIds.length; i += 10) {
-            const chunk = quizIds.slice(i, i + 10);
-            const quizzesQuery = query(
-              collection(db, "quizzes"),
-              where("__name__", "in", chunk),
+          if (!quizAttemptsSnap.empty) {
+            const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Array<{
+              id: string;
+              quiz_id: string;
+              score?: number;
+              total_points?: number;
+              completed_at?: any;
+              time_taken?: number;
+              status?: string;
+            }>;
+
+            // Get unique quiz IDs
+            const quizIds = Array.from(
+              new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
             );
-            const quizzesSnap = await getDocs(quizzesQuery);
-            quizzesSnap.docs.forEach((doc) => quizMap.set(doc.id, doc.data()));
+
+            // Fetch quiz details
+            const quizMap = new Map();
+            for (let i = 0; i < quizIds.length; i += 10) {
+              const chunk = quizIds.slice(i, i + 10);
+              const quizzesQuery = query(
+                collection(db, "quizzes"),
+                where("__name__", "in", chunk),
+              );
+              const quizzesSnap = await getDocs(quizzesQuery);
+              quizzesSnap.docs.forEach((doc) =>
+                quizMap.set(doc.id, doc.data()),
+              );
+            }
+
+            // Format quiz results
+            const formattedQuizResults: QuizResult[] = quizAttempts.map(
+              (attempt) => {
+                const quiz = quizMap.get(attempt.quiz_id);
+                const score = attempt.score || 0;
+                const totalPoints =
+                  attempt.total_points || quiz?.total_points || 0;
+                const percentage =
+                  totalPoints > 0 ? (score / totalPoints) * 100 : 0;
+
+                return {
+                  id: attempt.id,
+                  quiz_id: attempt.quiz_id,
+                  quiz_title: quiz?.title || "Quiz",
+                  score: score,
+                  total_points: totalPoints,
+                  percentage: Math.round(percentage),
+                  completed_at:
+                    attempt.completed_at || new Date().toISOString(),
+                  time_taken: attempt.time_taken || 0,
+                  status: attempt.status || "completed",
+                };
+              },
+            );
+
+            setQuizResults(formattedQuizResults);
           }
-
-          // Format quiz results
-          const formattedQuizResults: QuizResult[] = quizAttempts.map(
-            (attempt) => {
-              const quiz = quizMap.get(attempt.quiz_id);
-              const score = attempt.score || 0;
-              const totalPoints =
-                attempt.total_points || quiz?.total_points || 0;
-              const percentage =
-                totalPoints > 0 ? (score / totalPoints) * 100 : 0;
-
-              return {
-                id: attempt.id,
-                quiz_id: attempt.quiz_id,
-                quiz_title: quiz?.title || "Quiz",
-                score: score,
-                total_points: totalPoints,
-                percentage: Math.round(percentage),
-                completed_at: attempt.completed_at || new Date().toISOString(),
-                time_taken: attempt.time_taken || 0,
-                status: attempt.status || "completed",
-              };
-            },
-          );
-
-          setQuizResults(formattedQuizResults);
+        } catch (quizError) {
+          console.error("Error loading quiz results:", quizError);
         }
-      } catch (err) {
-        console.error("Error loading exam results", err);
       } finally {
         setResultsLoading(false);
       }
@@ -708,7 +750,7 @@ export default function Results() {
               <div className="bg-white rounded-xl p-3 flex items-center justify-center mb-4 border border-border">
                 <div ref={qrRef} className="w-full max-w-[200px]">
                   <QRCodeSVG
-                    value={`https://nexus-university.vercel.app/results?student=${user?.uid}`}
+                    value={`https://universityportal2026.web.app/results?student=${user?.uid}`}
                     size={200}
                     level="H"
                     includeMargin={true}
