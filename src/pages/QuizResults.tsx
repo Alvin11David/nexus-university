@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -26,6 +26,7 @@ import {
   getDocs,
   doc,
   orderBy,
+  onSnapshot,
 } from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -67,6 +68,7 @@ export default function QuizResults() {
     null,
   );
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const [stats, setStats] = useState<QuizStats>({
     totalAttempts: 0,
     averageScore: 0,
@@ -81,8 +83,17 @@ export default function QuizResults() {
   useEffect(() => {
     if (id) {
       loadQuiz();
-      loadResults();
+      const unsubscribe = loadResults();
+      unsubscribeRef.current = unsubscribe;
     }
+
+    // Cleanup function to unsubscribe from listeners
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
   }, [id]);
 
   const loadQuiz = async () => {
@@ -100,147 +111,164 @@ export default function QuizResults() {
     }
   };
 
-  const loadResults = async () => {
+  const loadResults = () => {
     try {
-      // Load quiz attempts from Firestore
+      // Set up real-time listener for quiz attempts
       const attemptsQuery = query(
         collection(db, "quiz_attempts"),
         where("quiz_id", "==", id),
         orderBy("completed_at", "desc"),
       );
-      const attemptsSnapshot = await getDocs(attemptsQuery);
-      const attemptsData: QuizAttempt[] = attemptsSnapshot.docs.map(
-        (docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<QuizAttempt, "id">),
-        }),
-      );
-      if (!attemptsData || attemptsData.length === 0) {
-        setAttempts([]);
-        setStats({
-          totalAttempts: 0,
-          averageScore: 0,
-          averagePercentage: 0,
-          completionRate: 0,
-          highestScore: 0,
-          lowestScore: 0,
-          averageTime: 0,
-          passRate: 0,
-        });
-        return;
-      }
-      // Load student profiles from Firestore
-      const studentIds = attemptsData.map((attempt) => attempt.student_id);
-      let profilesMap = new Map();
-      if (studentIds.length > 0) {
-        const profilesQuery = query(
-          collection(db, "profiles"),
-          where("id", "in", studentIds),
-        );
-        const profilesSnapshot = await getDocs(profilesQuery);
-        profilesSnapshot.docs.forEach((docSnap) => {
-          profilesMap.set(docSnap.id, docSnap.data());
-        });
-      }
-      const formattedAttempts: QuizAttempt[] = attemptsData.map(
-        (attemptRaw) => {
-          const attempt = attemptRaw as QuizAttempt & {
-            started_at?: string;
-            completed_at?: string;
-          };
-          const profile = profilesMap.get(attempt.student_id);
-          // Calculate time taken from started_at and completed_at if available
-          const timeTaken =
-            attempt.completed_at && attempt.started_at
-              ? Math.round(
-                  (new Date(attempt.completed_at).getTime() -
-                    new Date(attempt.started_at).getTime()) /
-                    1000,
-                )
-              : 0;
-          return {
-            id: attempt.id,
-            student_id: attempt.student_id,
-            student_name: profile?.full_name || "Unknown Student",
-            student_email: profile?.email || "",
-            score: attempt.score,
-            total_points: quiz?.total_points || 0,
-            percentage:
-              attempt.score !== null &&
-              quiz?.total_points &&
-              quiz.total_points > 0
-                ? Math.round((attempt.score / quiz.total_points) * 100)
-                : null,
-            time_taken: timeTaken,
-            completed_at:
-              attempt.completed_at ||
-              attempt.started_at ||
-              new Date().toISOString(),
-            passed:
-              attempt.score !== null
-                ? attempt.score >= (quiz?.passing_score || 0)
-                : null,
-            status: attempt.score !== null ? "graded" : "submitted",
-            answers: attempt.answers || {},
-          };
+
+      const unsubscribe = onSnapshot(
+        attemptsQuery,
+        async (attemptsSnapshot) => {
+          const attemptsData: QuizAttempt[] = attemptsSnapshot.docs.map(
+            (docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<QuizAttempt, "id">),
+            }),
+          );
+
+          if (!attemptsData || attemptsData.length === 0) {
+            setAttempts([]);
+            setStats({
+              totalAttempts: 0,
+              averageScore: 0,
+              averagePercentage: 0,
+              completionRate: 0,
+              highestScore: 0,
+              lowestScore: 0,
+              averageTime: 0,
+              passRate: 0,
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Load student profiles from Firestore
+          const studentIds = attemptsData.map((attempt) => attempt.student_id);
+          let profilesMap = new Map();
+          if (studentIds.length > 0) {
+            const profilesQuery = query(
+              collection(db, "profiles"),
+              where("id", "in", studentIds),
+            );
+            const profilesSnapshot = await getDocs(profilesQuery);
+            profilesSnapshot.docs.forEach((docSnap) => {
+              profilesMap.set(docSnap.id, docSnap.data());
+            });
+          }
+
+          const formattedAttempts: QuizAttempt[] = attemptsData.map(
+            (attemptRaw) => {
+              const attempt = attemptRaw as QuizAttempt & {
+                started_at?: string;
+                completed_at?: string;
+              };
+              const profile = profilesMap.get(attempt.student_id);
+              // Calculate time taken from started_at and completed_at if available
+              const timeTaken =
+                attempt.completed_at && attempt.started_at
+                  ? Math.round(
+                      (new Date(attempt.completed_at).getTime() -
+                        new Date(attempt.started_at).getTime()) /
+                        1000,
+                    )
+                  : 0;
+              return {
+                id: attempt.id,
+                student_id: attempt.student_id,
+                student_name: profile?.full_name || "Unknown Student",
+                student_email: profile?.email || "",
+                score: attempt.score,
+                total_points: quiz?.total_points || 0,
+                percentage:
+                  attempt.score !== null &&
+                  quiz?.total_points &&
+                  quiz.total_points > 0
+                    ? Math.round((attempt.score / quiz.total_points) * 100)
+                    : null,
+                time_taken: timeTaken,
+                completed_at:
+                  attempt.completed_at ||
+                  attempt.started_at ||
+                  new Date().toISOString(),
+                passed:
+                  attempt.score !== null
+                    ? attempt.score >= (quiz?.passing_score || 0)
+                    : null,
+                status: attempt.score !== null ? "graded" : "submitted",
+                answers: attempt.answers || {},
+              };
+            },
+          );
+
+          setAttempts(formattedAttempts);
+
+          // Calculate stats
+          if (formattedAttempts.length > 0) {
+            const totalAttempts = formattedAttempts.length;
+            const gradedAttempts = formattedAttempts.filter(
+              (a) => a.score !== null,
+            );
+
+            // Only calculate averages for graded attempts
+            const averageScore =
+              gradedAttempts.length > 0
+                ? gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) /
+                  gradedAttempts.length
+                : 0;
+            const averagePercentage =
+              gradedAttempts.length > 0
+                ? gradedAttempts.reduce(
+                    (sum, a) => sum + (a.percentage || 0),
+                    0,
+                  ) / gradedAttempts.length
+                : 0;
+            const highestScore =
+              gradedAttempts.length > 0
+                ? Math.max(...gradedAttempts.map((a) => a.score || 0))
+                : 0;
+            const lowestScore =
+              gradedAttempts.length > 0
+                ? Math.min(...gradedAttempts.map((a) => a.score || 0))
+                : 0;
+            const averageTime =
+              formattedAttempts.reduce((sum, a) => sum + a.time_taken, 0) /
+              totalAttempts;
+            const passRate =
+              gradedAttempts.length > 0
+                ? (gradedAttempts.filter((a) => a.passed).length /
+                    gradedAttempts.length) *
+                  100
+                : 0;
+
+            setStats({
+              totalAttempts,
+              averageScore: Math.round(averageScore * 10) / 10,
+              averagePercentage: Math.round(averagePercentage),
+              completionRate: 100,
+              highestScore,
+              lowestScore,
+              averageTime: Math.round(averageTime),
+              passRate: Math.round(passRate),
+            });
+          }
+
+          setLoading(false);
         },
       );
-      setAttempts(formattedAttempts);
-      // Calculate stats
-      if (formattedAttempts.length > 0) {
-        const totalAttempts = formattedAttempts.length;
-        const gradedAttempts = formattedAttempts.filter(
-          (a) => a.score !== null,
-        );
 
-        // Only calculate averages for graded attempts
-        const averageScore =
-          gradedAttempts.length > 0
-            ? gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) /
-              gradedAttempts.length
-            : 0;
-        const averagePercentage =
-          gradedAttempts.length > 0
-            ? gradedAttempts.reduce((sum, a) => sum + (a.percentage || 0), 0) /
-              gradedAttempts.length
-            : 0;
-        const highestScore =
-          gradedAttempts.length > 0
-            ? Math.max(...gradedAttempts.map((a) => a.score || 0))
-            : 0;
-        const lowestScore =
-          gradedAttempts.length > 0
-            ? Math.min(...gradedAttempts.map((a) => a.score || 0))
-            : 0;
-        const averageTime =
-          formattedAttempts.reduce((sum, a) => sum + a.time_taken, 0) /
-          totalAttempts;
-        const passRate =
-          gradedAttempts.length > 0
-            ? (gradedAttempts.filter((a) => a.passed).length /
-                gradedAttempts.length) *
-              100
-            : 0;
-
-        setStats({
-          totalAttempts,
-          averageScore: Math.round(averageScore * 10) / 10,
-          averagePercentage: Math.round(averagePercentage),
-          completionRate: 100,
-          highestScore,
-          lowestScore,
-          averageTime: Math.round(averageTime),
-          passRate: Math.round(passRate),
-        });
-      }
+      // Return unsubscribe function for cleanup
+      return unsubscribe;
     } catch (error: any) {
-      console.error("Error loading results:", error);
+      console.error("Error setting up results listener:", error);
       toast({
         title: "Error",
         description: error?.message || "Failed to load results",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
     }
   };
