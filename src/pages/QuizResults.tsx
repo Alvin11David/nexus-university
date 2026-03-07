@@ -62,8 +62,7 @@ export default function QuizResults() {
   const [loading, setLoading] = useState(true);
   const [quiz, setQuiz] = useState<any>(null);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
-  const [gradingAttempt, setGradingAttempt] = useState<QuizAttempt | null>(null);
-  const [gradingScore, setGradingScore] = useState("");
+  const [viewingAttempt, setViewingAttempt] = useState<QuizAttempt | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
   const [stats, setStats] = useState<QuizStats>({
     totalAttempts: 0,
@@ -566,7 +565,7 @@ export default function QuizResults() {
             <div className="p-6 border-b border-border">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">
-                  {gradingAttempt.status === "submitted" ? "Grade" : "View"} Attempt
+                  View Student Attempt
                 </h3>
                 <Button
                   variant="ghost"
@@ -652,52 +651,18 @@ export default function QuizResults() {
                 })}
               </div>
 
-              {/* Grading Section */}
-              {gradingAttempt.status === "submitted" && (
-                <div className="border-t border-border pt-6">
-                  <h4 className="font-medium mb-4">Assign Grade</h4>
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium mb-2">
-                        Score (out of {gradingAttempt.total_points})
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max={gradingAttempt.total_points}
-                        value={gradingScore}
-                        onChange={(e) => setGradingScore(e.target.value)}
-                        className="w-full px-4 py-2 rounded-lg border border-border bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        placeholder="Enter score"
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-8">
-                      <Button
-                        onClick={() => setGradingAttempt(null)}
-                        variant="outline"
-                      >
-                        Cancel
-                      </Button>
-                      <Button onClick={submitGrade} className="bg-primary">
-                        Submit Grade
-                      </Button>
-                    </div>
+              {/* Results Section */}
+              <div className="border-t border-border pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">Automatically Calculated Grade</h4>
+                    <p className="text-2xl font-bold text-primary">
+                      {gradingAttempt.score}/{gradingAttempt.total_points} ({gradingAttempt.percentage}%)
+                    </p>
                   </div>
-                </div>
-              )}
-
-              {gradingAttempt.status === "graded" && (
-                <div className="border-t border-border pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Final Grade</h4>
-                      <p className="text-2xl font-bold text-primary">
-                        {gradingAttempt.score}/{gradingAttempt.total_points} ({gradingAttempt.percentage}%)
-                      </p>
-                    </div>
-                    <Badge
-                      variant={gradingAttempt.passed ? "default" : "destructive"}
-                      className={
+                  <Badge
+                    variant={gradingAttempt.passed ? "default" : "destructive"}
+                    className={
                         gradingAttempt.passed
                           ? "bg-emerald-500/20 text-emerald-700"
                           : ""
