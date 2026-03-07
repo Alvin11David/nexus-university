@@ -24,6 +24,7 @@ import {
   getDocs,
   getDoc,
   doc,
+  Timestamp,
 } from "firebase/firestore";
 
 interface CourseAnalytics {
@@ -70,6 +71,36 @@ export default function LecturerAnalytics() {
   const handleViewCourseDetails = (courseId: string) => {
     // Navigate to gradebook where lecturer can view detailed course information
     navigate("/lecturer/gradebook");
+  };
+
+  const getDateRange = () => {
+    const now = new Date();
+    let startDate: Date;
+
+    switch (timeRange) {
+      case "week":
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "month":
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        break;
+      case "semester":
+      default:
+        // Assuming semester starts in September (month 8) and ends in February (month 1)
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        if (currentMonth >= 8) { // September to December
+          startDate = new Date(currentYear, 8, 1); // September 1st
+        } else { // January to August
+          startDate = new Date(currentYear - 1, 8, 1); // September 1st of previous year
+        }
+        break;
+    }
+
+    return {
+      startDate: startDate.toISOString().split('T')[0], // YYYY-MM-DD format
+      endDate: now.toISOString().split('T')[0]
+    };
   };
 
   const fetchAnalyticsData = async () => {
@@ -176,9 +207,15 @@ export default function LecturerAnalytics() {
 
   const fetchAverageGPA = async (courseId: string): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
+      const startTimestamp = Timestamp.fromDate(new Date(startDate));
+      const endTimestamp = Timestamp.fromDate(new Date(endDate + 'T23:59:59'));
+
       const gradesQuery = query(
         collection(db, "student_grades"),
         where("course_id", "==", courseId),
+        where("created_at", ">=", startTimestamp),
+        where("created_at", "<=", endTimestamp)
       );
       const gradesSnap = await getDocs(gradesQuery);
 
@@ -200,9 +237,13 @@ export default function LecturerAnalytics() {
 
   const fetchAttendanceRate = async (courseId: string): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
+
       const attendanceQuery = query(
         collection(db, "attendance"),
         where("course_id", "==", courseId),
+        where("attendance_date", ">=", startDate),
+        where("attendance_date", "<=", endDate)
       );
       const attendanceSnap = await getDocs(attendanceQuery);
 
@@ -224,9 +265,15 @@ export default function LecturerAnalytics() {
     courseId: string,
   ): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
+      const startTimestamp = Timestamp.fromDate(new Date(startDate));
+      const endTimestamp = Timestamp.fromDate(new Date(endDate + 'T23:59:59'));
+
       const gradesQuery = query(
         collection(db, "student_grades"),
         where("course_id", "==", courseId),
+        where("created_at", ">=", startTimestamp),
+        where("created_at", "<=", endTimestamp)
       );
       const gradesSnap = await getDocs(gradesQuery);
 
@@ -282,10 +329,16 @@ export default function LecturerAnalytics() {
           const studentData = studentDoc.data();
 
           // Get student grades for this course
+          const { startDate, endDate } = getDateRange();
+          const startTimestamp = Timestamp.fromDate(new Date(startDate));
+          const endTimestamp = Timestamp.fromDate(new Date(endDate + 'T23:59:59'));
+
           const gradesQuery = query(
             collection(db, "student_grades"),
             where("course_id", "==", course.id),
             where("student_id", "==", studentId),
+            where("created_at", ">=", startTimestamp),
+            where("created_at", "<=", endTimestamp)
           );
           const gradesSnap = await getDocs(gradesQuery);
 
@@ -302,6 +355,8 @@ export default function LecturerAnalytics() {
             collection(db, "attendance"),
             where("course_id", "==", course.id),
             where("student_id", "==", studentId),
+            where("attendance_date", ">=", startDate),
+            where("attendance_date", "<=", endDate)
           );
           const attendanceSnap = await getDocs(attendanceQuery);
 
