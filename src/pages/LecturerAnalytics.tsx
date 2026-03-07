@@ -24,6 +24,7 @@ import {
   getDocs,
   getDoc,
   doc,
+  Timestamp,
 } from "firebase/firestore";
 
 interface CourseAnalytics {
@@ -60,6 +61,7 @@ export default function LecturerAnalytics() {
   const [insights, setInsights] = useState<StudentInsight[]>([]);
   const [timeRange, setTimeRange] = useState("semester");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -68,8 +70,53 @@ export default function LecturerAnalytics() {
   }, [user, timeRange]);
 
   const handleViewCourseDetails = (courseId: string) => {
-    // Navigate to gradebook where lecturer can view detailed course information
-    navigate("/lecturer/gradebook");
+    // Navigate to gradebook with the specific course pre-selected
+    navigate(`/lecturer/gradebook?course=${courseId}`);
+  };
+
+  const calculateTrend = (
+    avgGPA: number,
+    attendanceRate: number,
+    assignmentCompletion: number,
+  ): "up" | "down" | "stable" => {
+    // Simple trend calculation based on performance metrics
+    const performanceScore =
+      (avgGPA / 4) * 0.4 +
+      (attendanceRate / 100) * 0.3 +
+      (assignmentCompletion / 100) * 0.3;
+
+    if (performanceScore >= 0.8) return "up";
+    if (performanceScore <= 0.5) return "down";
+    return "stable";
+  };
+
+  const getDateRange = () => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = now;
+
+    switch (timeRange) {
+      case "week":
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "month":
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - 1,
+          now.getDate(),
+        );
+        break;
+      case "semester":
+      default:
+        // Assuming semester is 6 months
+        startDate = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    return {
+      startDate,
+      endDate,
+    };
   };
 
   const fetchAnalyticsData = async () => {
@@ -96,7 +143,7 @@ export default function LecturerAnalytics() {
             avgGPA: avgGPA,
             attendanceRate: attendanceRate,
             assignmentCompletion: assignmentCompletion,
-            trend: "stable" as const, // Could be calculated based on historical data
+            trend: calculateTrend(avgGPA, attendanceRate, assignmentCompletion),
           };
         }),
       );
@@ -108,6 +155,7 @@ export default function LecturerAnalytics() {
       setInsights(studentInsights);
     } catch (error) {
       console.error("Error fetching analytics data:", error);
+      setError("Failed to load analytics data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -176,9 +224,12 @@ export default function LecturerAnalytics() {
 
   const fetchAverageGPA = async (courseId: string): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
       const gradesQuery = query(
         collection(db, "student_grades"),
         where("course_id", "==", courseId),
+        where("created_at", ">=", Timestamp.fromDate(startDate)),
+        where("created_at", "<=", Timestamp.fromDate(endDate)),
       );
       const gradesSnap = await getDocs(gradesQuery);
 
@@ -200,9 +251,13 @@ export default function LecturerAnalytics() {
 
   const fetchAttendanceRate = async (courseId: string): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
+
       const attendanceQuery = query(
         collection(db, "attendance"),
         where("course_id", "==", courseId),
+        where("attendance_date", ">=", startDate),
+        where("attendance_date", "<=", endDate),
       );
       const attendanceSnap = await getDocs(attendanceQuery);
 
@@ -224,9 +279,15 @@ export default function LecturerAnalytics() {
     courseId: string,
   ): Promise<number> => {
     try {
+      const { startDate, endDate } = getDateRange();
+      const startTimestamp = Timestamp.fromDate(new Date(startDate));
+      const endTimestamp = Timestamp.fromDate(new Date(endDate + "T23:59:59"));
+
       const gradesQuery = query(
         collection(db, "student_grades"),
         where("course_id", "==", courseId),
+        where("created_at", ">=", startTimestamp),
+        where("created_at", "<=", endTimestamp),
       );
       const gradesSnap = await getDocs(gradesQuery);
 
@@ -282,10 +343,18 @@ export default function LecturerAnalytics() {
           const studentData = studentDoc.data();
 
           // Get student grades for this course
+          const { startDate, endDate } = getDateRange();
+          const startTimestamp = Timestamp.fromDate(new Date(startDate));
+          const endTimestamp = Timestamp.fromDate(
+            new Date(endDate + "T23:59:59"),
+          );
+
           const gradesQuery = query(
             collection(db, "student_grades"),
             where("course_id", "==", course.id),
             where("student_id", "==", studentId),
+            where("created_at", ">=", startTimestamp),
+            where("created_at", "<=", endTimestamp),
           );
           const gradesSnap = await getDocs(gradesQuery);
 
@@ -302,6 +371,8 @@ export default function LecturerAnalytics() {
             collection(db, "attendance"),
             where("course_id", "==", course.id),
             where("student_id", "==", studentId),
+            where("attendance_date", ">=", startDate),
+            where("attendance_date", "<=", endDate),
           );
           const attendanceSnap = await getDocs(attendanceQuery);
 
@@ -335,8 +406,27 @@ export default function LecturerAnalytics() {
         }
       }
 
-      // Sort by score descending and take top students
-      return allInsights.sort((a, b) => b.score - a.score).slice(0, 8); // Show top 8 students
+      // Prioritize at-risk students, then show top performers
+      const atRiskStudents = allInsights.filter(
+        (student) => student.status === "at-risk",
+      );
+      const otherStudents = allInsights.filter(
+        (student) => student.status !== "at-risk",
+      );
+
+      // Sort at-risk students by score (lowest first to show most concerning)
+      const sortedAtRisk = atRiskStudents.sort((a, b) => a.score - b.score);
+
+      // Sort other students by score (highest first)
+      const sortedOthers = otherStudents.sort((a, b) => b.score - a.score);
+
+      // Combine: show up to 4 at-risk students, then fill with top performers
+      const prioritizedInsights = [
+        ...sortedAtRisk.slice(0, 4),
+        ...sortedOthers.slice(0, 4),
+      ];
+
+      return prioritizedInsights.slice(0, 8); // Ensure max 8 students
     } catch (error) {
       console.error("Error fetching student insights:", error);
       return [];
@@ -347,15 +437,16 @@ export default function LecturerAnalytics() {
     analytics.length > 0
       ? {
           avgEnrollment: Math.round(
-            analytics.reduce((acc, a) => acc + a.enrollment, 0) /
-              analytics.length,
+            analytics.reduce((acc, a) => acc + (a.enrollment || 0), 0) /
+              analytics.length || 0,
           ),
           avgGPA: (
-            analytics.reduce((acc, a) => acc + a.avgGPA, 0) / analytics.length
+            analytics.reduce((acc, a) => acc + (a.avgGPA || 0), 0) /
+              analytics.length || 0
           ).toFixed(2),
           avgAttendance: Math.round(
-            analytics.reduce((acc, a) => acc + a.attendanceRate, 0) /
-              analytics.length,
+            analytics.reduce((acc, a) => acc + (a.attendanceRate || 0), 0) /
+              analytics.length || 0,
           ),
           atRiskStudents: insights.filter((s) => s.status === "at-risk").length,
         }
@@ -420,6 +511,20 @@ export default function LecturerAnalytics() {
               ))}
             </div>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-red-500/10 border border-red-300/30 rounded-lg p-4"
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <p className="text-red-700 font-medium">{error}</p>
+              </div>
+            </motion.div>
+          )}
 
           {/* Key Metrics */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

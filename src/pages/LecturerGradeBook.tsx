@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -94,6 +95,7 @@ const getStatusColor = (status: string) => {
 
 export default function LecturerGradeBook() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -173,7 +175,14 @@ export default function LecturerGradeBook() {
       }));
       setCourses(coursesData);
 
-      if (coursesData.length > 0 && !selectedCourse) {
+      // Check if a course is specified in URL parameters
+      const courseParam = searchParams.get("course");
+      if (
+        courseParam &&
+        coursesData.some((course) => course.id === courseParam)
+      ) {
+        setSelectedCourse(courseParam);
+      } else if (coursesData.length > 0 && !selectedCourse) {
         setSelectedCourse(coursesData[0].id);
       }
     } catch (error) {
@@ -320,6 +329,27 @@ export default function LecturerGradeBook() {
     if (!student || !selectedCourse || !user) return;
 
     try {
+      // Determine current semester and academic year
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
+      const currentYear = now.getFullYear();
+
+      let semester: string;
+      let academicYear: string;
+
+      if (currentMonth >= 9 || currentMonth <= 2) {
+        // Fall semester (Sep-Feb)
+        semester = currentMonth >= 9 ? "Fall" : "Fall";
+        academicYear =
+          currentMonth >= 9
+            ? `${currentYear}-${currentYear + 1}`
+            : `${currentYear - 1}-${currentYear}`;
+      } else {
+        // Spring semester (Mar-Aug)
+        semester = "Spring";
+        academicYear = `${currentYear - 1}-${currentYear}`;
+      }
+
       const gradeData = {
         student_id: student.student_id,
         course_id: selectedCourse,
@@ -332,8 +362,8 @@ export default function LecturerGradeBook() {
         total: student.total,
         grade: student.grade,
         gp: student.gp,
-        semester: "Spring",
-        academic_year: "2025-2026",
+        semester,
+        academic_year: academicYear,
         saved_at: new Date().toISOString(),
         updated_at: serverTimestamp(),
       };

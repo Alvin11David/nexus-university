@@ -104,27 +104,46 @@ export default function Results() {
 
         // Try to fetch from student_grades
         const sgRef = collection(db, "student_grades");
-        const qSg = query(
-          sgRef,
-          where("student_id", "==", studentId),
-          orderBy("academic_year", "desc"),
-          orderBy("semester", "desc"),
-        );
-        const sgSnap = await getDocs(qSg);
-
-        if (!sgSnap.empty) {
-          data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        } else {
-          // Fallback to exam_results
-          const erRef = collection(db, "exam_results");
-          const qEr = query(
-            erRef,
+        try {
+          const qSg = query(
+            sgRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
             orderBy("semester", "desc"),
           );
-          const erSnap = await getDocs(qEr);
-          data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const sgSnap = await getDocs(qSg);
+
+          if (!sgSnap.empty) {
+            data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found student grades:", data.length);
+          } else {
+            console.log("No student grades found, trying exam_results");
+            // Fallback to exam_results
+            const erRef = collection(db, "exam_results");
+            const qEr = query(
+              erRef,
+              where("student_id", "==", studentId),
+              orderBy("academic_year", "desc"),
+              orderBy("semester", "desc"),
+            );
+            const erSnap = await getDocs(qEr);
+            data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found exam results:", data.length);
+          }
+        } catch (error) {
+          console.error("Error querying student_grades with ordering:", error);
+          // Fallback to simple query without ordering
+          try {
+            const qSgSimple = query(
+              sgRef,
+              where("student_id", "==", studentId),
+            );
+            const sgSnapSimple = await getDocs(qSgSimple);
+            data = sgSnapSimple.docs.map((d) => ({ id: d.id, ...d.data() }));
+            console.log("Found student grades (simple query):", data.length);
+          } catch (simpleError) {
+            console.error("Error with simple query too:", simpleError);
+          }
         }
 
         // Fetch course details
@@ -144,6 +163,7 @@ export default function Results() {
 
         // Normalize data
         const normalized = data.map((row) => {
+          console.log("Processing grade row:", row);
           const course = courseMap.get(row.course_id);
           return {
             ...row,
@@ -165,6 +185,15 @@ export default function Results() {
             final: row.final_exam || 0,
           };
         });
+
+        console.log("Normalized data:", normalized);
+
+        if (normalized.length === 0) {
+          console.log("No grade data found for student");
+          setTermResults([]);
+          setCgpa(0);
+          return;
+        }
 
         const termMap = new Map<string, TermResult>();
         normalized.forEach((row) => {
@@ -209,64 +238,77 @@ export default function Results() {
         setCgpa(computedCgpa);
 
         // Load quiz results
-        const quizAttemptsQuery = query(
-          collection(db, "quiz_attempts"),
-          where("student_id", "==", studentId),
-          orderBy("completed_at", "desc"),
-        );
-        const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
-
-        if (!quizAttemptsSnap.empty) {
-          const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-          }));
-
-          // Get unique quiz IDs
-          const quizIds = Array.from(
-            new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
+        try {
+          const quizAttemptsQuery = query(
+            collection(db, "quiz_attempts"),
+            where("student_id", "==", studentId),
+            orderBy("completed_at", "desc"),
           );
+          const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
 
-          // Fetch quiz details
-          const quizMap = new Map();
-          for (let i = 0; i < quizIds.length; i += 10) {
-            const chunk = quizIds.slice(i, i + 10);
-            const quizzesQuery = query(
-              collection(db, "quizzes"),
-              where("__name__", "in", chunk),
+          if (!quizAttemptsSnap.empty) {
+            const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+            })) as Array<{
+              id: string;
+              quiz_id: string;
+              score?: number;
+              total_points?: number;
+              completed_at?: any;
+              time_taken?: number;
+              status?: string;
+            }>;
+
+            // Get unique quiz IDs
+            const quizIds = Array.from(
+              new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
             );
-            const quizzesSnap = await getDocs(quizzesQuery);
-            quizzesSnap.docs.forEach((doc) => quizMap.set(doc.id, doc.data()));
+
+            // Fetch quiz details
+            const quizMap = new Map();
+            for (let i = 0; i < quizIds.length; i += 10) {
+              const chunk = quizIds.slice(i, i + 10);
+              const quizzesQuery = query(
+                collection(db, "quizzes"),
+                where("__name__", "in", chunk),
+              );
+              const quizzesSnap = await getDocs(quizzesQuery);
+              quizzesSnap.docs.forEach((doc) =>
+                quizMap.set(doc.id, doc.data()),
+              );
+            }
+
+            // Format quiz results
+            const formattedQuizResults: QuizResult[] = quizAttempts.map(
+              (attempt) => {
+                const quiz = quizMap.get(attempt.quiz_id);
+                const score = attempt.score || 0;
+                const totalPoints =
+                  attempt.total_points || quiz?.total_points || 0;
+                const percentage =
+                  totalPoints > 0 ? (score / totalPoints) * 100 : 0;
+
+                return {
+                  id: attempt.id,
+                  quiz_id: attempt.quiz_id,
+                  quiz_title: quiz?.title || "Quiz",
+                  score: score,
+                  total_points: totalPoints,
+                  percentage: Math.round(percentage),
+                  completed_at:
+                    attempt.completed_at || new Date().toISOString(),
+                  time_taken: attempt.time_taken || 0,
+                  status: attempt.status || "completed",
+                };
+              },
+            );
+
+            setQuizResults(formattedQuizResults);
           }
-
-          // Format quiz results
-          const formattedQuizResults: QuizResult[] = quizAttempts.map(
-            (attempt) => {
-              const quiz = quizMap.get(attempt.quiz_id);
-              const score = attempt.score || 0;
-              const totalPoints =
-                attempt.total_points || quiz?.total_points || 0;
-              const percentage =
-                totalPoints > 0 ? (score / totalPoints) * 100 : 0;
-
-              return {
-                id: attempt.id,
-                quiz_id: attempt.quiz_id,
-                quiz_title: quiz?.title || "Quiz",
-                score: score,
-                total_points: totalPoints,
-                percentage: Math.round(percentage),
-                completed_at: attempt.completed_at || new Date().toISOString(),
-                time_taken: attempt.time_taken || 0,
-                status: attempt.status || "completed",
-              };
-            },
-          );
-
-          setQuizResults(formattedQuizResults);
+        } catch (quizError) {
+          console.error("Error loading quiz results:", quizError);
         }
-      } catch (err) {
-        console.error("Error loading exam results", err);
       } finally {
         setResultsLoading(false);
       }
@@ -309,36 +351,36 @@ export default function Results() {
     <div className="min-h-screen bg-background pb-20 md:pb-8">
       <StudentHeader />
 
-      <main className="container py-6 md:py-8 max-w-5xl">
+      <main className="container py-4 sm:py-6 md:py-8 max-w-6xl px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="space-y-6"
+          className="space-y-4 sm:space-y-6"
         >
           {/* Header Section with Actions */}
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
+            <div className="flex-1">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-foreground">
                 Academic Transcript
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 Your complete academic record and grades
               </p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex flex-wrap gap-2 sm:gap-3">
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="flex-1 sm:flex-none gap-2"
                 onClick={() => window.print()}
               >
                 <Printer className="h-4 w-4" />
-                <span className="hidden sm:inline">Print</span>
+                <span className="hidden xs:inline sm:inline">Print</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="flex-1 sm:flex-none gap-2"
                 onClick={() => {
                   const html = document.documentElement.innerHTML;
                   const blob = new Blob([html], { type: "text/html" });
@@ -351,16 +393,16 @@ export default function Results() {
                 }}
               >
                 <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Download</span>
+                <span className="hidden xs:inline sm:inline">Download</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="gap-2"
+                className="flex-1 sm:flex-none gap-2"
                 onClick={() => setShowQRModal(true)}
               >
                 <QrCode className="h-4 w-4" />
-                <span className="hidden sm:inline">QR Code</span>
+                <span className="hidden xs:inline sm:inline">QR Code</span>
               </Button>
             </div>
           </div>
@@ -382,36 +424,36 @@ export default function Results() {
             <div className="space-y-8">
               {/* Student Information Card */}
               <Card className="p-4 md:p-6 border">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                       Full Name
                     </p>
-                    <p className="font-semibold text-foreground">
+                    <p className="font-semibold text-foreground mt-1">
                       {profile?.full_name || "Not Available"}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                       Student Number
                     </p>
-                    <p className="font-semibold text-foreground">
+                    <p className="font-semibold text-foreground mt-1">
                       {profile?.student_number || "Not Available"}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                       Programme
                     </p>
-                    <p className="font-semibold text-foreground">
+                    <p className="font-semibold text-foreground mt-1">
                       {profile?.programme || "Not Available"}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase">
+                  <div className="sm:col-span-2">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                       Department
                     </p>
-                    <p className="font-semibold text-foreground">
+                    <p className="font-semibold text-foreground mt-1">
                       {profile?.department || "Not Available"}
                     </p>
                   </div>
@@ -503,45 +545,50 @@ export default function Results() {
                       <div className="sm:hidden divide-y divide-border/30">
                         {term.entries.map((course) => (
                           <div key={course.id} className="p-4 space-y-3">
-                            <div className="flex justify-between items-start gap-2">
+                            <div className="flex justify-between items-start gap-3">
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-xs text-primary font-mono">
+                                <p className="font-bold text-xs text-primary font-mono uppercase tracking-wide">
                                   {course.courseCode}
                                 </p>
-                                <p className="font-semibold text-sm text-foreground truncate">
+                                <p className="font-semibold text-sm text-foreground mt-1 leading-tight">
                                   {course.courseTitle}
                                 </p>
                               </div>
-                              <div
-                                className={`font-bold ${getGradeColor(
-                                  course.grade,
-                                )}`}
-                              >
-                                {course.grade || "—"}
+                              <div className={`text-right flex-shrink-0`}>
+                                <div
+                                  className={`font-bold text-lg ${getGradeColor(
+                                    course.grade,
+                                  )}`}
+                                >
+                                  {course.grade || "—"}
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  {course.grade_point?.toFixed(1) || "0.0"} pts
+                                </div>
                               </div>
                             </div>
-                            <div className="grid grid-cols-4 gap-2 text-xs">
-                              <div>
-                                <p className="text-muted-foreground">Mark</p>
-                                <p className="font-semibold">
+                            <div className="grid grid-cols-3 gap-3 text-xs">
+                              <div className="text-center p-2 bg-muted/30 rounded-lg">
+                                <p className="text-muted-foreground font-medium">
+                                  Mark
+                                </p>
+                                <p className="font-bold text-base mt-1">
                                   {course.marks.toFixed(1)}
                                 </p>
                               </div>
-                              <div>
-                                <p className="text-muted-foreground">CUs</p>
-                                <p className="font-semibold">
+                              <div className="text-center p-2 bg-muted/30 rounded-lg">
+                                <p className="text-muted-foreground font-medium">
+                                  Credits
+                                </p>
+                                <p className="font-bold text-base mt-1">
                                   {course.credits}
                                 </p>
                               </div>
-                              <div>
-                                <p className="text-muted-foreground">GD Pt</p>
-                                <p className="font-semibold">
-                                  {course.grade_point?.toFixed(1) || "0.0"}
+                              <div className="text-center p-2 bg-muted/30 rounded-lg">
+                                <p className="text-muted-foreground font-medium">
+                                  Remark
                                 </p>
-                              </div>
-                              <div>
-                                <p className="text-muted-foreground">Rmk</p>
-                                <p className="font-semibold text-emerald-600">
+                                <p className="font-bold text-emerald-600 text-xs mt-1">
                                   {course.semester_remark || "—"}
                                 </p>
                               </div>
@@ -553,28 +600,28 @@ export default function Results() {
                   </div>
 
                   {/* Semester Summary */}
-                  <div className="flex flex-wrap gap-4 text-sm bg-muted/30 rounded-lg p-4">
-                    <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-4 text-sm bg-muted/30 rounded-lg p-4">
+                    <div className="col-span-2 sm:col-span-1">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                         Semester Remark
                       </p>
-                      <p className="font-semibold text-emerald-600">
+                      <p className="font-semibold text-emerald-600 mt-1">
                         {term.remark || "NP"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                         GPA
                       </p>
-                      <p className="font-bold text-lg text-primary">
+                      <p className="font-bold text-lg text-primary mt-1">
                         {term.gpa.toFixed(2)}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-bold text-muted-foreground uppercase">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
                         CGPA
                       </p>
-                      <p className="font-bold text-lg text-secondary">
+                      <p className="font-bold text-lg text-secondary mt-1">
                         {cgpa.toFixed(2)}
                       </p>
                     </div>
@@ -603,21 +650,24 @@ export default function Results() {
                         transition={{ delay: idx * 0.05 }}
                       >
                         <Card className="p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <div className="flex flex-col gap-4">
                             <div className="flex-1">
-                              <h3 className="font-semibold text-foreground">
+                              <h3 className="font-semibold text-foreground text-base">
                                 {quiz.quiz_title}
                               </h3>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-sm text-muted-foreground mt-1">
                                 Completed on{" "}
                                 {new Date(
                                   quiz.completed_at,
                                 ).toLocaleDateString()}
                               </p>
                             </div>
-                            <div className="flex items-center gap-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                               <div className="text-center">
-                                <p className="text-2xl font-bold text-primary">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Score
+                                </p>
+                                <p className="text-xl font-bold text-primary mt-1">
                                   {quiz.score}/{quiz.total_points}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
@@ -625,19 +675,22 @@ export default function Results() {
                                 </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-sm font-medium text-muted-foreground">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                                   Time Taken
                                 </p>
-                                <p className="text-sm font-semibold">
+                                <p className="text-lg font-semibold mt-1">
                                   {Math.floor(quiz.time_taken / 60)}:
                                   {(quiz.time_taken % 60)
                                     .toString()
                                     .padStart(2, "0")}
                                 </p>
                               </div>
-                              <div className="text-center">
+                              <div className="text-center col-span-2 sm:col-span-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Status
+                                </p>
                                 <span
-                                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                  className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium mt-1 ${
                                     quiz.percentage >= 70
                                       ? "bg-emerald-100 text-emerald-800"
                                       : quiz.percentage >= 50
@@ -679,11 +732,11 @@ export default function Results() {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full"
+              className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full mx-4"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-foreground">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-foreground">
                   Share Results
                 </h2>
                 <button
@@ -694,11 +747,11 @@ export default function Results() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-xl p-4 flex items-center justify-center mb-4 border border-border">
-                <div ref={qrRef}>
+              <div className="bg-white rounded-xl p-3 flex items-center justify-center mb-4 border border-border">
+                <div ref={qrRef} className="w-full max-w-[200px]">
                   <QRCodeSVG
-                    value={`https://nexus-university.vercel.app/results?student=${user?.uid}`}
-                    size={256}
+                    value={`https://universityportal2026.web.app/results?student=${user?.uid}`}
+                    size={200}
                     level="H"
                     includeMargin={true}
                     fgColor="#000000"
@@ -707,12 +760,12 @@ export default function Results() {
                 </div>
               </div>
 
-              <p className="text-sm text-muted-foreground text-center mb-6">
+              <p className="text-sm text-muted-foreground text-center mb-6 leading-relaxed">
                 Scan this QR code to view academic results for{" "}
                 <strong>{profile?.full_name || "this student"}</strong>
               </p>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Button
                   variant="outline"
                   className="flex-1"
