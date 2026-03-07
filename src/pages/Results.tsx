@@ -38,6 +38,18 @@ interface ExamResultRow {
   courses?: ResultCourse;
 }
 
+interface QuizResult {
+  id: string;
+  quiz_id: string;
+  quiz_title: string;
+  score: number;
+  total_points: number;
+  percentage: number;
+  completed_at: string;
+  time_taken: number;
+  status: string;
+}
+
 interface TermResult {
   term: string;
   gpa: number;
@@ -73,6 +85,7 @@ export default function Results() {
   const { user, profile } = useAuth();
   const [resultsLoading, setResultsLoading] = useState(true);
   const [termResults, setTermResults] = useState<TermResult[]>([]);
+  const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [cgpa, setCgpa] = useState(0);
   const [showQRModal, setShowQRModal] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
@@ -194,6 +207,64 @@ export default function Results() {
 
         setTermResults(terms);
         setCgpa(computedCgpa);
+
+        // Load quiz results
+        const quizAttemptsQuery = query(
+          collection(db, "quiz_attempts"),
+          where("student_id", "==", studentId),
+          orderBy("completed_at", "desc"),
+        );
+        const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
+
+        if (!quizAttemptsSnap.empty) {
+          const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+
+          // Get unique quiz IDs
+          const quizIds = Array.from(
+            new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
+          );
+
+          // Fetch quiz details
+          const quizMap = new Map();
+          for (let i = 0; i < quizIds.length; i += 10) {
+            const chunk = quizIds.slice(i, i + 10);
+            const quizzesQuery = query(
+              collection(db, "quizzes"),
+              where("__name__", "in", chunk),
+            );
+            const quizzesSnap = await getDocs(quizzesQuery);
+            quizzesSnap.docs.forEach((doc) => quizMap.set(doc.id, doc.data()));
+          }
+
+          // Format quiz results
+          const formattedQuizResults: QuizResult[] = quizAttempts.map(
+            (attempt) => {
+              const quiz = quizMap.get(attempt.quiz_id);
+              const score = attempt.score || 0;
+              const totalPoints =
+                attempt.total_points || quiz?.total_points || 0;
+              const percentage =
+                totalPoints > 0 ? (score / totalPoints) * 100 : 0;
+
+              return {
+                id: attempt.id,
+                quiz_id: attempt.quiz_id,
+                quiz_title: quiz?.title || "Quiz",
+                score: score,
+                total_points: totalPoints,
+                percentage: Math.round(percentage),
+                completed_at: attempt.completed_at || new Date().toISOString(),
+                time_taken: attempt.time_taken || 0,
+                status: attempt.status || "completed",
+              };
+            },
+          );
+
+          setQuizResults(formattedQuizResults);
+        }
       } catch (err) {
         console.error("Error loading exam results", err);
       } finally {
@@ -510,6 +581,85 @@ export default function Results() {
                   </div>
                 </motion.div>
               ))}
+
+              {/* Quiz Results Section */}
+              {quizResults.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 }}
+                  className="space-y-4"
+                >
+                  <h2 className="text-xl font-bold text-foreground border-b border-border pb-2">
+                    Quiz Results
+                  </h2>
+
+                  <div className="grid gap-4">
+                    {quizResults.map((quiz, idx) => (
+                      <motion.div
+                        key={quiz.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                      >
+                        <Card className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-foreground">
+                                {quiz.quiz_title}
+                              </h3>
+                              <p className="text-sm text-muted-foreground">
+                                Completed on{" "}
+                                {new Date(
+                                  quiz.completed_at,
+                                ).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-center">
+                                <p className="text-2xl font-bold text-primary">
+                                  {quiz.score}/{quiz.total_points}
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {quiz.percentage}%
+                                </p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-sm font-medium text-muted-foreground">
+                                  Time Taken
+                                </p>
+                                <p className="text-sm font-semibold">
+                                  {Math.floor(quiz.time_taken / 60)}:
+                                  {(quiz.time_taken % 60)
+                                    .toString()
+                                    .padStart(2, "0")}
+                                </p>
+                              </div>
+                              <div className="text-center">
+                                <span
+                                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                    quiz.percentage >= 70
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : quiz.percentage >= 50
+                                        ? "bg-amber-100 text-amber-800"
+                                        : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {quiz.percentage >= 70
+                                    ? "Passed"
+                                    : quiz.percentage >= 50
+                                      ? "Average"
+                                      : "Failed"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
             </div>
           )}
         </motion.div>

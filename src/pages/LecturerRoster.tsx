@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
   Mail,
@@ -16,6 +17,22 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 
 interface Student {
   id: string;
@@ -39,83 +56,112 @@ const rise = {
 };
 
 export default function LecturerRoster() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTrack, setSelectedTrack] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
-
-  const mockStudents: Student[] = [
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john@uni.edu",
-      phone: "+1 234-567-8900",
-      studentId: "STU001",
-      status: "active",
-      gpa: 3.8,
-      enrollmentDate: "2022-09-01",
-      track: "Advanced",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane@uni.edu",
-      phone: "+1 234-567-8901",
-      studentId: "STU002",
-      status: "active",
-      gpa: 3.6,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-    {
-      id: "3",
-      name: "Mike Johnson",
-      email: "mike@uni.edu",
-      phone: "+1 234-567-8902",
-      studentId: "STU003",
-      status: "active",
-      gpa: 3.2,
-      enrollmentDate: "2022-09-01",
-      track: "Advanced",
-    },
-    {
-      id: "4",
-      name: "Sarah Williams",
-      email: "sarah@uni.edu",
-      phone: "+1 234-567-8903",
-      studentId: "STU004",
-      status: "active",
-      gpa: 3.4,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-    {
-      id: "5",
-      name: "Alex Brown",
-      email: "alex@uni.edu",
-      phone: "+1 234-567-8904",
-      studentId: "STU005",
-      status: "inactive",
-      gpa: 2.9,
-      enrollmentDate: "2023-01-15",
-      track: "Advanced",
-    },
-    {
-      id: "6",
-      name: "Emma Davis",
-      email: "emma@uni.edu",
-      phone: "+1 234-567-8905",
-      studentId: "STU006",
-      status: "active",
-      gpa: 3.9,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-  ];
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
-    setStudents(mockStudents);
-  }, []);
+    if (user) {
+      fetchStudents();
+    }
+  }, [user]);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      if (!user?.uid) return;
+
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedCourseUnits: string[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourses = profileData.assigned_course_units || [];
+          assignedCourseUnits.push(...assignedCourses);
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile:", err);
+      }
+
+      if (assignedCourseUnits.length === 0) {
+        setStudents([]);
+        return;
+      }
+
+      // Fetch enrollments for all lecturer's courses
+      const studentIds = new Set<string>();
+      const courseChunks = [];
+      for (let i = 0; i < assignedCourseUnits.length; i += 10) {
+        courseChunks.push(assignedCourseUnits.slice(i, i + 10));
+      }
+
+      for (const chunk of courseChunks) {
+        const enrollQuery = query(
+          collection(db, "enrollments"),
+          where("course_id", "in", chunk),
+          where("status", "==", "approved"),
+        );
+        const enrollSnap = await getDocs(enrollQuery);
+        enrollSnap.docs.forEach((doc) => {
+          studentIds.add(doc.data().student_id);
+        });
+      }
+
+      if (studentIds.size === 0) {
+        setStudents([]);
+        return;
+      }
+
+      // Fetch student profiles
+      const studentProfiles: Student[] = [];
+      const studentIdArray = Array.from(studentIds);
+      for (let i = 0; i < studentIdArray.length; i += 10) {
+        const chunk = studentIdArray.slice(i, i + 10);
+        const profilesQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
+        const profilesSnap = await getDocs(profilesQuery);
+        profilesSnap.docs.forEach((doc) => {
+          const data = doc.data();
+          studentProfiles.push({
+            id: doc.id,
+            name: data.full_name || data.name || "Unknown Student",
+            email: data.email || "",
+            phone: data.phone || "",
+            studentId: data.student_id || doc.id,
+            status: "active" as const,
+            gpa: data.gpa || 0,
+            enrollmentDate: data.created_at || new Date().toISOString(),
+            track: data.programme || "General",
+          });
+        });
+      }
+
+      setStudents(studentProfiles);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMessageStudent = (student: Student) => {
+    // Navigate to messages page - could pass student ID as a parameter
+    navigate("/lecturer/messages");
+  };
+
+  const handleViewProfile = (student: Student) => {
+    setSelectedStudent(student);
+    setShowProfileModal(true);
+  };
 
   const filteredStudents = students.filter((s) => {
     const matchesSearch =
@@ -292,79 +338,226 @@ export default function LecturerRoster() {
         </motion.div>
 
         {/* Student Cards Grid */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredStudents.map((student, i) => (
-            <motion.div
-              key={student.id}
-              variants={rise}
-              initial="hidden"
-              animate="visible"
-              custom={i}
-            >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg hover:shadow-lg transition-shadow h-full">
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {student.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {student.studentId}
-                      </p>
-                    </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading students...</p>
+            </div>
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              No Students Found
+            </h3>
+            <p className="text-muted-foreground">
+              {students.length === 0
+                ? "No students are enrolled in your courses yet."
+                : "No students match your current filters."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredStudents.map((student, i) => (
+              <motion.div
+                key={student.id}
+                variants={rise}
+                initial="hidden"
+                animate="visible"
+                custom={i}
+              >
+                <Card className="border-border/60 bg-card/70 backdrop-blur-lg hover:shadow-lg transition-shadow h-full">
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {student.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {student.studentId}
+                        </p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        <a
-                          href={`mailto:${student.email}`}
-                          className="text-primary hover:underline"
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <a
+                            href={`mailto:${student.email}`}
+                            className="text-primary hover:underline"
+                          >
+                            {student.email}
+                          </a>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {student.phone}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={getStatusColor(student.status)}
                         >
-                          {student.email}
-                        </a>
+                          {student.status}
+                        </Badge>
+                        <Badge variant="secondary">{student.track}</Badge>
+                        <Badge variant="outline">GPA: {student.gpa}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {student.phone}
-                        </span>
+
+                      <div className="flex gap-2 pt-3 border-t border-border/60">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 gap-1"
+                          onClick={() => handleMessageStudent(student)}
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Message
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                          onClick={() => handleViewProfile(student)}
+                        >
+                          View Profile
+                        </Button>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </main>
 
-                    <div className="flex gap-2 flex-wrap">
-                      <Badge
-                        variant="outline"
-                        className={getStatusColor(student.status)}
-                      >
-                        {student.status}
-                      </Badge>
-                      <Badge variant="secondary">{student.track}</Badge>
-                      <Badge variant="outline">GPA: {student.gpa}</Badge>
-                    </div>
+      {/* Student Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && selectedStudent && (
+          <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {selectedStudent.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Student ID: {selectedStudent.studentId}
+                    </p>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
 
-                    <div className="flex gap-2 pt-3 border-t border-border/60">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 gap-1"
+              <div className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Email</p>
+                      <a
+                        href={`mailto:${selectedStudent.email}`}
+                        className="text-sm text-primary hover:underline"
                       >
-                        <MessageCircle className="h-4 w-4" />
-                        Message
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                      >
-                        View Profile
-                      </Button>
+                        {selectedStudent.email}
+                      </a>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      </main>
+
+                  {selectedStudent.phone && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Phone</p>
+                        <a
+                          href={`tel:${selectedStudent.phone}`}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          {selectedStudent.phone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Programme</p>
+                      <p className="text-sm text-foreground">
+                        {selectedStudent.track}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Status</p>
+                      <Badge
+                        className={`text-xs ${
+                          selectedStudent.status === "active"
+                            ? "bg-emerald-500/20 text-emerald-700 border-emerald-300/30"
+                            : "bg-amber-500/20 text-amber-700 border-amber-300/30"
+                        }`}
+                      >
+                        {selectedStudent.status}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {selectedStudent.gpa > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">GPA</p>
+                        <p className="text-sm text-foreground">
+                          {selectedStudent.gpa.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Enrolled</p>
+                      <p className="text-sm text-foreground">
+                        {new Date(
+                          selectedStudent.enrollmentDate,
+                        ).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleMessageStudent(selectedStudent)}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Message
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => setShowProfileModal(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
 
       <LecturerBottomNav />
     </div>
