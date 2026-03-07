@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -94,6 +95,7 @@ const getStatusColor = (status: string) => {
 
 export default function LecturerGradeBook() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -173,7 +175,14 @@ export default function LecturerGradeBook() {
       }));
       setCourses(coursesData);
 
-      if (coursesData.length > 0 && !selectedCourse) {
+      // Check if a course is specified in URL parameters
+      const courseParam = searchParams.get("course");
+      if (
+        courseParam &&
+        coursesData.some((course) => course.id === courseParam)
+      ) {
+        setSelectedCourse(courseParam);
+      } else if (coursesData.length > 0 && !selectedCourse) {
         setSelectedCourse(coursesData[0].id);
       }
     } catch (error) {
