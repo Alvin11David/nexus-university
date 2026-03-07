@@ -73,34 +73,13 @@ export default function LecturerAnalytics() {
     navigate("/lecturer/gradebook");
   };
 
-  const getDateRange = () => {
-    const now = new Date();
-    let startDate: Date;
+  const calculateTrend = (avgGPA: number, attendanceRate: number, assignmentCompletion: number): "up" | "down" | "stable" => {
+    // Simple trend calculation based on performance metrics
+    const performanceScore = (avgGPA / 4) * 0.4 + (attendanceRate / 100) * 0.3 + (assignmentCompletion / 100) * 0.3;
 
-    switch (timeRange) {
-      case "week":
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case "month":
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-        break;
-      case "semester":
-      default:
-        // Assuming semester starts in September (month 8) and ends in February (month 1)
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
-        if (currentMonth >= 8) { // September to December
-          startDate = new Date(currentYear, 8, 1); // September 1st
-        } else { // January to August
-          startDate = new Date(currentYear - 1, 8, 1); // September 1st of previous year
-        }
-        break;
-    }
-
-    return {
-      startDate: startDate.toISOString().split('T')[0], // YYYY-MM-DD format
-      endDate: now.toISOString().split('T')[0]
-    };
+    if (performanceScore >= 0.8) return "up";
+    if (performanceScore <= 0.5) return "down";
+    return "stable";
   };
 
   const fetchAnalyticsData = async () => {
@@ -127,7 +106,7 @@ export default function LecturerAnalytics() {
             avgGPA: avgGPA,
             attendanceRate: attendanceRate,
             assignmentCompletion: assignmentCompletion,
-            trend: "stable" as const, // Could be calculated based on historical data
+            trend: calculateTrend(avgGPA, attendanceRate, assignmentCompletion),
           };
         }),
       );
