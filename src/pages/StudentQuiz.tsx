@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Play,
@@ -85,6 +86,7 @@ interface QuizAttempt {
 export default function StudentQuiz() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [loading, setLoading] = useState(true);
   const [takingQuiz, setTakingQuiz] = useState<Quiz | null>(null);
@@ -1179,6 +1181,14 @@ export default function StudentQuiz() {
 
                       {/* Action buttons */}
                       <div className="flex flex-col sm:flex-row gap-3 justify-center pt-6">
+                        <Button
+                          onClick={() => navigate("/results")}
+                          size="lg"
+                          className="gap-2"
+                        >
+                          <Award className="h-4 w-4" />
+                          View All Results
+                        </Button>
                         <Button onClick={resetQuiz} size="lg" className="gap-2">
                           <BarChart3 className="h-4 w-4" />
                           View All Quizzes
