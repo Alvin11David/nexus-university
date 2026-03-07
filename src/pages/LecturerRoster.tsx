@@ -16,6 +16,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/integrations/firebase/client";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  getDoc,
+  doc,
+} from "firebase/firestore";
 
 interface Student {
   id: string;
@@ -39,83 +49,99 @@ const rise = {
 };
 
 export default function LecturerRoster() {
+  const { user } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTrack, setSelectedTrack] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
 
-  const mockStudents: Student[] = [
-    {
-      id: "1",
-      name: "John Doe",
-      email: "john@uni.edu",
-      phone: "+1 234-567-8900",
-      studentId: "STU001",
-      status: "active",
-      gpa: 3.8,
-      enrollmentDate: "2022-09-01",
-      track: "Advanced",
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      email: "jane@uni.edu",
-      phone: "+1 234-567-8901",
-      studentId: "STU002",
-      status: "active",
-      gpa: 3.6,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-    {
-      id: "3",
-      name: "Mike Johnson",
-      email: "mike@uni.edu",
-      phone: "+1 234-567-8902",
-      studentId: "STU003",
-      status: "active",
-      gpa: 3.2,
-      enrollmentDate: "2022-09-01",
-      track: "Advanced",
-    },
-    {
-      id: "4",
-      name: "Sarah Williams",
-      email: "sarah@uni.edu",
-      phone: "+1 234-567-8903",
-      studentId: "STU004",
-      status: "active",
-      gpa: 3.4,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-    {
-      id: "5",
-      name: "Alex Brown",
-      email: "alex@uni.edu",
-      phone: "+1 234-567-8904",
-      studentId: "STU005",
-      status: "inactive",
-      gpa: 2.9,
-      enrollmentDate: "2023-01-15",
-      track: "Advanced",
-    },
-    {
-      id: "6",
-      name: "Emma Davis",
-      email: "emma@uni.edu",
-      phone: "+1 234-567-8905",
-      studentId: "STU006",
-      status: "active",
-      gpa: 3.9,
-      enrollmentDate: "2022-09-01",
-      track: "Standard",
-    },
-  ];
-
   useEffect(() => {
-    setStudents(mockStudents);
-  }, []);
+    if (user) {
+      fetchStudents();
+    }
+  }, [user]);
+
+  const fetchStudents = async () => {
+    try {
+      setLoading(true);
+      if (!user?.uid) return;
+
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedCourseUnits: string[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourses = profileData.assigned_course_units || [];
+          assignedCourseUnits.push(...assignedCourses);
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile:", err);
+      }
+
+      if (assignedCourseUnits.length === 0) {
+        setStudents([]);
+        return;
+      }
+
+      // Fetch enrollments for all lecturer's courses
+      const studentIds = new Set<string>();
+      const courseChunks = [];
+      for (let i = 0; i < assignedCourseUnits.length; i += 10) {
+        courseChunks.push(assignedCourseUnits.slice(i, i + 10));
+      }
+
+      for (const chunk of courseChunks) {
+        const enrollQuery = query(
+          collection(db, "enrollments"),
+          where("course_id", "in", chunk),
+          where("status", "==", "approved"),
+        );
+        const enrollSnap = await getDocs(enrollQuery);
+        enrollSnap.docs.forEach((doc) => {
+          studentIds.add(doc.data().student_id);
+        });
+      }
+
+      if (studentIds.size === 0) {
+        setStudents([]);
+        return;
+      }
+
+      // Fetch student profiles
+      const studentProfiles: Student[] = [];
+      const studentIdArray = Array.from(studentIds);
+      for (let i = 0; i < studentIdArray.length; i += 10) {
+        const chunk = studentIdArray.slice(i, i + 10);
+        const profilesQuery = query(
+          collection(db, "profiles"),
+          where("__name__", "in", chunk),
+        );
+        const profilesSnap = await getDocs(profilesQuery);
+        profilesSnap.docs.forEach((doc) => {
+          const data = doc.data();
+          studentProfiles.push({
+            id: doc.id,
+            name: data.full_name || data.name || "Unknown Student",
+            email: data.email || "",
+            phone: data.phone || "",
+            studentId: data.student_id || doc.id,
+            status: "active" as const,
+            gpa: data.gpa || 0,
+            enrollmentDate: data.created_at || new Date().toISOString(),
+            track: data.programme || "General",
+          });
+        });
+      }
+
+      setStudents(studentProfiles);
+    } catch (error) {
+      console.error("Error fetching students:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredStudents = students.filter((s) => {
     const matchesSearch =
@@ -292,78 +318,99 @@ export default function LecturerRoster() {
         </motion.div>
 
         {/* Student Cards Grid */}
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredStudents.map((student, i) => (
-            <motion.div
-              key={student.id}
-              variants={rise}
-              initial="hidden"
-              animate="visible"
-              custom={i}
-            >
-              <Card className="border-border/60 bg-card/70 backdrop-blur-lg hover:shadow-lg transition-shadow h-full">
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-foreground">
-                        {student.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {student.studentId}
-                      </p>
-                    </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading students...</p>
+            </div>
+          </div>
+        ) : filteredStudents.length === 0 ? (
+          <div className="text-center py-12">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-2">
+              No Students Found
+            </h3>
+            <p className="text-muted-foreground">
+              {students.length === 0
+                ? "No students are enrolled in your courses yet."
+                : "No students match your current filters."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredStudents.map((student, i) => (
+              <motion.div
+                key={student.id}
+                variants={rise}
+                initial="hidden"
+                animate="visible"
+                custom={i}
+              >
+                <Card className="border-border/60 bg-card/70 backdrop-blur-lg hover:shadow-lg transition-shadow h-full">
+                  <CardContent className="pt-6">
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {student.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {student.studentId}
+                        </p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Mail className="h-4 w-4 text-muted-foreground" />
-                        <a
-                          href={`mailto:${student.email}`}
-                          className="text-primary hover:underline"
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <a
+                            href={`mailto:${student.email}`}
+                            className="text-primary hover:underline"
+                          >
+                            {student.email}
+                          </a>
+                        </div>
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-muted-foreground">
+                            {student.phone}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 flex-wrap">
+                        <Badge
+                          variant="outline"
+                          className={getStatusColor(student.status)}
                         >
-                          {student.email}
-                        </a>
+                          {student.status}
+                        </Badge>
+                        <Badge variant="secondary">{student.track}</Badge>
+                        <Badge variant="outline">GPA: {student.gpa}</Badge>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          {student.phone}
-                        </span>
+
+                      <div className="flex gap-2 pt-3 border-t border-border/60">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 gap-1"
+                        >
+                          <MessageCircle className="h-4 w-4" />
+                          Message
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                        >
+                          View Profile
+                        </Button>
                       </div>
                     </div>
-
-                    <div className="flex gap-2 flex-wrap">
-                      <Badge
-                        variant="outline"
-                        className={getStatusColor(student.status)}
-                      >
-                        {student.status}
-                      </Badge>
-                      <Badge variant="secondary">{student.track}</Badge>
-                      <Badge variant="outline">GPA: {student.gpa}</Badge>
-                    </div>
-
-                    <div className="flex gap-2 pt-3 border-t border-border/60">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 gap-1"
-                      >
-                        <MessageCircle className="h-4 w-4" />
-                        Message
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="flex-1 bg-gradient-to-r from-primary to-secondary"
-                      >
-                        View Profile
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        )}
       </main>
 
       <LecturerBottomNav />
