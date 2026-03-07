@@ -308,9 +308,9 @@ export default function StudentQuiz() {
         attempt_number: 1, // TODO: Calculate actual attempt number
         started_at: quizStartTime.toISOString(),
         completed_at: new Date().toISOString(),
-        score: takingQuiz.show_answers ? totalScore : null, // Set score if showing answers, otherwise null
+        score: totalScore, // Always record the calculated score automatically
         total_points: total,
-        status: takingQuiz.show_answers ? "graded" : "submitted",
+        status: "graded", // Always mark as graded since score is calculated
         time_taken: timeTaken,
       });
 
@@ -322,7 +322,7 @@ export default function StudentQuiz() {
           quiz_id: takingQuiz.id,
           student_id: user.uid,
           answers: answers,
-          score: takingQuiz.show_answers ? totalScore : 0,
+          score: totalScore, // Always use the calculated score
           total_points: total,
           completed_at: new Date().toISOString(),
           time_taken: timeTaken,
@@ -335,7 +335,7 @@ export default function StudentQuiz() {
         title: "Quiz Submitted!",
         description: takingQuiz.show_answers
           ? "Your answers have been reviewed!"
-          : "Your quiz has been submitted for grading. You will receive your results once graded.",
+          : "Your quiz has been submitted and results are now available to your lecturer.",
       });
     } catch (error: any) {
       console.error("Error submitting quiz:", error);
@@ -1210,9 +1210,8 @@ export default function StudentQuiz() {
                           Quiz Submitted!
                         </h3>
                         <p className="text-muted-foreground text-lg">
-                          Your quiz has been submitted for grading. You will
-                          receive your results once your lecturer has reviewed
-                          it.
+                          Your quiz has been automatically graded. Your results
+                          are now available to your lecturer.
                         </p>
                       </div>
 
@@ -1220,14 +1219,14 @@ export default function StudentQuiz() {
                       <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-6 border border-border/50">
                         <div className="space-y-4">
                           <div className="flex items-center justify-center gap-2 text-primary">
-                            <Clock className="h-5 w-5" />
+                            <CheckCircle2 className="h-5 w-5" />
                             <span className="font-medium">
-                              Submitted for Grading
+                              Automatically Graded
                             </span>
                           </div>
                           <p className="text-sm text-muted-foreground">
-                            Your lecturer will review your answers and provide
-                            feedback. Check back later for your results.
+                            Your quiz has been automatically graded and the
+                            results are now available to your lecturer.
                           </p>
                         </div>
                       </div>
