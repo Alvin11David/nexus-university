@@ -24,6 +24,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc,
   addDoc,
   setDoc,
   doc,
@@ -121,34 +122,55 @@ export default function LecturerGradeBook() {
     try {
       if (!user?.uid) return;
 
-      const q = query(
-        collection(db, "lecturer_courses"),
-        where("lecturer_id", "==", user.uid)
-      );
-      const querySnapshot = await getDocs(q);
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedRawCourses: any[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
 
-      if (querySnapshot.empty) {
-        setCourses([]);
-        return;
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            // Firestore 'in' supports up to 30 values
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                assignedRawCourses.push({
+                  id: doc.id,
+                  code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                  title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                  credits: courseData.credits || 3,
+                });
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile or course units:", err);
       }
 
-      const lecturerCoursesData = querySnapshot.docs.map(doc => doc.data());
-      const courseIds = lecturerCoursesData.map(lc => lc.course_id);
-
-      // Fetch course details chunked (max 30 ids per 'in' query)
-      const coursesData: any[] = [];
-      for (let i = 0; i < courseIds.length; i += 30) {
-        const chunk = courseIds.slice(i, i + 30);
-        const coursesQuery = query(
-          collection(db, "courses"),
-          where("__name__", "in", chunk)
-        );
-        const coursesSnap = await getDocs(coursesQuery);
-        coursesSnap.forEach(doc => {
-          coursesData.push({ id: doc.id, ...doc.data() });
-        });
-      }
-
+      // Set available courses to the assigned course units
+      const coursesData: any[] = assignedRawCourses.map((raw) => ({
+        id: raw.id || `temp-${Date.now()}`,
+        code: raw.code || "Unknown",
+        title: raw.title || "Unknown Course",
+        credits: raw.credits || 3,
+      }));
       setCourses(coursesData);
 
       if (coursesData.length > 0 && !selectedCourse) {
@@ -169,7 +191,7 @@ export default function LecturerGradeBook() {
       const enrollQuery = query(
         collection(db, "enrollments"),
         where("course_id", "==", selectedCourse),
-        where("status", "==", "approved")
+        where("status", "==", "approved"),
       );
       const enrollSnap = await getDocs(enrollQuery);
 
@@ -178,7 +200,7 @@ export default function LecturerGradeBook() {
         return;
       }
 
-      const studentIds = enrollSnap.docs.map(doc => doc.data().student_id);
+      const studentIds = enrollSnap.docs.map((doc) => doc.data().student_id);
 
       // Fetch student profiles chunked
       const profilesMap: Record<string, any> = {};
@@ -186,10 +208,10 @@ export default function LecturerGradeBook() {
         const chunk = studentIds.slice(i, i + 30);
         const profilesQuery = query(
           collection(db, "profiles"),
-          where("__name__", "in", chunk)
+          where("__name__", "in", chunk),
         );
         const profilesSnap = await getDocs(profilesQuery);
-        profilesSnap.forEach(doc => {
+        profilesSnap.forEach((doc) => {
           profilesMap[doc.id] = doc.data();
         });
       }
@@ -197,16 +219,16 @@ export default function LecturerGradeBook() {
       // Fetch existing grades for this course
       const gradesQuery = query(
         collection(db, "student_grades"),
-        where("course_id", "==", selectedCourse)
+        where("course_id", "==", selectedCourse),
       );
       const gradesSnap = await getDocs(gradesQuery);
       const gradesMap: Record<string, any> = {};
-      gradesSnap.forEach(doc => {
+      gradesSnap.forEach((doc) => {
         gradesMap[doc.data().student_id] = { ...doc.data(), id: doc.id };
       });
 
       // Merge data
-      const studentsWithGrades: StudentGrade[] = studentIds.map(sid => {
+      const studentsWithGrades: StudentGrade[] = studentIds.map((sid) => {
         const profile = profilesMap[sid];
         const existingGrade = gradesMap[sid];
 
@@ -317,7 +339,11 @@ export default function LecturerGradeBook() {
       };
 
       // Use sid_cid as the doc ID for upsert behavior
-      const gradeRef = doc(db, "student_grades", `${student.student_id}_${selectedCourse}`);
+      const gradeRef = doc(
+        db,
+        "student_grades",
+        `${student.student_id}_${selectedCourse}`,
+      );
       await setDoc(gradeRef, gradeData, { merge: true });
 
       await sendGradeUpdateNotification(student);
@@ -593,8 +619,8 @@ export default function LecturerGradeBook() {
     classAverage:
       students.length > 0
         ? (
-          students.reduce((acc, s) => acc + s.total, 0) / students.length
-        ).toFixed(1)
+            students.reduce((acc, s) => acc + s.total, 0) / students.length
+          ).toFixed(1)
         : "0.0",
     highestScore:
       students.length > 0 ? Math.max(...students.map((s) => s.total)) : 0,
