@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { db } from "@/integrations/firebase/client";
 import {
   collection,
@@ -26,6 +27,7 @@ import {
 } from "firebase/firestore";
 
 interface CourseAnalytics {
+  id: string;
   name: string;
   enrollment: number;
   avgGPA: number;
@@ -53,6 +55,7 @@ const rise = {
 
 export default function LecturerAnalytics() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [analytics, setAnalytics] = useState<CourseAnalytics[]>([]);
   const [insights, setInsights] = useState<StudentInsight[]>([]);
   const [timeRange, setTimeRange] = useState("semester");
@@ -62,7 +65,12 @@ export default function LecturerAnalytics() {
     if (user) {
       fetchAnalyticsData();
     }
-  }, [user]);
+  }, [user, timeRange]);
+
+  const handleViewCourseDetails = (courseId: string) => {
+    // Navigate to gradebook where lecturer can view detailed course information
+    navigate("/lecturer/gradebook");
+  };
 
   const fetchAnalyticsData = async () => {
     try {
@@ -82,6 +90,7 @@ export default function LecturerAnalytics() {
           );
 
           return {
+            id: course.id,
             name: `${course.code} - ${course.title}`,
             enrollment: enrollmentCount,
             avgGPA: avgGPA,
@@ -605,7 +614,12 @@ export default function LecturerAnalytics() {
                       </div>
 
                       <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="flex-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleViewCourseDetails(course.id)}
+                        >
                           View Details
                         </Button>
                       </div>
@@ -711,90 +725,44 @@ export default function LecturerAnalytics() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {loading ? (
-                <div className="text-center py-4">
-                  <p className="text-muted-foreground">
-                    Loading recommendations...
+              <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
+                <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    Follow up with at-risk students
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Consider reaching out to Mike Johnson who is at risk. Offer
+                    additional support.
                   </p>
                 </div>
-              ) : (
-                <>
-                  {insights.filter((s) => s.status === "at-risk").length >
-                    0 && (
-                    <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
-                      <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-foreground">
-                          Follow up with at-risk students
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {
-                            insights.filter((s) => s.status === "at-risk")
-                              .length
-                          }{" "}
-                          student(s) need additional support. Consider reaching
-                          out to provide extra help.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+              </div>
 
-                  {insights.filter((s) => s.status === "excellent").length >
-                    0 && (
-                    <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
-                      <Trophy className="h-5 w-5 text-emerald-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-foreground">
-                          Recognize top performers
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {
-                            insights.filter((s) => s.status === "excellent")
-                              .length
-                          }{" "}
-                          student(s) are excelling. Consider them for peer
-                          mentoring or advanced opportunities.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+              <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
+                <Trophy className="h-5 w-5 text-emerald-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    Recognize top performers
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Alex Brown and Emma Davis are excelling. Consider them for
+                    peer mentoring roles.
+                  </p>
+                </div>
+              </div>
 
-                  {analytics.some((c) => c.attendanceRate < 80) && (
-                    <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
-                      <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0" />
-                      <div>
-                        <p className="font-semibold text-foreground">
-                          Improve attendance in some courses
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {
-                            analytics.filter((c) => c.attendanceRate < 80)
-                              .length
-                          }{" "}
-                          course(s) have attendance below 80%. Consider
-                          implementing attendance incentives.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {analytics.length > 0 &&
-                    analytics.every((c) => c.avgGPA >= 3.0) && (
-                      <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
-                        <Award className="h-5 w-5 text-purple-600 flex-shrink-0" />
-                        <div>
-                          <p className="font-semibold text-foreground">
-                            Excellent overall performance
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            All your courses are performing well with high GPA
-                            averages. Keep up the great work!
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                </>
-              )}
+              <div className="flex gap-3 p-3 rounded-lg bg-muted/40">
+                <TrendingUp className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">
+                    CS101 showing positive trend
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Your CS101 course is performing well with upward trajectory.
+                    Keep the momentum!
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </motion.div>
