@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Users,
   Mail,
@@ -16,6 +17,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/integrations/firebase/client";
 import {
@@ -50,11 +57,14 @@ const rise = {
 
 export default function LecturerRoster() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTrack, setSelectedTrack] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -141,6 +151,16 @@ export default function LecturerRoster() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMessageStudent = (student: Student) => {
+    // Navigate to messages page - could pass student ID as a parameter
+    navigate("/lecturer/messages");
+  };
+
+  const handleViewProfile = (student: Student) => {
+    setSelectedStudent(student);
+    setShowProfileModal(true);
   };
 
   const filteredStudents = students.filter((s) => {
@@ -393,6 +413,7 @@ export default function LecturerRoster() {
                           size="sm"
                           variant="outline"
                           className="flex-1 gap-1"
+                          onClick={() => handleMessageStudent(student)}
                         >
                           <MessageCircle className="h-4 w-4" />
                           Message
@@ -400,6 +421,7 @@ export default function LecturerRoster() {
                         <Button
                           size="sm"
                           className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                          onClick={() => handleViewProfile(student)}
                         >
                           View Profile
                         </Button>
@@ -412,6 +434,130 @@ export default function LecturerRoster() {
           </div>
         )}
       </main>
+
+      {/* Student Profile Modal */}
+      <AnimatePresence>
+        {showProfileModal && selectedStudent && (
+          <Dialog open={showProfileModal} onOpenChange={setShowProfileModal}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                    <Users className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold">
+                      {selectedStudent.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Student ID: {selectedStudent.studentId}
+                    </p>
+                  </div>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Email</p>
+                      <a
+                        href={`mailto:${selectedStudent.email}`}
+                        className="text-sm text-primary hover:underline"
+                      >
+                        {selectedStudent.email}
+                      </a>
+                    </div>
+                  </div>
+
+                  {selectedStudent.phone && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Phone className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">Phone</p>
+                        <a
+                          href={`tel:${selectedStudent.phone}`}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          {selectedStudent.phone}
+                        </a>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <Users className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Programme</p>
+                      <p className="text-sm text-foreground">
+                        {selectedStudent.track}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Status</p>
+                      <Badge
+                        className={`text-xs ${
+                          selectedStudent.status === "active"
+                            ? "bg-emerald-500/20 text-emerald-700 border-emerald-300/30"
+                            : "bg-amber-500/20 text-amber-700 border-amber-300/30"
+                        }`}
+                      >
+                        {selectedStudent.status}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {selectedStudent.gpa > 0 && (
+                    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                      <Filter className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">GPA</p>
+                        <p className="text-sm text-foreground">
+                          {selectedStudent.gpa.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                    <MapPin className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Enrolled</p>
+                      <p className="text-sm text-foreground">
+                        {new Date(
+                          selectedStudent.enrollmentDate,
+                        ).toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => handleMessageStudent(selectedStudent)}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Message
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => setShowProfileModal(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
 
       <LecturerBottomNav />
     </div>
