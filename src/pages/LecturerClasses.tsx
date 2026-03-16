@@ -4,18 +4,19 @@ import {
   PlayCircle,
   Plus,
   Video,
-  Link as LinkIcon,
   Users,
   Clock,
   CheckCircle,
   AlertCircle,
   Download,
+  Copy,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface ClassSession {
   id: string;
@@ -40,6 +41,7 @@ const rise = {
 };
 
 export default function LecturerClasses() {
+  const { toast } = useToast();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
@@ -146,6 +148,29 @@ export default function LecturerClasses() {
     }
   };
 
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    toast({
+      title: "Link Copied",
+      description: "Meeting link copied to clipboard.",
+    });
+  };
+
+  const handleStartSession = (link: string) => {
+    window.open(link, "_blank");
+  };
+
+  const handleOpenRecording = (url: string) => {
+    window.open(url, "_blank");
+  };
+
+  const handleNewSession = () => {
+    toast({
+      title: "New Session",
+      description: "Session scheduling will be available in a future update.",
+    });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
       <LecturerHeader />
@@ -169,7 +194,10 @@ export default function LecturerClasses() {
                 </p>
               </div>
             </div>
-            <Button className="bg-gradient-to-r from-primary to-secondary gap-2">
+            <Button
+              className="bg-gradient-to-r from-primary to-secondary gap-2"
+              onClick={handleNewSession}
+            >
               <Plus className="h-4 w-4" /> New Session
             </Button>
           </div>
@@ -280,7 +308,7 @@ export default function LecturerClasses() {
               >
                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
-            )
+            ),
           )}
         </motion.div>
 
@@ -313,7 +341,7 @@ export default function LecturerClasses() {
                           <div className="flex items-start gap-3">
                             <div
                               className={`p-2 rounded-lg ${getStatusColor(
-                                session.status
+                                session.status,
                               )}`}
                             >
                               <StatusIcon className="h-5 w-5" />
@@ -362,12 +390,23 @@ export default function LecturerClasses() {
                           )}
                           {session.status === "scheduled" && (
                             <>
-                              <Button size="sm" variant="outline">
-                                <LinkIcon className="h-4 w-4" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  session.meetingLink &&
+                                  handleCopyLink(session.meetingLink)
+                                }
+                              >
+                                <Copy className="h-4 w-4" />
                               </Button>
                               <Button
                                 size="sm"
                                 className="bg-gradient-to-r from-primary to-secondary"
+                                onClick={() =>
+                                  session.meetingLink &&
+                                  handleStartSession(session.meetingLink)
+                                }
                               >
                                 <PlayCircle className="h-4 w-4 mr-1" /> Start
                               </Button>
@@ -375,7 +414,13 @@ export default function LecturerClasses() {
                           )}
                           {session.status === "completed" &&
                             session.recordingUrl && (
-                              <Button size="sm" variant="outline">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() =>
+                                  handleOpenRecording(session.recordingUrl!)
+                                }
+                              >
                                 <Download className="h-4 w-4 mr-1" /> Recording
                               </Button>
                             )}
