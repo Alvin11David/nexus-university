@@ -10,12 +10,14 @@ import {
   CheckCircle,
   AlertCircle,
   Download,
+  Copy,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface ClassSession {
   id: string;
@@ -40,6 +42,7 @@ const rise = {
 };
 
 export default function LecturerClasses() {
+  const { toast } = useToast();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
@@ -141,6 +144,46 @@ export default function LecturerClasses() {
         return CheckCircle;
       case "cancelled":
         return AlertCircle;
+
+        const handleCopyLink = (link: string) => {
+          navigator.clipboard.writeText(link);
+          toast({ title: "Link Copied", description: "Meeting link copied to clipboard." });
+        };
+
+        const handleStartSession = (link: string) => {
+          window.open(link, "_blank");
+        };
+
+        const handleOpenRecording = (url: string) => {
+          window.open(url, "_blank");
+        };
+
+        const handleNewSession = () => {
+          toast({
+            title: "New Session",
+            description: "Session scheduling will be available in a future update.",
+          });
+        };
+  
+        const handleCopyLink = (link: string) => {
+          navigator.clipboard.writeText(link);
+          toast({ title: "Link Copied", description: "Meeting link copied to clipboard." });
+        };
+  
+        const handleStartSession = (link: string) => {
+          window.open(link, "_blank");
+        };
+  
+        const handleOpenRecording = (url: string) => {
+          window.open(url, "_blank");
+        };
+  
+        const handleNewSession = () => {
+          toast({
+            title: "New Session",
+            description: "Session scheduling will be available in a future update.",
+          });
+        };
       default:
         return Clock;
     }
@@ -172,6 +215,7 @@ export default function LecturerClasses() {
             <Button className="bg-gradient-to-r from-primary to-secondary gap-2">
               <Plus className="h-4 w-4" /> New Session
             </Button>
+
           </div>
 
           {/* Stats Grid */}
@@ -368,6 +412,7 @@ export default function LecturerClasses() {
                               <Button
                                 size="sm"
                                 className="bg-gradient-to-r from-primary to-secondary"
+                                onClick={() => session.meetingLink && handleStartSession(session.meetingLink)}
                               >
                                 <PlayCircle className="h-4 w-4 mr-1" /> Start
                               </Button>
@@ -375,7 +420,7 @@ export default function LecturerClasses() {
                           )}
                           {session.status === "completed" &&
                             session.recordingUrl && (
-                              <Button size="sm" variant="outline">
+                              <Button size="sm" variant="outline" onClick={() => handleOpenRecording(session.recordingUrl!)}>
                                 <Download className="h-4 w-4 mr-1" /> Recording
                               </Button>
                             )}

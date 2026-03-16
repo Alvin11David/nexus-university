@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Calendar,
@@ -16,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 interface AttendanceRecord {
   id: string;
@@ -36,7 +38,11 @@ const rise = {
 };
 
 export default function LecturerAttendance() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [savedRecords, setSavedRecords] = useState<AttendanceRecord[]>([]);
   const [selectedCourse, setSelectedCourse] = useState("CS101");
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -107,7 +113,62 @@ export default function LecturerAttendance() {
 
   useEffect(() => {
     setRecords(mockRecords);
+    setSavedRecords(mockRecords);
   }, []);
+
+  const handleExport = () => {
+    const header = "Student Name,Course Code,Date,Status,Remarks";
+    const rows = filteredRecords.map(
+      (r) => `"${r.studentName}","${r.courseCode}","${r.date}","${r.status}","${r.remarks || ""}"`
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `attendance-${selectedCourse}-${selectedDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Exported", description: "Attendance exported as CSV." });
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split("\n").slice(1).filter(Boolean);
+      const imported: AttendanceRecord[] = lines.map((line, i) => {
+        const cols = line.split(",").map((c) => c.replace(/^"|"$/g, ""));
+        return {
+          id: `import-${i}`,
+          studentName: cols[0] || "",
+          courseCode: cols[1] || selectedCourse,
+          date: cols[2] || selectedDate,
+          status: (cols[3] as AttendanceRecord["status"]) || "present",
+          remarks: cols[4] || undefined,
+        };
+      });
+      setRecords((prev) => [
+        ...prev.filter((r) => !imported.some((im) => im.studentName === r.studentName && im.date === r.date)),
+        ...imported,
+      ]);
+      toast({ title: "Imported", description: `${imported.length} records imported.` });
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleCancel = () => {
+    setRecords(savedRecords);
+    toast({ title: "Cancelled", description: "Changes have been discarded." });
+  };
+
+  const handleSaveAttendance = () => {
+    setSavedRecords(records);
+    toast({ title: "Attendance Saved", description: `${filteredRecords.length} records saved for ${selectedCourse} on ${selectedDate}.` });
+  };
 
   const filteredRecords = records.filter(
     (r) =>
@@ -177,10 +238,17 @@ export default function LecturerAttendance() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" className="gap-2">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".csv"
+                className="hidden"
+                onChange={handleImport}
+              />
+              <Button variant="outline" className="gap-2" onClick={handleExport}>
                 <Download className="h-4 w-4" /> Export
               </Button>
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2" onClick={() => importInputRef.current?.click()}>
                 <Upload className="h-4 w-4" /> Import
               </Button>
             </div>
@@ -379,8 +447,8 @@ export default function LecturerAttendance() {
         </Card>
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline">Cancel</Button>
-          <Button className="bg-gradient-to-r from-primary to-secondary">
+          <Button variant="outline" onClick={handleCancel}>Cancel</Button>
+          <Button className="bg-gradient-to-r from-primary to-secondary" onClick={handleSaveAttendance}>
             Save Attendance
           </Button>
         </div>

@@ -32,12 +32,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { db, auth } from "@/firebase";
-import { doc, updateDoc, Timestamp } from "firebase/firestore";
+import { doc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
 import {
   updatePassword,
   EmailAuthProvider,
   reauthenticateWithCredential,
+  deleteUser,
 } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -53,12 +55,14 @@ const itemVariants = {
 export default function LecturerSettings() {
   const { profile, user } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
   const [saved, setSaved] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   // Profile form state
   const [fullName, setFullName] = useState("");
@@ -276,6 +280,44 @@ export default function LecturerSettings() {
       });
     } finally {
       setSavingProfile(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete your account? This action is permanent and cannot be undone."
+    );
+    if (!confirmed) return;
+
+    const password = window.prompt("Please enter your current password to confirm:");
+    if (!password) return;
+
+    setDeletingAccount(true);
+    try {
+      if (!auth.currentUser || !auth.currentUser.email) {
+        throw new Error("No user logged in");
+      }
+      const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+      await reauthenticateWithCredential(auth.currentUser, credential);
+
+      // Delete Firestore profile
+      if (user?.uid) {
+        await deleteDoc(doc(db, "profiles", user.uid));
+      }
+
+      // Delete Firebase Auth account
+      await deleteUser(auth.currentUser);
+
+      toast({ title: "Account Deleted", description: "Your account has been permanently deleted." });
+      navigate("/auth");
+    } catch (error: any) {
+      toast({
+        title: "Deletion Failed",
+        description: error.message || "Failed to delete account.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -1356,8 +1398,10 @@ export default function LecturerSettings() {
                       <Button
                         variant="destructive"
                         className="w-full bg-red-600 hover:bg-red-700"
+                        onClick={handleDeleteAccount}
+                        disabled={deletingAccount}
                       >
-                        Delete Account
+                        {deletingAccount ? "Deleting..." : "Delete Account"}
                       </Button>
                     </CardContent>
                   </Card>
