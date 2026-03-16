@@ -24,7 +24,16 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
@@ -284,7 +293,9 @@ export default function Timetable() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
   const [dynamicCourses, setDynamicCourses] = useState<any[]>([]);
-  const [submissionStatuses, setSubmissionStatuses] = useState<Map<string, string>>(new Map());
+  const [submissionStatuses, setSubmissionStatuses] = useState<
+    Map<string, string>
+  >(new Map());
   const timetableRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -294,12 +305,42 @@ export default function Timetable() {
   // Helper to get color for a course index
   const getCourseColors = (index: number) => {
     const palettes = [
-      { color: "from-indigo-500 to-blue-500", textColor: "text-blue-600", bgColor: "bg-blue-50", borderColor: "border-blue-200" },
-      { color: "from-emerald-500 to-teal-500", textColor: "text-emerald-600", bgColor: "bg-emerald-50", borderColor: "border-emerald-200" },
-      { color: "from-purple-500 to-fuchsia-500", textColor: "text-purple-600", bgColor: "bg-purple-50", borderColor: "border-purple-200" },
-      { color: "from-orange-500 to-red-500", textColor: "text-orange-600", bgColor: "bg-orange-50", borderColor: "border-orange-200" },
-      { color: "from-rose-500 to-pink-500", textColor: "text-rose-600", bgColor: "bg-rose-50", borderColor: "border-rose-200" },
-      { color: "from-cyan-500 to-blue-500", textColor: "text-cyan-600", bgColor: "bg-cyan-50", borderColor: "border-cyan-200" },
+      {
+        color: "from-indigo-500 to-blue-500",
+        textColor: "text-blue-600",
+        bgColor: "bg-blue-50",
+        borderColor: "border-blue-200",
+      },
+      {
+        color: "from-emerald-500 to-teal-500",
+        textColor: "text-emerald-600",
+        bgColor: "bg-emerald-50",
+        borderColor: "border-emerald-200",
+      },
+      {
+        color: "from-purple-500 to-fuchsia-500",
+        textColor: "text-purple-600",
+        bgColor: "bg-purple-50",
+        borderColor: "border-purple-200",
+      },
+      {
+        color: "from-orange-500 to-red-500",
+        textColor: "text-orange-600",
+        bgColor: "bg-orange-50",
+        borderColor: "border-orange-200",
+      },
+      {
+        color: "from-rose-500 to-pink-500",
+        textColor: "text-rose-600",
+        bgColor: "bg-rose-50",
+        borderColor: "border-rose-200",
+      },
+      {
+        color: "from-cyan-500 to-blue-500",
+        textColor: "text-cyan-600",
+        bgColor: "bg-cyan-50",
+        borderColor: "border-cyan-200",
+      },
     ];
     return palettes[index % palettes.length];
   };
@@ -317,7 +358,7 @@ export default function Timetable() {
         const qEnroll = query(
           enrollRef,
           where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"])
+          where("status", "in", ["approved", "pending"]),
         );
         const enrollSnap = await getDocs(qEnroll);
 
@@ -328,14 +369,19 @@ export default function Timetable() {
           return;
         }
 
-        const enrolledCourseIds = enrollSnap.docs.map(d => d.data().course_id).filter(Boolean);
+        const enrolledCourseIds = enrollSnap.docs
+          .map((d) => d.data().course_id)
+          .filter(Boolean);
 
         // 2. Fetch course details
         const courseMap = new Map();
         const coursesList: any[] = [];
         for (let i = 0; i < enrolledCourseIds.length; i += 10) {
           const chunk = enrolledCourseIds.slice(i, i + 10);
-          const qCourse = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const qCourse = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
           const courseSnap = await getDocs(qCourse);
           courseSnap.docs.forEach((d, idx) => {
             const data = d.data();
@@ -348,7 +394,7 @@ export default function Timetable() {
         setDynamicCourses(coursesList);
 
         // 3. Fetch assignments for enrolled courses
-        const assignmentsRef = collection(db, "assignments");
+        const assignmentsRef = collection(db, "Assignments");
         const assignmentsData: any[] = [];
         const now = new Date().toISOString();
 
@@ -358,14 +404,16 @@ export default function Timetable() {
             assignmentsRef,
             where("course_id", "in", chunk),
             where("due_date", ">=", now),
-            orderBy("due_date", "asc")
+            orderBy("due_date", "asc"),
           );
           const assignSnap = await getDocs(qAssign);
-          assignmentsData.push(...assignSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+          assignmentsData.push(
+            ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+          );
         }
 
         // 4. Fetch submission statuses
-        const assignmentIds = assignmentsData.map(a => a.id);
+        const assignmentIds = assignmentsData.map((a) => a.id);
         const statusMap = new Map<string, string>();
         if (assignmentIds.length > 0) {
           const submissionsRef = collection(db, "submissions");
@@ -374,10 +422,10 @@ export default function Timetable() {
             const qSubs = query(
               submissionsRef,
               where("student_id", "==", user.uid),
-              where("assignment_id", "in", chunk)
+              where("assignment_id", "in", chunk),
             );
             const subSnap = await getDocs(qSubs);
-            subSnap.docs.forEach(d => {
+            subSnap.docs.forEach((d) => {
               const data = d.data();
               statusMap.set(data.assignment_id, data.status || "submitted");
             });
@@ -386,13 +434,15 @@ export default function Timetable() {
         setSubmissionStatuses(statusMap);
 
         // Map assignments with course and status
-        const mapped: Assignment[] = assignmentsData.map(a => ({
+        const mapped: Assignment[] = assignmentsData.map((a) => ({
           ...a,
           status: statusMap.get(a.id) || "pending",
-          course: courseMap.get(a.course_id) ? {
-            code: courseMap.get(a.course_id).code,
-            title: courseMap.get(a.course_id).title
-          } : undefined
+          course: courseMap.get(a.course_id)
+            ? {
+                code: courseMap.get(a.course_id).code,
+                title: courseMap.get(a.course_id).title,
+              }
+            : undefined,
         }));
 
         setAssignments(mapped);
@@ -411,7 +461,9 @@ export default function Timetable() {
     fetchData();
   }, [user]);
 
-  const getCourseById = (id: string | number) => dynamicCourses.find((c) => c.id === id) || courses.find((c) => c.id === (typeof id === 'string' ? id : id)); // Keep fallback for mocked schedule
+  const getCourseById = (id: string | number) =>
+    dynamicCourses.find((c) => c.id === id) ||
+    courses.find((c) => c.id === (typeof id === "string" ? id : id)); // Keep fallback for mocked schedule
 
   // Share functionality
   const handleShare = async () => {
@@ -467,8 +519,9 @@ export default function Timetable() {
       });
 
       const link = document.createElement("a");
-      link.download = `teaching-timetable-${new Date().toISOString().split("T")[0]
-        }.png`;
+      link.download = `teaching-timetable-${
+        new Date().toISOString().split("T")[0]
+      }.png`;
       link.href = canvas.toDataURL("image/png");
       link.click();
 
@@ -513,7 +566,7 @@ export default function Timetable() {
 
       pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height);
       pdf.save(
-        `teaching-timetable-${new Date().toISOString().split("T")[0]}.pdf`
+        `teaching-timetable-${new Date().toISOString().split("T")[0]}.pdf`,
       );
 
       toast({
@@ -544,7 +597,7 @@ export default function Timetable() {
                 "text-center py-3 px-2 rounded-lg font-semibold transition-all relative",
                 day === currentDay
                   ? "bg-gradient-to-br from-secondary to-secondary/80 text-secondary-foreground shadow-lg ring-2 ring-secondary/50"
-                  : "bg-muted/50 text-foreground"
+                  : "bg-muted/50 text-foreground",
               )}
             >
               <div className="text-xs uppercase tracking-wide">
@@ -582,7 +635,7 @@ export default function Timetable() {
                 key={day}
                 className={cn(
                   "space-y-2 p-2 rounded-lg transition-colors",
-                  day === currentDay ? "bg-secondary/5" : ""
+                  day === currentDay ? "bg-secondary/5" : "",
                 )}
               >
                 {timeSlots.map((time, index) => {
@@ -607,7 +660,7 @@ export default function Timetable() {
                         className={cn(
                           "relative h-20 rounded-lg border-l-4 p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group",
                           course?.bgColor,
-                          course?.borderColor
+                          course?.borderColor,
                         )}
                         style={{
                           minHeight: duration > 2 ? "160px" : "80px",
@@ -619,7 +672,7 @@ export default function Timetable() {
                               <h4
                                 className={cn(
                                   "font-bold text-xs line-clamp-1",
-                                  course?.textColor
+                                  course?.textColor,
                                 )}
                               >
                                 {course?.code}
@@ -681,7 +734,7 @@ export default function Timetable() {
                         "h-20 rounded-lg border border-dashed transition-colors",
                         day === currentDay
                           ? "bg-secondary/10 border-secondary/30"
-                          : "bg-muted/20 border-muted-foreground/20"
+                          : "bg-muted/20 border-muted-foreground/20",
                       )}
                     />
                   );
@@ -706,7 +759,7 @@ export default function Timetable() {
           <Card
             className={cn(
               "overflow-hidden",
-              daySchedule.day === currentDay && "border-secondary shadow-lg"
+              daySchedule.day === currentDay && "border-secondary shadow-lg",
             )}
           >
             <div
@@ -714,7 +767,7 @@ export default function Timetable() {
                 "px-6 py-4 border-b",
                 daySchedule.day === currentDay
                   ? "bg-secondary text-secondary-foreground"
-                  : "bg-muted/50"
+                  : "bg-muted/50",
               )}
             >
               <div className="flex items-center justify-between">
@@ -738,7 +791,7 @@ export default function Timetable() {
                     className={cn(
                       "relative p-4 rounded-lg border-l-4 hover:shadow-md transition-all cursor-pointer",
                       course?.bgColor,
-                      course?.borderColor
+                      course?.borderColor,
                     )}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -747,7 +800,7 @@ export default function Timetable() {
                           <h4
                             className={cn(
                               "font-bold text-lg",
-                              course?.textColor
+                              course?.textColor,
                             )}
                           >
                             {course?.code}
@@ -921,7 +974,7 @@ export default function Timetable() {
                   <p className="text-2xl font-bold">
                     {schedule.reduce(
                       (acc, day) => acc + day.sessions.length,
-                      0
+                      0,
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -940,7 +993,7 @@ export default function Timetable() {
                     {schedule.reduce(
                       (acc, day) =>
                         acc + day.sessions.filter((s) => s.online).length,
-                      0
+                      0,
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -968,7 +1021,7 @@ export default function Timetable() {
                   const dueDate = new Date(assignment.due_date);
                   const daysUntilDue = Math.ceil(
                     (dueDate.getTime() - new Date().getTime()) /
-                    (1000 * 60 * 60 * 24)
+                      (1000 * 60 * 60 * 24),
                   );
                   const isUrgent = daysUntilDue <= 3;
 
@@ -982,7 +1035,7 @@ export default function Timetable() {
                         "flex items-center gap-4 p-4 rounded-lg border-l-4 hover:shadow-md transition-all cursor-pointer",
                         isUrgent
                           ? "bg-red-50 border-red-500"
-                          : "bg-blue-50 border-blue-500"
+                          : "bg-blue-50 border-blue-500",
                       )}
                     >
                       <div className="flex-1">
@@ -990,7 +1043,7 @@ export default function Timetable() {
                           <h4
                             className={cn(
                               "font-semibold text-sm",
-                              isUrgent ? "text-red-700" : "text-blue-700"
+                              isUrgent ? "text-red-700" : "text-blue-700",
                             )}
                           >
                             {assignment.title}
@@ -1003,9 +1056,11 @@ export default function Timetable() {
                               variant="secondary"
                               className={cn(
                                 "text-[10px] h-4",
-                                assignment.status === "submitted" ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20" :
-                                  assignment.status === "graded" ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                                    "bg-amber-500/10 text-amber-600 border-amber-500/20"
+                                assignment.status === "submitted"
+                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                                  : assignment.status === "graded"
+                                    ? "bg-blue-500/10 text-blue-600 border-blue-500/20"
+                                    : "bg-amber-500/10 text-amber-600 border-amber-500/20",
                               )}
                             >
                               {assignment.status}
@@ -1032,7 +1087,7 @@ export default function Timetable() {
                         <p
                           className={cn(
                             "text-xl font-bold",
-                            isUrgent ? "text-red-600" : "text-blue-600"
+                            isUrgent ? "text-red-600" : "text-blue-600",
                           )}
                         >
                           {daysUntilDue}
@@ -1106,13 +1161,13 @@ export default function Timetable() {
                   className={cn(
                     "flex items-center gap-3 p-3 rounded-lg border-l-4",
                     course.bgColor,
-                    course.borderColor
+                    course.borderColor,
                   )}
                 >
                   <div
                     className={cn(
                       "w-3 h-3 rounded-full",
-                      `bg-gradient-to-br ${course.color}`
+                      `bg-gradient-to-br ${course.color}`,
                     )}
                   />
                   <div className="flex-1 min-w-0">

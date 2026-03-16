@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -26,6 +26,7 @@ import {
   getDocs,
   doc,
   orderBy,
+  onSnapshot,
 } from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -34,12 +35,14 @@ interface QuizAttempt {
   student_id: string;
   student_name: string;
   student_email: string;
-  score: number;
+  score: number | null;
   total_points: number;
-  percentage: number;
+  percentage: number | null;
   time_taken: number;
   completed_at: string;
-  passed: boolean;
+  passed: boolean | null;
+  status: "submitted" | "graded";
+  answers: any;
 }
 
 interface QuizStats {
@@ -61,6 +64,11 @@ export default function QuizResults() {
   const [loading, setLoading] = useState(true);
   const [quiz, setQuiz] = useState<any>(null);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [viewingAttempt, setViewingAttempt] = useState<QuizAttempt | null>(
+    null,
+  );
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const [stats, setStats] = useState<QuizStats>({
     totalAttempts: 0,
     averageScore: 0,
@@ -75,8 +83,17 @@ export default function QuizResults() {
   useEffect(() => {
     if (id) {
       loadQuiz();
-      loadResults();
+      const unsubscribe = loadResults();
+      unsubscribeRef.current = unsubscribe;
     }
+
+    // Cleanup function to unsubscribe from listeners
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
+    };
   }, [id]);
 
   const loadQuiz = async () => {
@@ -94,122 +111,186 @@ export default function QuizResults() {
     }
   };
 
-  const loadResults = async () => {
+  const loadResults = () => {
     try {
-      // Load quiz attempts from Firestore
+      // Set up real-time listener for quiz attempts
       const attemptsQuery = query(
         collection(db, "quiz_attempts"),
         where("quiz_id", "==", id),
         orderBy("completed_at", "desc"),
       );
-      const attemptsSnapshot = await getDocs(attemptsQuery);
-      const attemptsData: QuizAttempt[] = attemptsSnapshot.docs.map(
-        (docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<QuizAttempt, "id">),
-        }),
-      );
-      if (!attemptsData || attemptsData.length === 0) {
-        setAttempts([]);
-        setStats({
-          totalAttempts: 0,
-          averageScore: 0,
-          averagePercentage: 0,
-          completionRate: 0,
-          highestScore: 0,
-          lowestScore: 0,
-          averageTime: 0,
-          passRate: 0,
-        });
-        return;
-      }
-      // Load student profiles from Firestore
-      const studentIds = attemptsData.map((attempt) => attempt.student_id);
-      let profilesMap = new Map();
-      if (studentIds.length > 0) {
-        const profilesQuery = query(
-          collection(db, "profiles"),
-          where("id", "in", studentIds),
-        );
-        const profilesSnapshot = await getDocs(profilesQuery);
-        profilesSnapshot.docs.forEach((docSnap) => {
-          profilesMap.set(docSnap.id, docSnap.data());
-        });
-      }
-      const formattedAttempts: QuizAttempt[] = attemptsData.map(
-        (attemptRaw) => {
-          const attempt = attemptRaw as QuizAttempt & {
-            started_at?: string;
-            completed_at?: string;
-          };
-          const profile = profilesMap.get(attempt.student_id);
-          // Calculate time taken from started_at and completed_at if available
-          const timeTaken =
-            attempt.completed_at && attempt.started_at
-              ? Math.round(
-                  (new Date(attempt.completed_at).getTime() -
-                    new Date(attempt.started_at).getTime()) /
-                    1000,
-                )
-              : 0;
-          return {
-            id: attempt.id,
-            student_id: attempt.student_id,
-            student_name: profile?.full_name || "Unknown Student",
-            student_email: profile?.email || "",
-            score: attempt.score || 0,
-            total_points: quiz?.total_points || 0,
-            percentage:
-              quiz?.total_points && quiz.total_points > 0
-                ? Math.round((attempt.score / quiz.total_points) * 100)
-                : 0,
-            time_taken: timeTaken,
-            completed_at:
-              attempt.completed_at ||
-              attempt.started_at ||
-              new Date().toISOString(),
-            passed: (attempt.score || 0) >= (quiz?.passing_score || 0),
-          };
+
+      const unsubscribe = onSnapshot(
+        attemptsQuery,
+        async (attemptsSnapshot) => {
+          const attemptsData: QuizAttempt[] = attemptsSnapshot.docs.map(
+            (docSnap) => ({
+              id: docSnap.id,
+              ...(docSnap.data() as Omit<QuizAttempt, "id">),
+            }),
+          );
+
+          if (!attemptsData || attemptsData.length === 0) {
+            setAttempts([]);
+            setStats({
+              totalAttempts: 0,
+              averageScore: 0,
+              averagePercentage: 0,
+              completionRate: 0,
+              highestScore: 0,
+              lowestScore: 0,
+              averageTime: 0,
+              passRate: 0,
+            });
+            setLoading(false);
+            return;
+          }
+
+          // Load student profiles from Firestore
+          const studentIds = attemptsData.map((attempt) => attempt.student_id);
+          let profilesMap = new Map();
+          if (studentIds.length > 0) {
+            const profilesQuery = query(
+              collection(db, "profiles"),
+              where("id", "in", studentIds),
+            );
+            const profilesSnapshot = await getDocs(profilesQuery);
+            profilesSnapshot.docs.forEach((docSnap) => {
+              profilesMap.set(docSnap.id, docSnap.data());
+            });
+          }
+
+          const formattedAttempts: QuizAttempt[] = attemptsData.map(
+            (attemptRaw) => {
+              const attempt = attemptRaw as QuizAttempt & {
+                started_at?: string;
+                completed_at?: string;
+              };
+              const profile = profilesMap.get(attempt.student_id);
+              // Calculate time taken from started_at and completed_at if available
+              const timeTaken =
+                attempt.completed_at && attempt.started_at
+                  ? Math.round(
+                      (new Date(attempt.completed_at).getTime() -
+                        new Date(attempt.started_at).getTime()) /
+                        1000,
+                    )
+                  : 0;
+              return {
+                id: attempt.id,
+                student_id: attempt.student_id,
+                student_name: profile?.full_name || "Unknown Student",
+                student_email: profile?.email || "",
+                score: attempt.score,
+                total_points: quiz?.total_points || 0,
+                percentage:
+                  attempt.score !== null &&
+                  quiz?.total_points &&
+                  quiz.total_points > 0
+                    ? Math.round((attempt.score / quiz.total_points) * 100)
+                    : null,
+                time_taken: timeTaken,
+                completed_at:
+                  attempt.completed_at ||
+                  attempt.started_at ||
+                  new Date().toISOString(),
+                passed:
+                  attempt.score !== null
+                    ? attempt.score >= (quiz?.passing_score || 0)
+                    : null,
+                status: attempt.score !== null ? "graded" : "submitted",
+                answers: attempt.answers || {},
+              };
+            },
+          );
+
+          setAttempts(formattedAttempts);
+
+          // Calculate stats
+          if (formattedAttempts.length > 0) {
+            const totalAttempts = formattedAttempts.length;
+            const gradedAttempts = formattedAttempts.filter(
+              (a) => a.score !== null,
+            );
+
+            // Only calculate averages for graded attempts
+            const averageScore =
+              gradedAttempts.length > 0
+                ? gradedAttempts.reduce((sum, a) => sum + (a.score || 0), 0) /
+                  gradedAttempts.length
+                : 0;
+            const averagePercentage =
+              gradedAttempts.length > 0
+                ? gradedAttempts.reduce(
+                    (sum, a) => sum + (a.percentage || 0),
+                    0,
+                  ) / gradedAttempts.length
+                : 0;
+            const highestScore =
+              gradedAttempts.length > 0
+                ? Math.max(...gradedAttempts.map((a) => a.score || 0))
+                : 0;
+            const lowestScore =
+              gradedAttempts.length > 0
+                ? Math.min(...gradedAttempts.map((a) => a.score || 0))
+                : 0;
+            const averageTime =
+              formattedAttempts.reduce((sum, a) => sum + a.time_taken, 0) /
+              totalAttempts;
+            const passRate =
+              gradedAttempts.length > 0
+                ? (gradedAttempts.filter((a) => a.passed).length /
+                    gradedAttempts.length) *
+                  100
+                : 0;
+
+            setStats({
+              totalAttempts,
+              averageScore: Math.round(averageScore * 10) / 10,
+              averagePercentage: Math.round(averagePercentage),
+              completionRate: 100,
+              highestScore,
+              lowestScore,
+              averageTime: Math.round(averageTime),
+              passRate: Math.round(passRate),
+            });
+          }
+
+          setLoading(false);
         },
       );
-      setAttempts(formattedAttempts);
-      // Calculate stats
-      if (formattedAttempts.length > 0) {
-        const totalAttempts = formattedAttempts.length;
-        const averageScore =
-          formattedAttempts.reduce((sum, a) => sum + a.score, 0) /
-          totalAttempts;
-        const averagePercentage =
-          formattedAttempts.reduce((sum, a) => sum + a.percentage, 0) /
-          totalAttempts;
-        const highestScore = Math.max(...formattedAttempts.map((a) => a.score));
-        const lowestScore = Math.min(...formattedAttempts.map((a) => a.score));
-        const averageTime =
-          formattedAttempts.reduce((sum, a) => sum + a.time_taken, 0) /
-          totalAttempts;
-        const passRate =
-          (formattedAttempts.filter((a) => a.passed).length / totalAttempts) *
-          100;
-        setStats({
-          totalAttempts,
-          averageScore: Math.round(averageScore * 10) / 10,
-          averagePercentage: Math.round(averagePercentage),
-          completionRate: 100,
-          highestScore,
-          lowestScore,
-          averageTime: Math.round(averageTime),
-          passRate: Math.round(passRate),
-        });
-      }
+
+      // Return unsubscribe function for cleanup
+      return unsubscribe;
     } catch (error: any) {
-      console.error("Error loading results:", error);
+      console.error("Error setting up results listener:", error);
       toast({
         title: "Error",
         description: error?.message || "Failed to load results",
         variant: "destructive",
       });
-    } finally {
       setLoading(false);
+    }
+  };
+
+  const handleViewAttempt = async (attempt: QuizAttempt) => {
+    setViewingAttempt(attempt);
+
+    // Load quiz questions for reference
+    try {
+      const questionsQuery = query(
+        collection(db, "questions"),
+        where("quiz_id", "==", id),
+        orderBy("order", "asc"),
+      );
+      const questionsSnapshot = await getDocs(questionsQuery);
+      const questionsData = questionsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setQuizQuestions(questionsData);
+    } catch (error) {
+      console.error("Error loading questions:", error);
     }
   };
 
@@ -365,6 +446,9 @@ export default function QuizResults() {
                         <th className="text-left py-3 px-4 font-semibold">
                           Completed
                         </th>
+                        <th className="text-left py-3 px-4 font-semibold">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -385,21 +469,27 @@ export default function QuizResults() {
                           </td>
                           <td className="py-3 px-4">
                             <span className="font-medium">
-                              {attempt.score}/{attempt.total_points}
+                              {attempt.score !== null
+                                ? `${attempt.score}/${attempt.total_points}`
+                                : "Not graded"}
                             </span>
                           </td>
                           <td className="py-3 px-4">
-                            <span
-                              className={`font-medium ${
-                                attempt.percentage >= 70
-                                  ? "text-emerald-600"
-                                  : attempt.percentage >= 50
-                                    ? "text-amber-600"
-                                    : "text-red-600"
-                              }`}
-                            >
-                              {attempt.percentage}%
-                            </span>
+                            {attempt.percentage !== null ? (
+                              <span
+                                className={`font-medium ${
+                                  attempt.percentage >= 70
+                                    ? "text-emerald-600"
+                                    : attempt.percentage >= 50
+                                      ? "text-amber-600"
+                                      : "text-red-600"
+                                }`}
+                              >
+                                {attempt.percentage}%
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             <span className="text-muted-foreground">
@@ -409,15 +499,23 @@ export default function QuizResults() {
                           <td className="py-3 px-4">
                             <Badge
                               variant={
-                                attempt.passed ? "default" : "destructive"
+                                attempt.status === "graded"
+                                  ? "default"
+                                  : "secondary"
                               }
                               className={
-                                attempt.passed
-                                  ? "bg-emerald-500/20 text-emerald-700"
-                                  : ""
+                                attempt.status === "graded"
+                                  ? attempt.passed
+                                    ? "bg-emerald-500/20 text-emerald-700"
+                                    : "bg-red-500/20 text-red-700"
+                                  : "bg-blue-500/20 text-blue-700"
                               }
                             >
-                              {attempt.passed ? "Passed" : "Failed"}
+                              {attempt.status === "graded"
+                                ? attempt.passed
+                                  ? "Passed"
+                                  : "Failed"
+                                : "Submitted"}
                             </Badge>
                           </td>
                           <td className="py-3 px-4">
@@ -426,6 +524,15 @@ export default function QuizResults() {
                                 attempt.completed_at,
                               ).toLocaleDateString()}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleViewAttempt(attempt)}
+                            >
+                              View
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -447,6 +554,140 @@ export default function QuizResults() {
           </Card>
         </div>
       </main>
+
+      {/* View Attempt Modal */}
+      {viewingAttempt && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">View Student Attempt</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewingAttempt(null)}
+                >
+                  ✕
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {viewingAttempt.student_name} - {viewingAttempt.student_email}
+              </p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Student Answers Review */}
+              <div className="space-y-4">
+                <h4 className="font-medium">Student Answers</h4>
+                {quizQuestions.map((question, index) => {
+                  const studentAnswer = viewingAttempt.answers?.[question.id];
+                  return (
+                    <Card key={question.id} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start gap-3">
+                          <span className="bg-primary/10 text-primary px-2 py-1 rounded text-sm font-medium">
+                            Q{index + 1}
+                          </span>
+                          <div className="flex-1">
+                            <p className="font-medium">
+                              {question.question_text}
+                            </p>
+                            {question.question_type === "multiple_choice" &&
+                              question.options && (
+                                <div className="mt-2 space-y-1">
+                                  {question.options.map(
+                                    (option: string, optIndex: number) => (
+                                      <div
+                                        key={optIndex}
+                                        className={`p-2 rounded text-sm ${
+                                          studentAnswer === optIndex
+                                            ? "bg-blue-100 text-blue-800"
+                                            : optIndex ===
+                                                question.correct_answer
+                                              ? "bg-green-100 text-green-800"
+                                              : "bg-muted"
+                                        }`}
+                                      >
+                                        {option}
+                                        {studentAnswer === optIndex &&
+                                          " (Student's Answer)"}
+                                        {optIndex === question.correct_answer &&
+                                          " (Correct Answer)"}
+                                      </div>
+                                    ),
+                                  )}
+                                </div>
+                              )}
+                            {question.question_type === "true_false" && (
+                              <div className="mt-2 space-y-1">
+                                {["True", "False"].map((option, optIndex) => (
+                                  <div
+                                    key={optIndex}
+                                    className={`p-2 rounded text-sm ${
+                                      studentAnswer === optIndex
+                                        ? "bg-blue-100 text-blue-800"
+                                        : optIndex === question.correct_answer
+                                          ? "bg-green-100 text-green-800"
+                                          : "bg-muted"
+                                    }`}
+                                  >
+                                    {option}
+                                    {studentAnswer === optIndex &&
+                                      " (Student's Answer)"}
+                                    {optIndex === question.correct_answer &&
+                                      " (Correct Answer)"}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {question.question_type === "short_answer" && (
+                              <div className="mt-2 p-3 bg-muted rounded text-sm">
+                                <p className="font-medium mb-1">
+                                  Student's Answer:
+                                </p>
+                                <p>{studentAnswer || "No answer provided"}</p>
+                                <p className="font-medium mt-2 mb-1">
+                                  Correct Answer:
+                                </p>
+                                <p>{question.correct_answer}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+              {/* Results Section */}
+              <div className="border-t border-border pt-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">
+                      Automatically Calculated Grade
+                    </h4>
+                    <p className="text-2xl font-bold text-primary">
+                      {viewingAttempt.score}/{viewingAttempt.total_points} (
+                      {viewingAttempt.percentage}%)
+                    </p>
+                  </div>
+                  <Badge
+                    variant={viewingAttempt.passed ? "default" : "destructive"}
+                    className={
+                      viewingAttempt.passed
+                        ? "bg-emerald-500/20 text-emerald-700"
+                        : ""
+                    }
+                  >
+                    {viewingAttempt.passed ? "Passed" : "Failed"}
+                  </Badge>
+                </div>
+              </div>
+              ){"}"}
+            </div>
+          </div>
+        </div>
+      )}
 
       <LecturerBottomNav />
     </div>

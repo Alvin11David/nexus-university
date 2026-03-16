@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc, addDoc, collection } from "firebase/firestore";
+import { doc, getDoc, addDoc, collection, getDocs } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/client";
 
 type AuthStep =
@@ -50,6 +50,9 @@ export default function Auth() {
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
   const [isRegistrarSignup, setIsRegistrarSignup] = useState(false); // Auto-detect based on email
+  const [colleges, setColleges] = useState<string[]>([]);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [filteredPrograms, setFilteredPrograms] = useState<string[]>([]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const [formData, setFormData] = useState({
@@ -62,6 +65,8 @@ export default function Auth() {
     firstName: "",
     lastName: "",
     department: "",
+    college: "",
+    program: "",
   });
 
   const {
@@ -76,6 +81,45 @@ export default function Auth() {
   const navigate = useNavigate();
 
   const isSignUp = step !== "signin";
+
+  // Fetch unique colleges and initial courses from collection
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const querySnapshot = await getDocs(collection(db, "courses"));
+        const collegeList = new Set<string>();
+        const courses: any[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          courses.push(data);
+          if (data.college) {
+            collegeList.add(data.college);
+          }
+        });
+        setAllCourses(courses);
+        setColleges(Array.from(collegeList).sort());
+      } catch (error) {
+        console.error("Error fetching colleges/courses:", error);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Update filtered programs when college changes
+  useEffect(() => {
+    if (formData.college) {
+      const programList = new Set<string>();
+      allCourses.forEach((course) => {
+        if (course.college === formData.college && course.name) {
+          programList.add(course.name);
+        }
+      });
+      setFilteredPrograms(Array.from(programList).sort());
+    } else {
+      setFilteredPrograms([]);
+    }
+  }, [formData.college, allCourses]);
 
   // Handle OTP input
   const handleOtpChange = (index: number, value: string) => {
@@ -213,11 +257,11 @@ export default function Auth() {
 
     try {
       // Auto-detect if email is lecturer format
-      const lecturerEmailPattern = /^[a-z]+\.[a-z]+@lecturer\.com$/i;
+      const lecturerEmailPattern = /^[a-zA-Z0-9._%+-]+@lecturer\.com$/i;
       const isLecturer = lecturerEmailPattern.test(formData.email);
 
       // Auto-detect if email is registrar format
-      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const registrarEmailPattern = /^[a-zA-Z0-9._%+-]+@registrar\.com$/i;
       const isRegistrar = registrarEmailPattern.test(formData.email);
 
       if (isLecturer) {
@@ -313,7 +357,7 @@ export default function Auth() {
           : formData.email;
 
       // Check if email is registrar format
-      const registrarEmailPattern = /^[a-z]+\.[a-z]+@registrar\.com$/i;
+      const registrarEmailPattern = /^[a-zA-Z0-9._%+-]+@registrar\.com$/i;
       const isRegistrarEmail = registrarEmailPattern.test(emailToUse);
 
       const { error } = await signUp(
@@ -337,6 +381,8 @@ export default function Auth() {
             ? "registrar"
             : "student",
         isLecturerSignup || isRegistrarSignup ? formData.department : undefined,
+        formData.college || undefined,
+        formData.program || undefined,
       );
       if (error) {
         // If user already exists, provide helpful guidance
@@ -428,6 +474,8 @@ export default function Auth() {
       firstName: "",
       lastName: "",
       department: "",
+      college: "",
+      program: "",
     });
   };
 
@@ -448,6 +496,8 @@ export default function Auth() {
       firstName: "",
       lastName: "",
       department: "",
+      college: "",
+      program: "",
     });
   };
 
@@ -647,6 +697,70 @@ export default function Auth() {
               )}
 
             <div className="space-y-2">
+              <Label htmlFor="college" className="text-sm font-medium">
+                College
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <select
+                  id="college"
+                  value={formData.college}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      college: e.target.value,
+                      program: "",
+                    })
+                  }
+                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
+                  required
+                >
+                  <option value="" disabled>
+                    Select College
+                  </option>
+                  {colleges.map((college) => (
+                    <option key={college} value={college}>
+                      {college}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!formData.email.endsWith("@lecturer.com") &&
+              !formData.email.endsWith("@registrar.com") && (
+                <div className="space-y-2">
+                  <Label htmlFor="program" className="text-sm font-medium">
+                    Program
+                  </Label>
+                  <div className="relative">
+                    <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <select
+                      id="program"
+                      value={formData.program}
+                      onChange={(e) =>
+                        setFormData({ ...formData, program: e.target.value })
+                      }
+                      className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
+                      required
+                      disabled={!formData.college}
+                    >
+                      <option value="" disabled>
+                        {formData.college
+                          ? "Select Program"
+                          : "Select College First"}
+                      </option>
+                      {filteredPrograms.map((program) => (
+                        <option key={program} value={program}>
+                          {program}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+            <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">
                 Email Address
               </Label>
@@ -755,6 +869,33 @@ export default function Auth() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="college" className="text-sm font-medium">
+                College
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <select
+                  id="college"
+                  value={formData.college}
+                  onChange={(e) =>
+                    setFormData({ ...formData, college: e.target.value })
+                  }
+                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
+                  required
+                >
+                  <option value="" disabled>
+                    Select College
+                  </option>
+                  {colleges.map((college) => (
+                    <option key={college} value={college}>
+                      {college}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="department" className="text-sm font-medium">
                 Department
               </Label>
@@ -858,6 +999,37 @@ export default function Auth() {
                   className="h-14 pl-12 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors"
                   required
                 />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="college" className="text-sm font-medium">
+                College
+              </Label>
+              <div className="relative">
+                <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <select
+                  id="college-registrar"
+                  value={formData.college}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      college: e.target.value,
+                      program: "",
+                    })
+                  }
+                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
+                  required
+                >
+                  <option value="" disabled>
+                    Select College
+                  </option>
+                  {colleges.map((college) => (
+                    <option key={college} value={college}>
+                      {college}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

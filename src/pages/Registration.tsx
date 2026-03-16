@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   ArrowRight,
   BookMarked,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,21 +45,34 @@ import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 interface Course {
   id: string;
   code: string;
-  title: string;
+  name: string; // The property is 'name' in course_units
   credits: number;
-  department_id: string;
-  description: string | null;
-  instructor_id: string | null;
-  semester: string | null;
-  year: number | null;
-  status: string | null;
-  department?: { name: string; code: string };
+  course_id: string; // From course_units
+  department_id?: string;
+  description?: string | null;
+  instructor_id?: string | null;
+  semester: number;
+  year: number;
+  status?: string | null;
 }
 
 interface Department {
@@ -67,8 +81,8 @@ interface Department {
   code: string;
 }
 
-const CURRENT_YEAR = 2025;
-const SEMESTERS = ["Semester 1", "Semester 2"];
+const YEARS_OF_STUDY = [1, 2, 3, 4, 5];
+const SEMESTERS = [1, 2];
 const MAX_CREDITS = 24;
 const MIN_CREDITS = 12;
 
@@ -79,22 +93,23 @@ export default function Registration() {
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [existingEnrollments, setExistingEnrollments] = useState<string[]>([]);
+  const [existingEnrollments, setExistingEnrollments] = useState<
+    Record<string, string>
+  >({});
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState<string>("all");
-  const [selectedSemester, setSelectedSemester] =
-    useState<string>("Semester 1");
-  const [selectedYear, setSelectedYear] = useState<number>(CURRENT_YEAR);
+  const [selectedSemester, setSelectedSemester] = useState<number>(1);
+  const [selectedYear, setSelectedYear] = useState<number>(1);
   const [step, setStep] = useState<"select" | "review">("select");
   const [registrationNumber, setRegistrationNumber] = useState<string>("");
   const [studentNumber, setStudentNumber] = useState<string>("");
 
   useEffect(() => {
     fetchData();
-  }, [user, selectedSemester, selectedYear]);
+  }, [user, profile, selectedSemester, selectedYear]);
 
   useEffect(() => {
     if (profile) {
@@ -105,41 +120,92 @@ export default function Registration() {
 
   const fetchData = async () => {
     try {
+      if (!profile?.course_id && !profile?.programme) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
-      // Fetch departments
-      const deptsRef = collection(db, "departments");
-      const deptsSnapshot = await getDocs(deptsRef);
-      const deptsData = deptsSnapshot.docs.map(d => ({ id: d.id, ...d.data() })) as Department[];
-      setDepartments(deptsData);
+      let targetCourseId = profile.course_id;
 
-      // Fetch courses (published, for current semester/year)
-      const coursesRef = collection(db, "courses");
-      const qCourses = query(
-        coursesRef,
-        where("status", "==", "published"),
+      // If no direct course_id is set on the profile, derive it from the programme name
+      if (!targetCourseId && profile.programme) {
+        const coursesRef = collection(db, "courses");
+
+        // Try matching by the 'name' field
+        const qName = query(
+          coursesRef,
+          where("name", "==", profile.programme),
+          limit(1),
+        );
+        const snapName = await getDocs(qName);
+
+        if (!snapName.empty) {
+          targetCourseId = snapName.docs[0].id;
+        } else {
+          // Fallback to matching by the 'title' field
+          const qTitle = query(
+            coursesRef,
+            where("title", "==", profile.programme),
+            limit(1),
+          );
+          const snapTitle = await getDocs(qTitle);
+          if (!snapTitle.empty) {
+            targetCourseId = snapTitle.docs[0].id;
+          }
+        }
+      }
+
+      if (!targetCourseId) {
+        setCourses([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch course units (for current semester/year and student's program)
+      const unitsRef = collection(db, "course_units");
+      const qUnits = query(
+        unitsRef,
+        where("course_id", "==", targetCourseId),
         where("semester", "==", selectedSemester),
-        where("year", "==", selectedYear)
+        where("year", "==", selectedYear),
       );
-      const coursesSnapshot = await getDocs(qCourses);
+      const unitsSnapshot = await getDocs(qUnits);
 
-      const coursesData = await Promise.all(coursesSnapshot.docs.map(async d => {
-        const c = d.data() as Course;
-        const dept = deptsData.find(dept => dept.id === c.department_id);
+      const coursesData = unitsSnapshot.docs.map((d) => {
+        const data = d.data();
         return {
-          ...c,
           id: d.id,
-          department: dept ? { name: dept.name, code: dept.code } : undefined
+          code: data.code,
+          name: data.name,
+          credits: data.credits,
+          semester: data.semester,
+          year: data.year,
+          course_id: data.course_id,
+          department_id: data.department_id || "",
+          description: data.description || null,
+          instructor_id: data.instructor_id || null,
+          status: data.status || null,
         } as Course;
-      }));
+      });
+
       setCourses(coursesData);
 
       // Fetch existing enrollments
       if (user) {
         const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(enrollmentsRef, where("student_id", "==", user.uid));
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+        );
         const enrollSnapshot = await getDocs(qEnroll);
-        setExistingEnrollments(enrollSnapshot.docs.map(d => (d.data() as any).course_id));
+        const enrollmentsMap: Record<string, string> = {};
+        enrollSnapshot.docs.forEach((doc) => {
+          const data = doc.data() as any;
+          enrollmentsMap[data.course_id] = data.status;
+        });
+        setExistingEnrollments(enrollmentsMap);
       }
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -149,10 +215,17 @@ export default function Registration() {
   };
 
   const toggleCourse = (courseId: string) => {
-    if (existingEnrollments.includes(courseId)) {
+    const status = existingEnrollments[courseId];
+    if (status) {
+      const statusMessage =
+        status === "approved"
+          ? "Enrolled"
+          : status === "pending"
+            ? "Pending Approval"
+            : "Request " + status;
       toast({
-        title: "Already Enrolled",
-        description: "You are already registered for this course.",
+        title: statusMessage,
+        description: `Your enrollment request for this course is ${status}.`,
         variant: "destructive",
       });
       return;
@@ -175,7 +248,7 @@ export default function Registration() {
     setSelectedCourses((prev) =>
       prev.includes(courseId)
         ? prev.filter((id) => id !== courseId)
-        : [...prev, courseId]
+        : [...prev, courseId],
     );
   };
 
@@ -235,7 +308,7 @@ export default function Registration() {
           user_id: course.instructor_id,
           type: "enrollment_request",
           title: "Enrollment Request",
-          message: `${studentLabel} requested to enroll in ${course.title} (${course.code}).`,
+          message: `${studentLabel} requested to enroll in ${course.name} (${course.code}).`,
           related_id: courseId,
           is_read: false,
           created_at: serverTimestamp(),
@@ -247,7 +320,7 @@ export default function Registration() {
 
       toast({
         title: "Registration Submitted! 🎉",
-        description: `You've registered for ${selectedCourses.length} course(s) with ${totalCredits} credits.`,
+        description: `You've registered for ${selectedCourses.length} course unit(s) with ${totalCredits} credits.`,
       });
       navigate("/enrollment");
     } catch (error: any) {
@@ -263,11 +336,9 @@ export default function Registration() {
 
   const filteredCourses = courses.filter((course) => {
     const matchesSearch =
-      course.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.code.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept =
-      selectedDept === "all" || course.department_id === selectedDept;
-    return matchesSearch && matchesDept;
+    return matchesSearch;
   });
 
   const totalCredits = selectedCourses.reduce((acc, id) => {
@@ -326,15 +397,15 @@ export default function Registration() {
               Register for Courses
             </h1>
             <p className="text-primary-foreground/80 text-lg max-w-2xl mb-6">
-              Select your courses for {selectedSemester} {selectedYear}. Choose
-              wisely to build your academic path.
+              Select your course units. Choose wisely to build your academic
+              path.
             </p>
 
             {/* Semester & Year Selection */}
             <div className="flex flex-wrap gap-3">
               <Select
-                value={selectedSemester}
-                onValueChange={setSelectedSemester}
+                value={selectedSemester.toString()}
+                onValueChange={(v) => setSelectedSemester(parseInt(v))}
               >
                 <SelectTrigger className="w-[160px] bg-white/10 border-white/20 text-primary-foreground">
                   <Calendar className="h-4 w-4 mr-2" />
@@ -342,8 +413,8 @@ export default function Registration() {
                 </SelectTrigger>
                 <SelectContent>
                   {SEMESTERS.map((sem) => (
-                    <SelectItem key={sem} value={sem}>
-                      {sem}
+                    <SelectItem key={sem} value={sem.toString()}>
+                      Semester {sem}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -357,9 +428,9 @@ export default function Registration() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[2024, 2025, 2026].map((year) => (
+                  {YEARS_OF_STUDY.map((year) => (
                     <SelectItem key={year} value={year.toString()}>
-                      {year}
+                      Year {year}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -474,136 +545,150 @@ export default function Registration() {
                       </Card>
                     </div>
 
-                    {/* Courses by Department */}
-                    {groupedCourses.length === 0 ? (
+                    {filteredCourses.length === 0 ? (
                       <Card className="p-12 text-center border-dashed">
                         <BookOpen className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
                         <h3 className="font-display text-xl font-semibold mb-2">
-                          No courses found
+                          No course units found
                         </h3>
                         <p className="text-muted-foreground max-w-md mx-auto">
-                          No courses are available for {selectedSemester}{" "}
-                          {selectedYear}. Try selecting a different semester or
-                          check back later.
+                          No course units are available for Semester{" "}
+                          {selectedSemester} Year {selectedYear}. Try selecting
+                          a different semester or check back later.
                         </p>
                       </Card>
                     ) : (
                       <div className="space-y-8">
-                        {groupedCourses.map((dept) => (
-                          <motion.div
-                            key={dept.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                          >
-                            <div className="flex items-center gap-3 mb-4">
-                              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                                <BookMarked className="h-5 w-5 text-primary" />
-                              </div>
-                              <div>
-                                <h2 className="font-display text-lg font-semibold">
-                                  {dept.name}
-                                </h2>
-                                <p className="text-sm text-muted-foreground">
-                                  {dept.courses.length} course(s) available
-                                </p>
-                              </div>
-                            </div>
+                        <div className="grid gap-4">
+                          {filteredCourses.map((course, i) => {
+                            const isSelected = selectedCourses.includes(
+                              course.id,
+                            );
+                            const status = existingEnrollments[course.id];
+                            const isEnrolled = !!status;
 
-                            <div className="grid gap-4">
-                              {dept.courses.map((course, i) => {
-                                const isSelected = selectedCourses.includes(
-                                  course.id
-                                );
-                                const isEnrolled = existingEnrollments.includes(
-                                  course.id
-                                );
-
-                                return (
-                                  <motion.div
-                                    key={course.id}
-                                    initial={{ opacity: 0, y: 10 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: i * 0.03 }}
-                                  >
-                                    <Card
-                                      className={`cursor-pointer transition-all duration-300 hover:shadow-lg group ${isEnrolled
-                                        ? "opacity-60 cursor-not-allowed bg-muted/50"
-                                        : isSelected
-                                          ? "ring-2 ring-secondary shadow-lg shadow-secondary/10 bg-secondary/5"
-                                          : "hover:border-secondary/50"
+                            return (
+                              <motion.div
+                                key={course.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: i * 0.03 }}
+                              >
+                                <Card
+                                  className={`cursor-pointer transition-all duration-300 hover:shadow-lg group ${
+                                    isEnrolled
+                                      ? status === "approved"
+                                        ? "opacity-60 cursor-not-allowed bg-emerald-50/50 border-emerald-200"
+                                        : status === "pending"
+                                          ? "opacity-60 cursor-not-allowed bg-amber-50/50 border-amber-200"
+                                          : "opacity-60 cursor-not-allowed bg-destructive/5 border-destructive/20"
+                                      : isSelected
+                                        ? "ring-2 ring-secondary shadow-lg shadow-secondary/10 bg-secondary/5"
+                                        : "hover:border-secondary/50"
+                                  }`}
+                                  onClick={() =>
+                                    !isEnrolled && toggleCourse(course.id)
+                                  }
+                                >
+                                  <CardContent className="p-5">
+                                    <div className="flex items-start gap-4">
+                                      <div
+                                        className={`h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors ${
+                                          isSelected
+                                            ? "bg-secondary text-secondary-foreground"
+                                            : "bg-muted group-hover:bg-secondary/10"
                                         }`}
-                                      onClick={() =>
-                                        !isEnrolled && toggleCourse(course.id)
-                                      }
-                                    >
-                                      <CardContent className="p-5">
-                                        <div className="flex items-start gap-4">
-                                          <div
-                                            className={`h-14 w-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors ${isSelected
-                                              ? "bg-secondary text-secondary-foreground"
-                                              : "bg-muted group-hover:bg-secondary/10"
-                                              }`}
-                                          >
-                                            {isEnrolled ? (
-                                              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
-                                            ) : isSelected ? (
-                                              <Check className="h-6 w-6" />
-                                            ) : (
-                                              <BookOpen className="h-6 w-6 text-muted-foreground group-hover:text-secondary" />
-                                            )}
-                                          </div>
+                                      >
+                                        {isEnrolled ? (
+                                          status === "approved" ? (
+                                            <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                                          ) : status === "pending" ? (
+                                            <Clock className="h-6 w-6 text-amber-500" />
+                                          ) : (
+                                            <Ban className="h-6 w-6 text-destructive" />
+                                          )
+                                        ) : isSelected ? (
+                                          <Check className="h-6 w-6" />
+                                        ) : (
+                                          <BookOpen className="h-6 w-6 text-muted-foreground group-hover:text-secondary" />
+                                        )}
+                                      </div>
 
-                                          <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap mb-2">
-                                              <Badge
-                                                variant="outline"
-                                                className="font-mono text-xs bg-background"
-                                              >
-                                                {course.code}
-                                              </Badge>
-                                              <Badge className="bg-accent/10 text-accent border-0 text-xs">
-                                                {course.credits} Credits
-                                              </Badge>
-                                              {isEnrolled && (
-                                                <Badge className="bg-emerald-500/10 text-emerald-600 border-0 text-xs">
-                                                  Already Enrolled
-                                                </Badge>
-                                              )}
-                                            </div>
-                                            <h3 className="font-semibold text-lg mb-1 group-hover:text-secondary transition-colors">
-                                              {course.title}
-                                            </h3>
-                                            <p className="text-sm text-muted-foreground line-clamp-2">
-                                              {course.description ||
-                                                "No description available"}
-                                            </p>
-                                          </div>
-
-                                          <div
-                                            className={`h-12 w-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${isEnrolled
-                                              ? "bg-emerald-500/10"
-                                              : isSelected
-                                                ? "bg-secondary text-secondary-foreground scale-110"
-                                                : "bg-muted text-muted-foreground group-hover:bg-secondary/20 group-hover:text-secondary"
-                                              }`}
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                                          <Badge
+                                            variant="outline"
+                                            className="font-mono text-xs bg-background"
                                           >
-                                            {isEnrolled ? (
-                                              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                                            ) : isSelected ? (
-                                              <Check className="h-5 w-5" />
-                                            ) : (
-                                              <Plus className="h-5 w-5" />
-                                            )}
-                                          </div>
+                                            {course.code}
+                                          </Badge>
+                                          <Badge className="bg-accent/10 text-accent border-0 text-xs">
+                                            {course.credits} Credits
+                                          </Badge>
+                                          {isEnrolled && (
+                                            <Badge
+                                              className={`border-0 text-xs ${
+                                                status === "approved"
+                                                  ? "bg-emerald-500/10 text-emerald-600"
+                                                  : status === "pending"
+                                                    ? "bg-amber-500/10 text-amber-600"
+                                                    : "bg-destructive/10 text-destructive"
+                                              }`}
+                                            >
+                                              {status === "approved"
+                                                ? "Enrolled"
+                                                : status === "pending"
+                                                  ? "Pending Approval"
+                                                  : status
+                                                      .charAt(0)
+                                                      .toUpperCase() +
+                                                    status.slice(1)}
+                                            </Badge>
+                                          )}
                                         </div>
-                                      </CardContent>
-                                    </Card>
-                                  </motion.div>
-                                );
-                              })}
-                            </div>
-                          </motion.div>
-                        ))}
+                                        <h3 className="font-semibold text-lg mb-1 group-hover:text-secondary transition-colors">
+                                          {course.name}
+                                        </h3>
+                                        <p className="text-sm text-muted-foreground line-clamp-2">
+                                          {course.description ||
+                                            "No description available"}
+                                        </p>
+                                      </div>
+
+                                      <div
+                                        className={`h-12 w-12 rounded-full flex items-center justify-center transition-all flex-shrink-0 ${
+                                          isEnrolled
+                                            ? status === "approved"
+                                              ? "bg-emerald-500/10"
+                                              : status === "pending"
+                                                ? "bg-amber-500/10"
+                                                : "bg-destructive/10"
+                                            : isSelected
+                                              ? "bg-secondary text-secondary-foreground scale-110"
+                                              : "bg-muted text-muted-foreground group-hover:bg-secondary/20 group-hover:text-secondary"
+                                        }`}
+                                      >
+                                        {isEnrolled ? (
+                                          status === "approved" ? (
+                                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                                          ) : status === "pending" ? (
+                                            <Clock className="h-5 w-5 text-amber-500" />
+                                          ) : (
+                                            <Ban className="h-5 w-5 text-destructive" />
+                                          )
+                                        ) : isSelected ? (
+                                          <Check className="h-5 w-5" />
+                                        ) : (
+                                          <Plus className="h-5 w-5" />
+                                        )}
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </motion.div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -615,12 +700,13 @@ export default function Registration() {
                       <Card className="overflow-hidden">
                         <div className="h-2 bg-muted">
                           <motion.div
-                            className={`h-full transition-colors ${creditProgress > 100
-                              ? "bg-destructive"
-                              : creditProgress >= 50
-                                ? "bg-secondary"
-                                : "bg-accent"
-                              }`}
+                            className={`h-full transition-colors ${
+                              creditProgress > 100
+                                ? "bg-destructive"
+                                : creditProgress >= 50
+                                  ? "bg-secondary"
+                                  : "bg-accent"
+                            }`}
                             initial={{ width: 0 }}
                             animate={{
                               width: `${Math.min(creditProgress, 100)}%`,
@@ -634,12 +720,13 @@ export default function Registration() {
                               Credit Load
                             </span>
                             <span
-                              className={`text-lg font-bold ${totalCredits > MAX_CREDITS
-                                ? "text-destructive"
-                                : totalCredits >= MIN_CREDITS
-                                  ? "text-emerald-500"
-                                  : ""
-                                }`}
+                              className={`text-lg font-bold ${
+                                totalCredits > MAX_CREDITS
+                                  ? "text-destructive"
+                                  : totalCredits >= MIN_CREDITS
+                                    ? "text-emerald-500"
+                                    : ""
+                              }`}
                             >
                               {totalCredits}/{MAX_CREDITS}
                             </span>
@@ -686,7 +773,7 @@ export default function Registration() {
                                 <AnimatePresence mode="popLayout">
                                   {selectedCourses.map((id) => {
                                     const course = courses.find(
-                                      (c) => c.id === id
+                                      (c) => c.id === id,
                                     );
                                     if (!course) return null;
                                     return (
@@ -708,7 +795,7 @@ export default function Registration() {
                                       >
                                         <div className="min-w-0">
                                           <p className="font-medium text-sm truncate">
-                                            {course.title}
+                                            {course.name}
                                           </p>
                                           <div className="flex items-center gap-2 mt-0.5">
                                             <span className="text-xs font-mono text-muted-foreground">
@@ -804,8 +891,8 @@ export default function Registration() {
                       Review Your Registration
                     </CardTitle>
                     <CardDescription>
-                      Please review your course selection for {selectedSemester}{" "}
-                      {selectedYear}
+                      Please review your course unit selection for Semester{" "}
+                      {selectedSemester} Year {selectedYear}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
@@ -876,7 +963,7 @@ export default function Registration() {
                                   {course.code}
                                 </Badge>
                                 <span className="font-medium">
-                                  {course.title}
+                                  {course.name}
                                 </span>
                               </div>
                               <Badge className="bg-accent/10 text-accent">
@@ -909,10 +996,10 @@ export default function Registration() {
                         </div>
                         <div>
                           <p className="text-2xl font-bold text-emerald-500">
-                            {selectedYear}
+                            Year {selectedYear}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {selectedSemester}
+                            Semester {selectedSemester}
                           </p>
                         </div>
                       </div>

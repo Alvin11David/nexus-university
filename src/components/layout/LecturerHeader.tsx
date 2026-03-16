@@ -87,7 +87,6 @@ export function LecturerHeader() {
       icon: MessageCircle,
     },
     { label: "Roster", href: "/lecturer/roster", icon: Users },
-    { label: "Rubrics", href: "/lecturer/rubrics", icon: CheckCircle },
     { label: "Analytics", href: "/lecturer/analytics", icon: Target },
     { label: "ID Card", href: "/lecturer/id-card", icon: User },
   ];

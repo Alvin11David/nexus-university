@@ -21,6 +21,17 @@ import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, storage } from "@/integrations/firebase/client";
 import {
@@ -33,6 +44,8 @@ import {
   deleteDoc,
   doc,
   serverTimestamp,
+  getDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useToast } from "@/components/ui/use-toast";
@@ -59,6 +72,21 @@ interface CourseOption {
   code: string;
 }
 
+interface Submission {
+  id: string;
+  student_id: string;
+  assignment_id: string;
+  content: string;
+  file_url?: string;
+  file_name?: string;
+  status: string;
+  submitted_at: any;
+  score?: number;
+  feedback?: string;
+  student_name?: string;
+  student_email?: string;
+}
+
 const rise = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
@@ -81,7 +109,17 @@ export default function LecturerAssignments() {
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [viewing, setViewing] = useState<Assignment | null>(null);
+  const [viewingSubmissions, setViewingSubmissions] = useState<Submission[]>(
+    [],
+  );
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
   const [editing, setEditing] = useState<Assignment | null>(null);
+  const [editingSubmission, setEditingSubmission] = useState<Submission | null>(
+    null,
+  );
+  const [activeTab, setActiveTab] = useState<"assignments" | "submissions">(
+    "assignments",
+  );
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -101,6 +139,8 @@ export default function LecturerAssignments() {
 
   // Load assignments created by this lecturer from Firebase
   useEffect(() => {
+    let submissionsUnsubscribe: (() => void) | null = null;
+
     const loadAssignments = async () => {
       if (!user) return;
       setLoading(true);
@@ -111,6 +151,50 @@ export default function LecturerAssignments() {
           where("lecturer_id", "==", user.uid),
         );
         const snapshot = await getDocs(assignmentsQuery);
+        const assignmentIds = snapshot.docs.map((doc) => doc.id);
+
+        // Fetch submission counts for all assignments
+        const submissionCounts: Record<string, number> = {};
+        if (assignmentIds.length > 0) {
+          for (let i = 0; i < assignmentIds.length; i += 10) {
+            const chunk = assignmentIds.slice(i, i + 10);
+            const submissionsQuery = query(
+              collection(db, "submissions"),
+              where("assignment_id", "in", chunk),
+            );
+            const submissionsSnapshot = await getDocs(submissionsQuery);
+            chunk.forEach((assignmentId) => {
+              submissionCounts[assignmentId] = submissionsSnapshot.docs.filter(
+                (doc) => doc.data().assignment_id === assignmentId,
+              ).length;
+            });
+          }
+        }
+
+        // Fetch enrollment counts for each course
+        const enrollmentCounts: Record<string, number> = {};
+        const courseIds = [
+          ...new Set(
+            snapshot.docs.map((doc) => doc.data().course_id).filter(Boolean),
+          ),
+        ];
+        if (courseIds.length > 0) {
+          for (let i = 0; i < courseIds.length; i += 10) {
+            const chunk = courseIds.slice(i, i + 10);
+            const enrollmentsQuery = query(
+              collection(db, "enrollments"),
+              where("course_id", "in", chunk),
+            );
+            const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
+            chunk.forEach((courseId) => {
+              const count = enrollmentsSnapshot.docs.filter(
+                (doc) => doc.data().course_id === courseId,
+              ).length;
+              enrollmentCounts[courseId] = count;
+            });
+          }
+        }
+
         const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
           const a = docSnap.data();
           return {
@@ -119,8 +203,8 @@ export default function LecturerAssignments() {
             description: a.description || "",
             dueDate: a.due_date,
             totalPoints: a.total_points ?? 100,
-            submissions: 0, // TODO: fetch submission count from Firestore
-            totalStudents: 0, // TODO: fetch from enrollments
+            submissions: submissionCounts[docSnap.id] || 0,
+            totalStudents: enrollmentCounts[a.course_id] || 0,
             status: a.status || "draft",
             courseTitle: a.course_title || "",
             instructionDocumentUrl: a.instruction_document_url,
@@ -128,6 +212,30 @@ export default function LecturerAssignments() {
           };
         });
         setAssignments(mapped);
+
+        // Set up real-time listener for submissions
+        if (assignmentIds.length > 0) {
+          const submissionsQuery = query(
+            collection(db, "submissions"),
+            where("assignment_id", "in", assignmentIds.slice(0, 10)), // Firestore limit
+          );
+
+          submissionsUnsubscribe = onSnapshot(submissionsQuery, (snapshot) => {
+            console.log("Submissions updated:", snapshot.docs.length);
+            // Update submission counts in real-time
+            setAssignments((currentAssignments) => {
+              return currentAssignments.map((assignment) => {
+                const submissionCount = snapshot.docs.filter(
+                  (doc) => doc.data().assignment_id === assignment.id,
+                ).length;
+                return {
+                  ...assignment,
+                  submissions: submissionCount,
+                };
+              });
+            });
+          });
+        }
       } catch (error: any) {
         console.error("Error loading assignments", error);
         toast({
@@ -138,38 +246,66 @@ export default function LecturerAssignments() {
       }
       setLoading(false);
     };
+
     loadAssignments();
+
+    // Cleanup function
+    return () => {
+      if (submissionsUnsubscribe) {
+        submissionsUnsubscribe();
+      }
+    };
   }, [toast, user]);
 
   // Load lecturer courses from Firebase
   useEffect(() => {
     const loadCourses = async () => {
       if (!user) return;
-      const currentAcademicYear = new Date().getFullYear().toString();
-      const currentSemester = "1";
       try {
-        // Fetch lecturer_courses from Firestore
-        const lecturerCoursesQuery = query(
-          collection(db, "lecturer_courses"),
-          where("lecturer_id", "==", user.uid),
-          where("academic_year", "==", currentAcademicYear),
-          where("semester", "==", currentSemester),
-        );
-        const snapshot = await getDocs(lecturerCoursesQuery);
-        const mapped = snapshot.docs.map((docSnap) => {
-          const lc = docSnap.data();
-          return {
-            id: lc.course_id,
-            title: lc.course_title || "Untitled Course",
-            code: lc.course_code || "",
-          };
-        });
-        setCourses(mapped);
-        if (mapped.length > 0) {
-          setSelectedCourse(mapped[0].id);
+        // Fetch lecturer's profile to get assigned_course_units
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
+
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            const mapped: CourseOption[] = [];
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                mapped.push({
+                  id: doc.id,
+                  title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                  code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                });
+              });
+            }
+            setCourses(mapped);
+            // Do not pre-select, let user choose from dropdown
+          } else {
+            setCourses([]);
+          }
+        } else {
+          setCourses([]);
         }
       } catch (error) {
         console.error("Error loading courses", error);
+        setCourses([]);
       }
     };
     loadCourses();
@@ -345,6 +481,81 @@ export default function LecturerAssignments() {
     }
   };
 
+  const loadSubmissions = async (assignmentId: string) => {
+    setLoadingSubmissions(true);
+    try {
+      // Get submissions for this assignment
+      const submissionsQuery = query(
+        collection(db, "submissions"),
+        where("assignment_id", "==", assignmentId),
+      );
+      const submissionsSnapshot = await getDocs(submissionsQuery);
+
+      // Get student details for each submission
+      const submissionsWithStudents = await Promise.all(
+        submissionsSnapshot.docs.map(async (docSnap) => {
+          const submission = docSnap.data();
+
+          // Get student profile
+          const studentDoc = await getDoc(
+            doc(db, "profiles", submission.student_id),
+          );
+          const studentData = studentDoc.data();
+
+          return {
+            id: docSnap.id,
+            ...submission,
+            student_name: studentData
+              ? `${studentData.first_name} ${studentData.last_name}`
+              : "Unknown Student",
+            student_email: studentData?.email || "No email",
+          } as Submission;
+        }),
+      );
+
+      setViewingSubmissions(submissionsWithStudents);
+    } catch (error: any) {
+      console.error("Error loading submissions:", error);
+      toast({
+        title: "Could not load submissions",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+    setLoadingSubmissions(false);
+  };
+
+  const updateSubmission = async (
+    submissionId: string,
+    updates: { status?: string; score?: number; feedback?: string },
+  ) => {
+    try {
+      await updateDoc(doc(db, "submissions", submissionId), {
+        ...updates,
+        graded_at: serverTimestamp(),
+      });
+
+      // Update local state
+      setViewingSubmissions((prev) =>
+        prev.map((sub) =>
+          sub.id === submissionId ? { ...sub, ...updates } : sub,
+        ),
+      );
+
+      toast({
+        title: "Submission updated",
+        description: "The submission has been graded successfully.",
+      });
+    } catch (error: any) {
+      console.error("Error updating submission:", error);
+      toast({
+        title: "Update failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleOpenEdit = (assignment: Assignment) => {
     const course = courses.find((c) => c.title === assignment.courseTitle);
     setEditing(assignment);
@@ -391,16 +602,22 @@ export default function LecturerAssignments() {
         setUploadingDocument(false);
       }
 
-      const assignmentUpdate = {
+      const assignmentUpdate: any = {
         title: editFormData.title,
         description: editFormData.description,
         due_date: new Date(editFormData.dueDate).toISOString(),
         total_points: editFormData.totalPoints,
         course_id: editFormData.courseId,
-        instruction_document_url: instructionDocUrl,
-        instruction_document_name: instructionDocName,
         updated_at: serverTimestamp(),
       };
+
+      // Only include instruction document fields if they are defined
+      if (instructionDocUrl !== undefined) {
+        assignmentUpdate.instruction_document_url = instructionDocUrl;
+      }
+      if (instructionDocName !== undefined) {
+        assignmentUpdate.instruction_document_name = instructionDocName;
+      }
 
       await updateDoc(doc(db, "Assignments", editing.id), assignmentUpdate);
 
@@ -598,207 +815,344 @@ export default function LecturerAssignments() {
           </div>
         </motion.div>
 
-        {/* Filters */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.25 }}
-          className="flex gap-3 flex-wrap"
-        >
-          {(["all", "active", "closed", "graded"] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setSelectedFilter(filter)}
-              className={`px-6 py-2 rounded-full font-semibold transition-all ${
-                selectedFilter === filter
-                  ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
-              }`}
-            >
-              {filter.charAt(0).toUpperCase() + filter.slice(1)}
-            </button>
-          ))}
-        </motion.div>
-
         {/* Assignments List */}
-        <div className="space-y-4">
-          {filteredAssignments.length === 0 ? (
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as "assignments" | "submissions")
+          }
+          className="w-full"
+        >
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="assignments" className="text-lg py-3">
+              📝 Assignments
+            </TabsTrigger>
+            <TabsTrigger value="submissions" className="text-lg py-3">
+              📄 Submissions
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="assignments" className="space-y-4">
+            {/* Filters */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-center py-16"
+              transition={{ delay: 0.25 }}
+              className="flex gap-3 flex-wrap"
             >
-              <div className="flex justify-center mb-4">
-                <div className="p-4 bg-gray-100 rounded-full">
-                  <FileText className="h-8 w-8 text-gray-400" />
-                </div>
-              </div>
-              <p className="text-gray-600 text-lg font-medium">
-                No assignments yet
-              </p>
-              <p className="text-gray-500 mt-2">
-                Create your first assignment to get started
-              </p>
+              {(["all", "active", "closed", "graded"] as const).map(
+                (filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setSelectedFilter(filter)}
+                    className={`px-6 py-2 rounded-full font-semibold transition-all ${
+                      selectedFilter === filter
+                        ? "bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-lg hover:shadow-xl"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200"
+                    }`}
+                  >
+                    {filter.charAt(0).toUpperCase() + filter.slice(1)}
+                  </button>
+                ),
+              )}
             </motion.div>
-          ) : (
-            filteredAssignments.map((assignment, i) => (
+
+            {filteredAssignments.length === 0 ? (
               <motion.div
-                key={assignment.id}
-                variants={rise}
-                initial="hidden"
-                animate="visible"
-                custom={i}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center py-16"
               >
-                <Card className="border-2 border-gray-200 bg-white shadow-sm hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden">
-                  <CardContent className="pt-0">
-                    <div className="space-y-5">
-                      {/* Top Section */}
-                      <div className="pt-6 px-6">
-                        <div className="flex items-start justify-between gap-4 mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-3">
-                              <div className="p-2 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg">
-                                <FileText className="h-5 w-5 text-amber-600" />
+                <div className="flex justify-center mb-4">
+                  <div className="p-4 bg-gray-100 rounded-full">
+                    <FileText className="h-8 w-8 text-gray-400" />
+                  </div>
+                </div>
+                <p className="text-gray-600 text-lg font-medium">
+                  No assignments yet
+                </p>
+                <p className="text-gray-500 mt-2">
+                  Create your first assignment to get started
+                </p>
+              </motion.div>
+            ) : (
+              filteredAssignments.map((assignment, i) => (
+                <motion.div
+                  key={assignment.id}
+                  variants={rise}
+                  initial="hidden"
+                  animate="visible"
+                  custom={i}
+                >
+                  <Card className="border-2 border-gray-200 bg-white shadow-sm hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden">
+                    <CardContent className="pt-0">
+                      <div className="space-y-5">
+                        {/* Top Section */}
+                        <div className="pt-6 px-6">
+                          <div className="flex items-start justify-between gap-4 mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-3 mb-3">
+                                <div className="p-2 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg">
+                                  <FileText className="h-5 w-5 text-amber-600" />
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900">
+                                  {assignment.title}
+                                </h3>
                               </div>
-                              <h3 className="text-xl font-bold text-gray-900">
-                                {assignment.title}
-                              </h3>
+                              <p className="text-gray-700 text-base mb-4 leading-relaxed">
+                                {assignment.description}
+                              </p>
                             </div>
-                            <p className="text-gray-700 text-base mb-4 leading-relaxed">
-                              {assignment.description}
-                            </p>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                                onClick={() => {
+                                  setViewing(assignment);
+                                  loadSubmissions(assignment.id);
+                                }}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                                onClick={() => handleOpenEdit(assignment)}
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
+                                onClick={() =>
+                                  handleDeleteAssignment(assignment.id)
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex gap-2 flex-shrink-0">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-                              onClick={() => setViewing(assignment)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-                              onClick={() => handleOpenEdit(assignment)}
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
-                              onClick={() =>
-                                handleDeleteAssignment(assignment.id)
-                              }
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
 
-                        {/* Badges */}
-                        <div className="flex gap-2 flex-wrap mb-5">
-                          <Badge
-                            variant="outline"
-                            className={`font-semibold border-2 ${getStatusColor(
-                              assignment.status,
-                            )}`}
-                          >
-                            {assignment.status.charAt(0).toUpperCase() +
-                              assignment.status.slice(1)}
-                          </Badge>
-                          {assignment.courseTitle && (
+                          {/* Badges */}
+                          <div className="flex gap-2 flex-wrap mb-5">
                             <Badge
-                              variant="secondary"
-                              className="gap-1 bg-orange-100 text-orange-700 border-orange-300 border-2"
+                              variant="outline"
+                              className={`font-semibold border-2 ${getStatusColor(
+                                assignment.status,
+                              )}`}
                             >
-                              <FileText className="h-3 w-3" />
-                              {assignment.courseTitle}
+                              {assignment.status.charAt(0).toUpperCase() +
+                                assignment.status.slice(1)}
                             </Badge>
-                          )}
-                          <Badge
-                            variant="outline"
-                            className="gap-1 border-gray-300 text-gray-700 border-2"
-                          >
-                            <Calendar className="h-3 w-3" />
-                            {new Date(assignment.dueDate).toLocaleDateString()}
-                          </Badge>
-                          <Badge
-                            variant="outline"
-                            className="gap-1 border-gray-300 text-gray-700 border-2"
-                          >
-                            <Users className="h-3 w-3" />
-                            {assignment.submissions}/{assignment.totalStudents}{" "}
-                            submitted
-                          </Badge>
-                          <Badge className="gap-1 bg-gradient-to-r from-orange-600 to-amber-600 text-white border-0">
-                            {assignment.totalPoints} pts
-                          </Badge>
+                            {assignment.courseTitle && (
+                              <Badge
+                                variant="secondary"
+                                className="gap-1 bg-orange-100 text-orange-700 border-orange-300 border-2"
+                              >
+                                <FileText className="h-3 w-3" />
+                                {assignment.courseTitle}
+                              </Badge>
+                            )}
+                            <Badge
+                              variant="outline"
+                              className="gap-1 border-gray-300 text-gray-700 border-2"
+                            >
+                              <Calendar className="h-3 w-3" />
+                              {new Date(
+                                assignment.dueDate,
+                              ).toLocaleDateString()}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className="gap-1 border-gray-300 text-gray-700 border-2"
+                            >
+                              <Users className="h-3 w-3" />
+                              {assignment.submissions}/
+                              {assignment.totalStudents} submitted
+                            </Badge>
+                            <Badge className="gap-1 bg-gradient-to-r from-orange-600 to-amber-600 text-white border-0">
+                              {assignment.totalPoints} pts
+                            </Badge>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Progress Bar */}
-                      <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-semibold text-gray-700">
-                            Submission Progress
-                          </span>
-                          <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
-                            {assignment.totalStudents > 0
-                              ? (
-                                  (assignment.submissions /
-                                    assignment.totalStudents) *
-                                  100
-                                ).toFixed(0)
-                              : "0"}
-                            %
-                          </span>
-                        </div>
-                        <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{
-                              width: `${
-                                assignment.totalStudents > 0
-                                  ? (assignment.submissions /
+                        {/* Progress Bar */}
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-gray-700">
+                              Submission Progress
+                            </span>
+                            <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
+                              {assignment.totalStudents > 0
+                                ? (
+                                    (assignment.submissions /
                                       assignment.totalStudents) *
                                     100
-                                  : 0
-                              }%`,
-                            }}
-                            transition={{ delay: 0.5, duration: 1 }}
-                            className="h-full bg-gradient-to-r from-orange-500 to-amber-600"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Average Score if graded */}
-                      {assignment.averageScore && (
-                        <div className="px-6 pb-6">
-                          <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border-2 border-emerald-200">
-                            <div className="p-2 bg-emerald-100 rounded-full">
-                              <CheckCircle className="h-5 w-5 text-emerald-600" />
-                            </div>
-                            <span className="text-base">
-                              <span className="text-gray-600">
-                                Average Score:{" "}
-                              </span>
-                              <span className="font-bold text-emerald-600">
-                                {assignment.averageScore}%
-                              </span>
+                                  ).toFixed(0)
+                                : "0"}
+                              %
                             </span>
                           </div>
+                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{
+                                width: `${
+                                  assignment.totalStudents > 0
+                                    ? (assignment.submissions /
+                                        assignment.totalStudents) *
+                                      100
+                                    : 0
+                                }%`,
+                              }}
+                              transition={{ delay: 0.5, duration: 1 }}
+                              className="h-full bg-gradient-to-r from-orange-500 to-amber-600"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Average Score if graded */}
+                        {assignment.averageScore && (
+                          <div className="px-6 pb-6">
+                            <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border-2 border-emerald-200">
+                              <div className="p-2 bg-emerald-100 rounded-full">
+                                <CheckCircle className="h-5 w-5 text-emerald-600" />
+                              </div>
+                              <span className="text-base">
+                                <span className="text-gray-600">
+                                  Average Score:{" "}
+                                </span>
+                                <span className="font-bold text-emerald-600">
+                                  {assignment.averageScore}%
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))
+            )}
+          </TabsContent>
+
+          <TabsContent value="submissions" className="space-y-6">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    All Submissions
+                  </h2>
+                  <p className="text-gray-600 mt-1">
+                    View and download student submissions
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-lg px-4 py-2">
+                  {assignments.reduce(
+                    (total, assignment) => total + assignment.submissions,
+                    0,
+                  )}{" "}
+                  Total Submissions
+                </Badge>
+              </div>
+
+              {assignments.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    No Assignments Yet
+                  </h3>
+                  <p className="text-gray-600">
+                    Create your first assignment to start receiving submissions.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {assignments.map((assignment) => (
+                    <div
+                      key={assignment.id}
+                      className="border border-gray-200 rounded-xl p-6 bg-gray-50/50"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                            {assignment.title}
+                          </h3>
+                          <div className="flex items-center gap-4 text-sm text-gray-600">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              Due:{" "}
+                              {new Date(
+                                assignment.dueDate,
+                              ).toLocaleDateString()}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Users className="h-4 w-4" />
+                              {assignment.submissions}/
+                              {assignment.totalStudents} submitted
+                            </span>
+                            <Badge
+                              className={`text-xs ${getStatusColor(assignment.status)}`}
+                            >
+                              {assignment.status.charAt(0).toUpperCase() +
+                                assignment.status.slice(1)}
+                            </Badge>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setViewing(assignment);
+                            loadSubmissions(assignment.id);
+                          }}
+                          className="gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </Button>
+                      </div>
+
+                      {assignment.submissions > 0 ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-semibold text-gray-900">
+                              Recent Submissions
+                            </h4>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setViewing(assignment);
+                                loadSubmissions(assignment.id);
+                              }}
+                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                              View All ({assignment.submissions})
+                            </Button>
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            Click "View Details" to see all submissions and
+                            download files.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-center py-6 text-gray-500">
+                          <UploadIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                          <p>No submissions yet</p>
                         </div>
                       )}
                     </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))
-          )}
-        </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {/* Create Assignment Modal */}
         {showCreateModal && (
@@ -1002,7 +1356,11 @@ export default function LecturerAssignments() {
                   {viewing.title}
                 </h2>
                 <button
-                  onClick={() => setViewing(null)}
+                  onClick={() => {
+                    setViewing(null);
+                    setViewingSubmissions([]);
+                    setEditingSubmission(null);
+                  }}
                   className="text-gray-500 hover:text-gray-700 transition-colors"
                 >
                   <X className="h-6 w-6" />
@@ -1079,11 +1437,257 @@ export default function LecturerAssignments() {
                 </div>
               )}
 
+              {/* Submissions Section */}
+              <div className="border-t border-gray-200 pt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Student Submissions ({viewing.submissions})
+                  </h3>
+                  <Badge
+                    variant="outline"
+                    className="bg-blue-50 text-blue-700 border-blue-200"
+                  >
+                    {viewing.submissions}/{viewing.totalStudents} submitted
+                  </Badge>
+                </div>
+
+                {loadingSubmissions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+                    <span className="ml-2 text-gray-600">
+                      Loading submissions...
+                    </span>
+                  </div>
+                ) : viewingSubmissions.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <FileText className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                    <p>No submissions yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {viewingSubmissions.map((submission) => (
+                      <div
+                        key={submission.id}
+                        className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h4 className="font-semibold text-gray-900">
+                              {submission.student_name}
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              {submission.student_email}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <Badge
+                              className={`text-xs ${
+                                submission.status === "submitted"
+                                  ? "bg-green-100 text-green-800"
+                                  : submission.status === "graded"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : "bg-yellow-100 text-yellow-800"
+                              }`}
+                            >
+                              {submission.status}
+                            </Badge>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {submission.submitted_at?.toDate
+                                ? submission.submitted_at
+                                    .toDate()
+                                    .toLocaleDateString()
+                                : "Unknown date"}
+                            </p>
+                          </div>
+                        </div>
+
+                        {submission.content && (
+                          <div className="mb-3">
+                            <p className="text-sm text-gray-700 bg-white p-3 rounded border">
+                              {submission.content}
+                            </p>
+                          </div>
+                        )}
+
+                        {submission.file_url && (
+                          <div className="flex items-center gap-2">
+                            <UploadIcon className="h-4 w-4 text-gray-500" />
+                            {submission.file_url.startsWith(
+                              "https://firebasestorage.googleapis.com/",
+                            ) ? (
+                              <a
+                                href={submission.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:text-blue-800 underline"
+                              >
+                                {submission.file_name ||
+                                  "Download submission file"}
+                              </a>
+                            ) : (
+                              <span className="text-sm text-gray-500 italic">
+                                File not available (uploaded before storage was
+                                implemented)
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Grading Section */}
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          {editingSubmission?.id === submission.id ? (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-sm font-medium">
+                                    Status
+                                  </Label>
+                                  <Select
+                                    value={editingSubmission.status}
+                                    onValueChange={(value) =>
+                                      setEditingSubmission((prev) =>
+                                        prev
+                                          ? { ...prev, status: value }
+                                          : null,
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="mt-1">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="submitted">
+                                        Submitted
+                                      </SelectItem>
+                                      <SelectItem value="reviewed">
+                                        Reviewed
+                                      </SelectItem>
+                                      <SelectItem value="graded">
+                                        Graded
+                                      </SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label className="text-sm font-medium">
+                                    Score (out of {viewing.totalPoints})
+                                  </Label>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    max={viewing.totalPoints}
+                                    value={editingSubmission.score || ""}
+                                    onChange={(e) =>
+                                      setEditingSubmission((prev) =>
+                                        prev
+                                          ? {
+                                              ...prev,
+                                              score: e.target.value
+                                                ? parseInt(e.target.value)
+                                                : undefined,
+                                            }
+                                          : null,
+                                      )
+                                    }
+                                    className="mt-1"
+                                    placeholder="Enter score"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-sm font-medium">
+                                  Feedback
+                                </Label>
+                                <Textarea
+                                  value={editingSubmission.feedback || ""}
+                                  onChange={(e) =>
+                                    setEditingSubmission((prev) =>
+                                      prev
+                                        ? { ...prev, feedback: e.target.value }
+                                        : null,
+                                    )
+                                  }
+                                  className="mt-1"
+                                  placeholder="Enter feedback for the student..."
+                                  rows={3}
+                                />
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={async () => {
+                                    if (editingSubmission) {
+                                      await updateSubmission(
+                                        editingSubmission.id,
+                                        {
+                                          status: editingSubmission.status,
+                                          score: editingSubmission.score,
+                                          feedback: editingSubmission.feedback,
+                                        },
+                                      );
+                                      setEditingSubmission(null);
+                                    }
+                                  }}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  Save Changes
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setEditingSubmission(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                {submission.score !== null &&
+                                submission.score !== undefined ? (
+                                  <span className="text-sm font-medium text-gray-600">
+                                    Score: {submission.score}/
+                                    {viewing.totalPoints}
+                                  </span>
+                                ) : (
+                                  <span className="text-sm text-gray-500">
+                                    Not graded yet
+                                  </span>
+                                )}
+                                {submission.feedback && (
+                                  <span className="text-sm text-gray-600">
+                                    Feedback provided
+                                  </span>
+                                )}
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingSubmission(submission)}
+                                className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                              >
+                                <Edit2 className="h-4 w-4 mr-1" />
+                                Grade
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
                   className="flex-1 border-2 border-gray-300 text-gray-700"
-                  onClick={() => setViewing(null)}
+                  onClick={() => {
+                    setViewing(null);
+                    setViewingSubmissions([]);
+                    setEditingSubmission(null);
+                  }}
                 >
                   Close
                 </Button>
@@ -1092,6 +1696,8 @@ export default function LecturerAssignments() {
                   onClick={() => {
                     handleOpenEdit(viewing);
                     setViewing(null);
+                    setViewingSubmissions([]);
+                    setEditingSubmission(null);
                   }}
                 >
                   Edit

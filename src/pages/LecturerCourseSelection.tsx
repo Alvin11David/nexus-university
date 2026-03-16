@@ -19,6 +19,7 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  getDoc,
 } from "firebase/firestore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -73,19 +74,71 @@ export default function LecturerCourseSelection() {
   const loadData = async () => {
     try {
       setLoading(true);
-      // Load all available courses from Firestore
-      const coursesSnapshot = await getDocs(collection(db, "courses"));
-      const coursesData: Course[] = coursesSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Course[];
-      setCourses(coursesData);
-
-      // Load lecturer's selected courses for this semester
       if (!user?.uid) {
         console.warn("No user ID available");
         return;
       }
+
+      // Fetch lecturer's profile to get assigned_course_units
+      const assignedRawCourses: Partial<Course>[] = [];
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        if (profileDoc.exists()) {
+          const profileData = profileDoc.data();
+          const assignedCourseUnits = profileData.assigned_course_units || [];
+
+          if (assignedCourseUnits.length > 0) {
+            // Query course_units collection where doc.id is in assignedCourseUnits
+            // Firestore 'in' supports up to 30 values
+            const chunks = [];
+            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
+              chunks.push(assignedCourseUnits.slice(i, i + 30));
+            }
+
+            for (const chunk of chunks) {
+              const courseUnitsQuery = query(
+                collection(db, "course_units"),
+                where("__name__", "in", chunk),
+              );
+              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
+              courseUnitsSnapshot.docs.forEach((doc) => {
+                const courseData = doc.data();
+                assignedRawCourses.push({
+                  id: doc.id,
+                  code:
+                    courseData.code || courseData.course_unit_code || "Unknown",
+                  title:
+                    courseData.name ||
+                    courseData.course_unit_name ||
+                    "Unknown Course",
+                  credits: courseData.credits || 3,
+                });
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch lecturer profile or course units:", err);
+      }
+
+      // Set available courses to the assigned course units
+      const coursesData: Course[] = assignedRawCourses.map((raw) => ({
+        id: raw.id || `temp-${Date.now()}`,
+        code: raw.code || "Unknown",
+        title: raw.title || "Unknown Course",
+        credits: raw.credits || 3,
+      })) as Course[];
+      setCourses(coursesData);
+
+      // Auto-assign courses based on assigned course units
+      const autoAssignedCourses: Course[] = assignedRawCourses.map((raw) => ({
+        id: raw.id || `temp-${Date.now()}`,
+        code: raw.code || "Unknown",
+        title: raw.title || "Unknown Course",
+        credits: raw.credits || 3,
+      })) as Course[];
+
+      // Load lecturer's CURRENT selected courses for this semester from lecturer_courses
       const lecturerCoursesQuery = query(
         collection(db, "lecturer_courses"),
         where("lecturer_id", "==", user.uid),
@@ -93,15 +146,29 @@ export default function LecturerCourseSelection() {
         where("semester", "==", currentSemester),
       );
       const lecturerCoursesSnapshot = await getDocs(lecturerCoursesQuery);
+
+      const existingCourseIds = new Set<string>();
+
       const lecturerCoursesData: LecturerCourse[] =
         lecturerCoursesSnapshot.docs.map((doc) => {
           const data = doc.data();
-          const course = coursesData.find((c) => c.id === data.course_id) || {
-            id: data.course_id,
-            code: "Unknown",
-            title: "Course",
-            credits: 0,
-          };
+          existingCourseIds.add(data.course_id);
+
+          let course = coursesData.find((c) => c.id === data.course_id);
+          if (!course) {
+            // Check if it's one of our auto-assigned fallbacks
+            course = autoAssignedCourses.find((c) => c.id === data.course_id);
+          }
+
+          if (!course) {
+            course = {
+              id: data.course_id,
+              code: "Unknown",
+              title: "Course",
+              credits: 0,
+            };
+          }
+
           return {
             id: doc.id,
             course_id: data.course_id,
@@ -110,6 +177,36 @@ export default function LecturerCourseSelection() {
             academic_year: data.academic_year,
           };
         });
+
+      // Save any newly assigned courses from the registrar that aren't yet in lecturer_courses
+      const coursesToAdd = autoAssignedCourses.filter(
+        (c) => !existingCourseIds.has(c.id),
+      );
+
+      for (const course of coursesToAdd) {
+        try {
+          const docRef = await addDoc(collection(db, "lecturer_courses"), {
+            lecturer_id: user.uid,
+            course_id: course.id,
+            semester: currentSemester,
+            academic_year: currentAcademicYear,
+          });
+
+          lecturerCoursesData.unshift({
+            id: docRef.id,
+            course_id: course.id,
+            course,
+            semester: currentSemester,
+            academic_year: currentAcademicYear,
+          });
+        } catch (addErr) {
+          console.error(
+            "Failed to auto-assign course to lecturer_courses",
+            addErr,
+          );
+        }
+      }
+
       setLecturerCourses(lecturerCoursesData);
       setSelectedCourses(lecturerCoursesData.map((lc) => lc.course_id));
     } catch (error) {
@@ -127,15 +224,17 @@ export default function LecturerCourseSelection() {
   // Filter courses based on search and credits
   const filteredCourses = courses.filter((course) => {
     const matchesSearch =
-      course.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.title.toLowerCase().includes(searchQuery.toLowerCase());
+      (course.code || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (course.title || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesFilter =
-      filterCredits === null || course.credits.toString() === filterCredits;
+      filterCredits === null || course.credits?.toString() === filterCredits;
     return matchesSearch && matchesFilter;
   });
 
   // Get unique credit values for filter
-  const creditOptions = Array.from(new Set(courses.map((c) => c.credits)));
+  const creditOptions = Array.from(
+    new Set(courses.map((c) => c.credits)),
+  ).filter((c): c is number => c !== undefined && c !== null);
 
   const rise = {
     hidden: { opacity: 0, y: 20 },

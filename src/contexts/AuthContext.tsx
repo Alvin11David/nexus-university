@@ -11,7 +11,7 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  updatePassword
+  updatePassword,
 } from "firebase/auth";
 import {
   doc,
@@ -25,7 +25,7 @@ import {
   getDocs,
   limit,
   serverTimestamp,
-  addDoc
+  addDoc,
 } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/client";
 
@@ -34,6 +34,7 @@ type User = FirebaseUser;
 type Session = { user: User } | null;
 
 interface Profile {
+  course_id?: string | null;
   id: string;
   full_name: string;
   email: string;
@@ -71,33 +72,35 @@ interface AuthContextType {
     registrationNumber?: string,
     studentNumber?: string,
     role?: "student" | "lecturer" | "admin" | "registrar",
-    department?: string
+    department?: string,
+    college?: string,
+    programme?: string,
   ) => Promise<{ error: Error | null }>;
   signIn: (
     identifier: string,
-    password: string
+    password: string,
   ) => Promise<{ error: Error | null }>;
   signInWithStudentId: (
     identifier: string,
-    password: string
+    password: string,
   ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   validateStudent: (
     registrationNumber: string,
     studentNumber: string,
-    email: string
+    email: string,
   ) => Promise<{ data: StudentRecord | null; error: Error | null }>;
   generateOTP: (
     email: string,
-    studentRecordId: string
+    studentRecordId: string,
   ) => Promise<{ otp: string; error: Error | null }>;
   verifyOTP: (
     email: string,
-    otp: string
+    otp: string,
   ) => Promise<{ valid: boolean; error: Error | null }>;
   resetPassword: (
     identifier: string,
-    newPassword: string
+    newPassword: string,
   ) => Promise<{ error: Error | null }>;
 }
 
@@ -144,7 +147,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // If student_number is missing, try to get it from student_records
         if (!data.student_number) {
           const recordsRef = collection(db, "student_records");
-          const q = query(recordsRef, where("email", "==", data.email), limit(1));
+          const q = query(
+            recordsRef,
+            where("email", "==", data.email),
+            limit(1),
+          );
           const querySnapshot = await getDocs(q);
 
           if (!querySnapshot.empty) {
@@ -157,11 +164,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
             // Update local state
-            setProfile(prev => prev ? {
-              ...prev,
-              student_number: studentRecord.student_number,
-              registration_number: studentRecord.registration_number,
-            } : null);
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    student_number: studentRecord.student_number,
+                    registration_number: studentRecord.registration_number,
+                  }
+                : null,
+            );
           }
         }
 
@@ -178,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const validateStudent = async (
     registrationNumber: string,
     studentNumber: string,
-    email: string
+    email: string,
   ): Promise<{ data: StudentRecord | null; error: Error | null }> => {
     try {
       // First, try to find existing record
@@ -187,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         recordsRef,
         where("registration_number", "==", registrationNumber),
         where("student_number", "==", studentNumber),
-        limit(1)
+        limit(1),
       );
       const querySnapshot = await getDocs(q);
 
@@ -199,7 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return {
             data: null,
             error: new Error(
-              "This student account is already registered. Please sign in instead."
+              "This student account is already registered. Please sign in instead.",
             ),
           };
         }
@@ -212,7 +223,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         emailName
           .split(/[._-]/)
           .map(
-            (part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
+            (part) =>
+              part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
           )
           .join(" ") || "New Student";
 
@@ -228,8 +240,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const docRef = await addDoc(collection(db, "student_records"), newData);
 
       return {
-        data: { ...newData, id: docRef.id, created_at: new Date().toISOString() } as unknown as StudentRecord,
-        error: null
+        data: {
+          ...newData,
+          id: docRef.id,
+          created_at: new Date().toISOString(),
+        } as unknown as StudentRecord,
+        error: null,
       };
     } catch (error: any) {
       return { data: null, error: new Error(error.message) };
@@ -239,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Generate a 4-digit OTP
   const generateOTP = async (
     email: string,
-    studentRecordId: string | null
+    studentRecordId: string | null,
   ): Promise<{ otp: string; error: Error | null }> => {
     try {
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -263,7 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Verify OTP
   const verifyOTP = async (
     email: string,
-    otp: string
+    otp: string,
   ): Promise<{ valid: boolean; error: Error | null }> => {
     try {
       const otpRef = collection(db, "otp_verifications");
@@ -272,7 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         where("email", "==", email),
         where("otp_code", "==", otp),
         where("verified", "==", false),
-        limit(1)
+        limit(1),
       );
       const querySnapshot = await getDocs(q);
 
@@ -294,7 +310,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Mark OTP as verified
-      await updateDoc(doc(db, "otp_verifications", otpDoc.id), { verified: true });
+      await updateDoc(doc(db, "otp_verifications", otpDoc.id), {
+        verified: true,
+      });
 
       return { valid: true, error: null };
     } catch (error: any) {
@@ -309,16 +327,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     registrationNumber?: string,
     studentNumber?: string,
     role: "student" | "lecturer" | "admin" | "registrar" = "student",
-    department?: string
+    department?: string,
+    college?: string,
+    programme?: string,
   ) => {
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, email, password);
+      const { user } = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
 
       if (user) {
         const profileData: any = {
           full_name: fullName,
           email: email,
           role: role,
+          college: college || null,
+          programme: programme || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
@@ -339,15 +365,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             recordsRef,
             where("registration_number", "==", registrationNumber),
             where("student_number", "==", studentNumber),
-            limit(1)
+            limit(1),
           );
           const querySnapshot = await getDocs(q);
           if (!querySnapshot.empty) {
-            await updateDoc(doc(db, "student_records", querySnapshot.docs[0].id), {
-              is_registered: true,
-              full_name: fullName,
-              email: email,
-            });
+            await updateDoc(
+              doc(db, "student_records", querySnapshot.docs[0].id),
+              {
+                is_registered: true,
+                full_name: fullName,
+                email: email,
+              },
+            );
           }
         }
       }
@@ -357,7 +386,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error.code === "auth/email-already-in-use") {
         return {
           error: new Error(
-            'An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.'
+            'An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.',
           ),
         };
       }
@@ -386,8 +415,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // First, find the student by registration number or student number in student_records
       const recordsRef = collection(db, "student_records");
-      const qReg = query(recordsRef, where("registration_number", "==", identifier), limit(1));
-      const qStu = query(recordsRef, where("student_number", "==", identifier), limit(1));
+      const qReg = query(
+        recordsRef,
+        where("registration_number", "==", identifier),
+        limit(1),
+      );
+      const qStu = query(
+        recordsRef,
+        where("student_number", "==", identifier),
+        limit(1),
+      );
 
       let querySnapshot = await getDocs(qReg);
       if (querySnapshot.empty) {
@@ -397,7 +434,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (querySnapshot.empty) {
         return {
           error: new Error(
-            "Student not found. Please check your registration or student number."
+            "Student not found. Please check your registration or student number.",
           ),
         };
       }
@@ -408,8 +445,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!studentData.email) {
         // Try to find the email from profiles collection
         const profilesRef = collection(db, "profiles");
-        const qProfReg = query(profilesRef, where("registration_number", "==", identifier), limit(1));
-        const qProfStu = query(profilesRef, where("student_number", "==", identifier), limit(1));
+        const qProfReg = query(
+          profilesRef,
+          where("registration_number", "==", identifier),
+          limit(1),
+        );
+        const qProfStu = query(
+          profilesRef,
+          where("student_number", "==", identifier),
+          limit(1),
+        );
 
         let profSnapshot = await getDocs(qProfReg);
         if (profSnapshot.empty) {
@@ -419,12 +464,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profSnapshot.empty || !profSnapshot.docs[0].data().email) {
           return {
             error: new Error(
-              "No email associated with this student. Please contact support."
+              "No email associated with this student. Please contact support.",
             ),
           };
         }
 
-        await signInWithEmailAndPassword(auth, profSnapshot.docs[0].data().email, password);
+        await signInWithEmailAndPassword(
+          auth,
+          profSnapshot.docs[0].data().email,
+          password,
+        );
         return { error: null };
       }
 
@@ -438,7 +487,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (
     identifier: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<{ error: Error | null }> => {
     try {
       let targetEmail = identifier;
@@ -446,8 +495,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Check if identifier is a student/registration number instead of email
       if (!identifier.includes("@")) {
         const recordsRef = collection(db, "student_records");
-        const qReg = query(recordsRef, where("registration_number", "==", identifier), limit(1));
-        const qStu = query(recordsRef, where("student_number", "==", identifier), limit(1));
+        const qReg = query(
+          recordsRef,
+          where("registration_number", "==", identifier),
+          limit(1),
+        );
+        const qStu = query(
+          recordsRef,
+          where("student_number", "==", identifier),
+          limit(1),
+        );
 
         let querySnapshot = await getDocs(qReg);
         if (querySnapshot.empty) {
@@ -459,8 +516,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           // If not in records, check profiles
           const profilesRef = collection(db, "profiles");
-          const qProfReg = query(profilesRef, where("registration_number", "==", identifier), limit(1));
-          const qProfStu = query(profilesRef, where("student_number", "==", identifier), limit(1));
+          const qProfReg = query(
+            profilesRef,
+            where("registration_number", "==", identifier),
+            limit(1),
+          );
+          const qProfStu = query(
+            profilesRef,
+            where("student_number", "==", identifier),
+            limit(1),
+          );
 
           let profSnapshot = await getDocs(qProfReg);
           if (profSnapshot.empty) {
@@ -470,7 +535,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!profSnapshot.empty && profSnapshot.docs[0].data().email) {
             targetEmail = profSnapshot.docs[0].data().email;
           } else {
-            return { error: new Error("No account found with this identifier or no email is linked.") };
+            return {
+              error: new Error(
+                "No account found with this identifier or no email is linked.",
+              ),
+            };
           }
         }
       }
@@ -483,7 +552,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: null };
       }
 
-      // FOR DEMO PURPOSES: We return success without modifying Firebase Auth directly, 
+      // FOR DEMO PURPOSES: We return success without modifying Firebase Auth directly,
       // since Client SDK forbids unauthenticated password changes without the old password.
       // In a real application, you would invoke a Firebase Cloud Function here.
       console.log(`[Demo Mode] Password reset simulated for ${targetEmail}`);
@@ -491,7 +560,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: null };
     } catch (error: any) {
       return {
-        error: error instanceof Error ? error : new Error("Failed to reset password"),
+        error:
+          error instanceof Error
+            ? error
+            : new Error("Failed to reset password"),
       };
     }
   };

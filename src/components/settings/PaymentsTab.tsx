@@ -48,7 +48,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, addDoc, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 interface Fee {
@@ -124,48 +135,59 @@ export function PaymentsTab() {
       const feesQ = query(
         collection(db, "fees"),
         where("student_id", "==", user.uid),
-        orderBy("due_date", "desc")
+        orderBy("due_date", "desc"),
       );
       const paymentsQ = query(
         collection(db, "payments"),
         where("student_id", "==", user.uid),
-        orderBy("paid_at", "desc")
+        orderBy("paid_at", "desc"),
       );
       const enrollmentsQ = query(
         collection(db, "enrollments"),
         where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc")
+        orderBy("enrolled_at", "desc"),
       );
 
       const [feesSnap, paymentsSnap, enrollmentsSnap] = await Promise.all([
         getDocs(feesQ),
         getDocs(paymentsQ),
-        getDocs(enrollmentsQ)
+        getDocs(enrollmentsQ),
       ]);
 
-      const feesData = feesSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const paymentsData = paymentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const enrollmentDocs = enrollmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const feesData = feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const paymentsData = paymentsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      const enrollmentDocs = enrollmentsSnap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
 
       setFees(feesData as Fee[]);
       setPayments(paymentsData as Payment[]);
 
       if (enrollmentDocs.length > 0) {
-        const courseIds = [...new Set(enrollmentDocs.map((e: any) => e.course_id))];
+        const courseIds = [
+          ...new Set(enrollmentDocs.map((e: any) => e.course_id)),
+        ];
         const courseMap: Record<string, any> = {};
 
         for (let i = 0; i < courseIds.length; i += 10) {
           const chunk = courseIds.slice(i, i + 10);
-          const courseQ = query(collection(db, "courses"), where("__name__", "in", chunk));
+          const courseQ = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
           const courseSnap = await getDocs(courseQ);
-          courseSnap.docs.forEach(d => {
+          courseSnap.docs.forEach((d) => {
             courseMap[d.id] = d.data();
           });
         }
 
         const transformedEnrollments = enrollmentDocs.map((e: any) => ({
           ...e,
-          course: courseMap[e.course_id]
+          course: courseMap[e.course_id],
         }));
         setEnrollments(transformedEnrollments as Enrollment[]);
       } else {
@@ -191,7 +213,7 @@ export function PaymentsTab() {
   const totalFees = fees.reduce((acc, f) => acc + Number(f.amount || 0), 0);
   const totalPaid = Array.from(paymentTotalsByFee.values()).reduce(
     (acc, v) => acc + v,
-    0
+    0,
   );
   const outstanding = Math.max(totalFees - totalPaid, 0);
   const paymentProgress = totalFees > 0 ? (totalPaid / totalFees) * 100 : 0;
@@ -259,7 +281,7 @@ export function PaymentsTab() {
 
   const findNextOutstandingFee = () =>
     fees.find(
-      (f) => Math.max(Number(f.amount || 0) - paymentTotalsForFee(f.id), 0) > 0
+      (f) => Math.max(Number(f.amount || 0) - paymentTotalsForFee(f.id), 0) > 0,
     );
 
   const handlePay = async (methodKey: string) => {
@@ -288,7 +310,7 @@ export function PaymentsTab() {
     }
 
     const transactionRef = `PAY-${method.key}-${Math.floor(
-      Date.now() / 1000
+      Date.now() / 1000,
     )}-${Math.floor(100 + Math.random() * 900)}`;
     const status = method.instant ? "completed" : "pending";
 
@@ -329,15 +351,15 @@ export function PaymentsTab() {
     const paymentTotals = paymentTotalsByFee;
     const breakdown = enrollments.map((enrollment) => {
       const semesterFees = fees.filter(
-        (fee) => fee.semester === enrollment.course?.semester
+        (fee) => fee.semester === enrollment.course?.semester,
       );
       const totalCost = semesterFees.reduce(
         (sum, fee) => sum + Number(fee.amount || 0),
-        0
+        0,
       );
       const totalPaidForSemester = semesterFees.reduce(
         (sum, fee) => sum + (paymentTotals.get(fee.id) || 0),
-        0
+        0,
       );
 
       return {
@@ -708,13 +730,14 @@ export function PaymentsTab() {
                                 </div>
                               </div>
                               <Badge
-                                className={`${courseRemaining <= 0
-                                  ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-                                  : courseRemaining <
-                                    breakdown.totalCost * 0.25
-                                    ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
-                                    : "bg-destructive/10 text-destructive border-destructive/30"
-                                  }`}
+                                className={`${
+                                  courseRemaining <= 0
+                                    ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+                                    : courseRemaining <
+                                        breakdown.totalCost * 0.25
+                                      ? "bg-amber-500/10 text-amber-600 border-amber-500/30"
+                                      : "bg-destructive/10 text-destructive border-destructive/30"
+                                }`}
                               >
                                 {courseRemaining <= 0 ? "✓ Paid" : "Pending"}
                               </Badge>
@@ -732,9 +755,9 @@ export function PaymentsTab() {
                                     const progress =
                                       fee.amount > 0
                                         ? Math.min(
-                                          (paid / fee.amount) * 100,
-                                          100
-                                        )
+                                            (paid / fee.amount) * 100,
+                                            100,
+                                          )
                                         : 0;
 
                                     return (
@@ -753,7 +776,7 @@ export function PaymentsTab() {
                                             <p className="text-xs text-muted-foreground">
                                               Due:{" "}
                                               {new Date(
-                                                fee.due_date
+                                                fee.due_date,
                                               ).toLocaleDateString("en-US", {
                                                 month: "short",
                                                 day: "numeric",
@@ -778,12 +801,13 @@ export function PaymentsTab() {
                                             initial={{ width: 0 }}
                                             animate={{ width: `${progress}%` }}
                                             transition={{ duration: 0.8 }}
-                                            className={`h-full ${isPaid
-                                              ? "bg-gradient-to-r from-emerald-500 to-teal-500"
-                                              : isPartial
-                                                ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                                                : "bg-gradient-to-r from-primary to-secondary"
-                                              }`}
+                                            className={`h-full ${
+                                              isPaid
+                                                ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                                                : isPartial
+                                                  ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                                                  : "bg-gradient-to-r from-primary to-secondary"
+                                            }`}
                                           />
                                         </div>
                                       </motion.div>
@@ -952,7 +976,7 @@ export function PaymentsTab() {
                                   month: "short",
                                   day: "numeric",
                                   year: "numeric",
-                                }
+                                },
                               )}
                             </p>
                             <ChevronRight className="h-5 w-5 text-muted-foreground mt-2 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1032,7 +1056,7 @@ export function PaymentsTab() {
                       {
                         label: "Date",
                         value: new Date(
-                          selectedPayment.paid_at
+                          selectedPayment.paid_at,
                         ).toLocaleString(),
                       },
                     ].map((item) => (

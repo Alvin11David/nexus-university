@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -28,7 +28,20 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, addDoc, serverTimestamp, setDoc, limit, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  updateDoc,
+  addDoc,
+  serverTimestamp,
+  setDoc,
+  limit,
+  orderBy,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -76,10 +89,19 @@ type DashboardAssignment = {
   rawStatus: string | null;
 };
 
+interface LiveSession {
+  id: string;
+  title: string;
+  courseName?: string | null;
+  scheduledAt: string;
+  durationMinutes?: number | null;
+  meetLink?: string | null;
+  isLive: boolean;
+}
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
-  const displayName =
-    profile?.full_name || user?.displayName || "Student";
+  const displayName = profile?.full_name || user?.displayName || "Student";
   const firstName = displayName.split(" ")[0];
   const [stats, setStats] = useState({
     enrolled: 0,
@@ -99,90 +121,11 @@ export default function Dashboard() {
   const [assignments, setAssignments] = useState<DashboardAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
 
-  const classroomCourses = [
-    {
-      id: "gclass-1",
-      title: "Advanced Data Structures",
-      code: "GCL-ADS-2026",
-      instructor: "Dr. Sarah Chen",
-      room: "Main Campus - Lab 4",
-      students: 156,
-      banner: "from-indigo-500 via-blue-500 to-cyan-400",
-      joinCode: "ads-26-x2z",
-      meetLink: "https://meet.google.com/ads-26-x2z",
-      progress: 72,
-      unread: 3,
-    },
-    {
-      id: "gclass-2",
-      title: "Database Systems & Cloud",
-      code: "GCL-DBS-2026",
-      instructor: "Prof. James Okonkwo",
-      room: "Innovation Hub",
-      students: 189,
-      banner: "from-emerald-500 via-teal-500 to-cyan-400",
-      joinCode: "dbs-26-r7m",
-      meetLink: "https://meet.google.com/dbs-26-r7m",
-      progress: 54,
-      unread: 1,
-      isLive: true,
-    },
-    {
-      id: "gclass-3",
-      title: "Software Engineering Studio",
-      code: "GCL-SE-2026",
-      instructor: "Dr. Emily Nakamura",
-      room: "SE Studio",
-      students: 120,
-      banner: "from-purple-500 via-fuchsia-500 to-pink-500",
-      joinCode: "se-26-wip",
-      meetLink: "https://meet.google.com/se-26-wip",
-      progress: 86,
-      unread: 0,
-    },
-  ];
-
-  const classroomStream = [
-    {
-      course: "Advanced Data Structures",
-      message: "Posted Lecture 5 slides + code samples on AVL Trees.",
-      author: "Dr. Sarah Chen",
-      time: "18m ago",
-      type: "material",
-    },
-    {
-      course: "Database Systems & Cloud",
-      message:
-        "Reminder: Live lab on replication + sharding starts at 10:00 AM (Meet).",
-      author: "Prof. James Okonkwo",
-      time: "1h ago",
-      type: "live",
-    },
-    {
-      course: "Software Engineering Studio",
-      message:
-        "Sprint 2 backlog is updated. Please check your tickets and story points.",
-      author: "Dr. Emily Nakamura",
-      time: "3h ago",
-      type: "announcement",
-    },
-  ];
-
-  const meetSessions = [
-    {
-      course: "Database Systems & Cloud",
-      starts: "Today · 10:00 AM",
-      link: "https://meet.google.com/dbs-26-r7m",
-      isLive: true,
-    },
-    {
-      course: "Advanced Data Structures",
-      starts: "Today · 2:00 PM",
-      link: "https://meet.google.com/ads-26-x2z",
-      isLive: false,
-    },
-  ];
+  const classroomCourses: any[] = [];
+  const classroomStream: any[] = [];
 
   const formatDueDate = (date: string | null) => {
     if (!date) return "No due date";
@@ -205,20 +148,27 @@ export default function Dashboard() {
         setLoadingStats(true);
 
         const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(enrollmentsRef, where("student_id", "==", user.uid));
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+        );
         const enrollSnapshot = await getDocs(qEnroll);
-        const enrollments = enrollSnapshot.docs.map(d => d.data());
+        const enrollments = enrollSnapshot.docs.map((d) => d.data());
 
         const enrolledCoursesCount = enrollments.length;
-        const completedCoursesCount = enrollments.filter((e: any) => e.status === "completed").length;
+        const completedCoursesCount = enrollments.filter(
+          (e: any) => e.status === "completed",
+        ).length;
 
-        const courseIds = enrollments.map((e: any) => e.course_id).filter(Boolean);
+        const courseIds = enrollments
+          .map((e: any) => e.course_id)
+          .filter(Boolean);
 
         let pendingAssignmentsCount = 0;
         if (courseIds.length > 0) {
-          // Note: Firestore 'in' queries are limited to 10 items. 
+          // Note: Firestore 'in' queries are limited to 10 items.
           // For more, we'd need to chunk the request.
-          const assignmentsRef = collection(db, "assignments");
+          const assignmentsRef = collection(db, "Assignments");
           const qAssign = query(
             assignmentsRef,
             where("course_id", "in", courseIds.slice(0, 10)),
@@ -226,10 +176,12 @@ export default function Dashboard() {
           );
           const assignSnapshot = await getDocs(qAssign);
           const assignments = assignSnapshot.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter((a: any) => a.due_date && new Date(a.due_date) >= new Date());
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter(
+              (a: any) => a.due_date && new Date(a.due_date) >= new Date(),
+            );
 
-          const assignmentIds = assignments.map(a => a.id);
+          const assignmentIds = assignments.map((a) => a.id);
           let submissions: any[] = [];
 
           if (assignmentIds.length > 0) {
@@ -237,26 +189,26 @@ export default function Dashboard() {
             const qSubs = query(
               subsRef,
               where("student_id", "==", user.uid),
-              where("assignment_id", "in", assignmentIds.slice(0, 10))
+              where("assignment_id", "in", assignmentIds.slice(0, 10)),
             );
             const subsSnapshot = await getDocs(qSubs);
-            submissions = subsSnapshot.docs.map(d => d.data());
+            submissions = subsSnapshot.docs.map((d) => d.data());
           }
 
           pendingAssignmentsCount = assignments.filter((a: any) => {
             const submission = submissions.find(
-              (s) => s.assignment_id === a.id
+              (s) => s.assignment_id === a.id,
             );
             return !submission || submission.status !== "submitted";
           }).length;
         }
 
-        setStats({
+        setStats((prev) => ({
+          ...prev,
           enrolled: enrolledCoursesCount,
           completed: completedCoursesCount,
           assignments: pendingAssignmentsCount,
-          liveMeets: meetSessions.filter((m) => m.isLive).length,
-        });
+        }));
       } catch (error) {
         console.error("Error loading dashboard stats", error);
       } finally {
@@ -266,6 +218,92 @@ export default function Dashboard() {
 
     loadStats();
   }, [user]);
+
+  useEffect(() => {
+    const loadLiveSessions = async () => {
+      try {
+        setLiveSessionsLoading(true);
+        const sessionsRef = collection(db, "live_sessions");
+        const snapshot = await getDocs(sessionsRef);
+        const now = new Date();
+
+        const sessions: LiveSession[] = snapshot.docs
+          .map((d) => {
+            const data = d.data() as any;
+            const scheduledAt: string = data.scheduled_at;
+            if (!scheduledAt) return null;
+            const start = new Date(scheduledAt);
+            if (Number.isNaN(start.getTime())) return null;
+
+            const duration = data.duration_minutes ?? 60;
+            const end = new Date(start.getTime() + duration * 60000);
+            const isLive = now >= start && now <= end;
+
+            return {
+              id: d.id,
+              title: data.title || "Online Class",
+              courseName: data.course_name || null,
+              scheduledAt,
+              durationMinutes: data.duration_minutes ?? null,
+              meetLink: data.meet_link || null,
+              isLive,
+            } as LiveSession;
+          })
+          .filter(Boolean) as LiveSession[];
+
+        sessions.sort((a, b) =>
+          a.scheduledAt.localeCompare(b.scheduledAt),
+        );
+
+        setLiveSessions(sessions);
+
+        const liveCount = sessions.filter((s) => s.isLive).length;
+        setStats((prev) => ({
+          ...prev,
+          liveMeets: liveCount,
+        }));
+      } catch (error) {
+        console.error("Error loading live sessions", error);
+      } finally {
+        setLiveSessionsLoading(false);
+      }
+    };
+
+    loadLiveSessions();
+  }, []);
+
+  const activeMeetsCount = useMemo(
+    () => liveSessions.filter((s) => s.isLive).length,
+    [liveSessions],
+  );
+
+  const formattedLiveSessions = useMemo(
+    () =>
+      liveSessions.map((session) => {
+        const start = new Date(session.scheduledAt);
+        const now = new Date();
+        const isToday = start.toDateString() === now.toDateString();
+
+        const timeLabel = start.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+
+        const dayLabel = isToday
+          ? "Today"
+          : start.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            });
+
+        return {
+          ...session,
+          displayTime: `${dayLabel} · ${timeLabel}`,
+          displayDay: session.isLive ? "Live" : dayLabel,
+        };
+      }),
+    [liveSessions],
+  );
 
   useEffect(() => {
     if (!user) return;
@@ -281,10 +319,10 @@ export default function Dashboard() {
         const qEnroll = query(
           enrollmentsRef,
           where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"])
+          where("status", "in", ["approved", "pending"]),
         );
         const enrollSnapshot = await getDocs(qEnroll);
-        const enrollmentsData = enrollSnapshot.docs.map(d => d.data());
+        const enrollmentsData = enrollSnapshot.docs.map((d) => d.data());
 
         const courseIds = enrollmentsData
           .map((enrollment: any) => enrollment.course_id)
@@ -298,16 +336,19 @@ export default function Dashboard() {
           return;
         }
 
-        const assignmentsRef = collection(db, "assignments");
+        const assignmentsRef = collection(db, "Assignments");
         const qAssign = query(
           assignmentsRef,
           where("course_id", "in", courseIds.slice(0, 10)),
-          orderBy("due_date", "asc")
+          orderBy("due_date", "asc"),
         );
         const assignSnapshot = await getDocs(qAssign);
-        const assignmentsData = assignSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        const assignmentsData = assignSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
+        }));
 
-        const assignmentIds = assignmentsData.map(a => a.id);
+        const assignmentIds = assignmentsData.map((a) => a.id);
         let submissions: any[] = [];
 
         if (assignmentIds.length > 0) {
@@ -315,32 +356,38 @@ export default function Dashboard() {
           const qSubs = query(
             subsRef,
             where("student_id", "==", user.uid),
-            where("assignment_id", "in", assignmentIds.slice(0, 10))
+            where("assignment_id", "in", assignmentIds.slice(0, 10)),
           );
           const subsSnapshot = await getDocs(qSubs);
-          submissions = subsSnapshot.docs.map(d => d.data());
+          submissions = subsSnapshot.docs.map((d) => d.data());
         }
 
-        const mappedAssignments = await Promise.all(assignmentsData.map(async (assignment: any) => {
-          const submission = submissions.find(
-            (s) => s.assignment_id === assignment.id
-          );
+        const mappedAssignments = await Promise.all(
+          assignmentsData.map(async (assignment: any) => {
+            const submission = submissions.find(
+              (s) => s.assignment_id === assignment.id,
+            );
 
-          const courseDoc = await getDoc(doc(db, "courses", assignment.course_id));
-          const courseInfo = courseDoc.exists() ? courseDoc.data() : { title: "Course", code: "" };
+            const courseDoc = await getDoc(
+              doc(db, "courses", assignment.course_id),
+            );
+            const courseInfo = courseDoc.exists()
+              ? courseDoc.data()
+              : { title: "Course", code: "" };
 
-          return {
-            id: assignment.id,
-            title: assignment.title,
-            dueDate: assignment.due_date,
-            courseTitle: courseInfo.title || "Course",
-            courseCode: courseInfo.code || "",
-            totalPoints: assignment.total_points,
-            status:
-              submission?.status === "submitted" ? "submitted" : "pending",
-            rawStatus: assignment.status,
-          } as DashboardAssignment;
-        }));
+            return {
+              id: assignment.id,
+              title: assignment.title,
+              dueDate: assignment.due_date,
+              courseTitle: courseInfo.title || "Course",
+              courseCode: courseInfo.code || "",
+              totalPoints: assignment.total_points,
+              status:
+                submission?.status === "submitted" ? "submitted" : "pending",
+              rawStatus: assignment.status,
+            } as DashboardAssignment;
+          }),
+        );
 
         if (isActive) setAssignments(mappedAssignments);
       } catch (error) {
@@ -375,17 +422,21 @@ export default function Dashboard() {
             gradesRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
-            orderBy("semester", "desc")
+            orderBy("semester", "desc"),
           );
           const gradesSnapshot = await getDocs(qGrades);
 
           if (!gradesSnapshot.empty) {
-            data = await Promise.all(gradesSnapshot.docs.map(async d => {
-              const gradeData = d.data();
-              const courseDoc = await getDoc(doc(db, "courses", gradeData.course_id));
-              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-              return { id: d.id, ...gradeData, courses: courseInfo };
-            }));
+            data = await Promise.all(
+              gradesSnapshot.docs.map(async (d) => {
+                const gradeData = d.data();
+                const courseDoc = await getDoc(
+                  doc(db, "courses", gradeData.course_id),
+                );
+                const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+                return { id: d.id, ...gradeData, courses: courseInfo };
+              }),
+            );
           } else {
             throw new Error("No student_grades rows");
           }
@@ -396,15 +447,19 @@ export default function Dashboard() {
             resultsRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
-            orderBy("semester", "desc")
+            orderBy("semester", "desc"),
           );
           const resultsSnapshot = await getDocs(qResults);
-          data = await Promise.all(resultsSnapshot.docs.map(async d => {
-            const resultData = d.data();
-            const courseDoc = await getDoc(doc(db, "courses", resultData.course_id));
-            const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-            return { id: d.id, ...resultData, courses: courseInfo };
-          }));
+          data = await Promise.all(
+            resultsSnapshot.docs.map(async (d) => {
+              const resultData = d.data();
+              const courseDoc = await getDoc(
+                doc(db, "courses", resultData.course_id),
+              );
+              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
+              return { id: d.id, ...resultData, courses: courseInfo };
+            }),
+          );
         }
 
         const normalized = (data as any[] | null)?.map((row) => ({
@@ -446,7 +501,7 @@ export default function Dashboard() {
         const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
         const totalPoints = terms.reduce(
           (sum, t) => sum + t.gpa * t.totalCredits,
-          0
+          0,
         );
         const computedCgpa = totalCredits
           ? Number((totalPoints / totalCredits).toFixed(2))
@@ -479,7 +534,11 @@ export default function Dashboard() {
     try {
       // First, find the classroom by join code
       const classroomsRef = collection(db, "classrooms");
-      const q = query(classroomsRef, where("join_code", "==", joinCode.trim()), limit(1));
+      const q = query(
+        classroomsRef,
+        where("join_code", "==", joinCode.trim()),
+        limit(1),
+      );
       const qSnapshot = await getDocs(q);
 
       if (qSnapshot.empty) {
@@ -496,7 +555,7 @@ export default function Dashboard() {
         enrollmentRef,
         where("classroom_id", "==", classroom.id),
         where("student_id", "==", user.uid),
-        limit(1)
+        limit(1),
       );
       const enrollSnapshot = await getDocs(qEnroll);
 
@@ -543,7 +602,10 @@ export default function Dashboard() {
     setIsSubmitting(true);
     try {
       // Generate a unique join code
-      const joinCodeGenerated = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const joinCodeGenerated = Math.random()
+        .toString(36)
+        .substring(2, 8)
+        .toUpperCase();
 
       // Create the classroom
       const newClassroomData = {
@@ -553,7 +615,10 @@ export default function Dashboard() {
         created_at: new Date().toISOString(),
       };
 
-      const classroomRef = await addDoc(collection(db, "classrooms"), newClassroomData);
+      const classroomRef = await addDoc(
+        collection(db, "classrooms"),
+        newClassroomData,
+      );
 
       // Add the creator as instructor
       await addDoc(collection(db, "classroom_enrollments"), {
@@ -564,7 +629,7 @@ export default function Dashboard() {
       });
 
       alert(
-        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`
+        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`,
       );
       setShowClassDialog(false);
       setClassName("");
@@ -623,7 +688,10 @@ export default function Dashboard() {
               </p>
               <div className="flex items-center gap-2 text-xs sm:text-sm">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-semibold">2 active Meets</span>
+                <span className="font-semibold">
+                  {activeMeetsCount} active Meet
+                  {activeMeetsCount === 1 ? "" : "s"}
+                </span>
               </div>
             </div>
           </div>
@@ -654,7 +722,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Live Meets"
-            value={loadingStats ? "…" : stats.liveMeets.toString()}
+            value={loadingStats && liveSessionsLoading ? "…" : stats.liveMeets.toString()}
             subtitle="Happening now"
             icon={Video}
             delay={0.4}
@@ -799,7 +867,7 @@ export default function Dashboard() {
         <div className="grid xl:grid-cols-3 gap-6">
           {/* Classrooms & Assignments */}
           <div className="xl:col-span-2 space-y-6">
-            {/* Google Classrooms */}
+            {/* Google Classrooms (placeholder, can be wired to real data later) */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-secondary" />
@@ -817,31 +885,36 @@ export default function Dashboard() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
-              {classroomCourses.map((course, i) => (
+              {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                <div className="col-span-full text-xs sm:text-sm text-muted-foreground">
+                  When your lecturers schedule Google Meet classes, they will
+                  appear here with join links.
+                </div>
+              )}
+
+              {formattedLiveSessions.map((session, i) => (
                 <motion.div
-                  key={course.id}
+                  key={session.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg shadow-lg"
                 >
-                  <div
-                    className={`h-20 sm:h-24 w-full bg-gradient-to-r ${course.banner} opacity-90`}
-                  />
+                  <div className="h-20 sm:h-24 w-full bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 opacity-90" />
                   <div className="p-4 sm:p-5 space-y-3 -mt-8 sm:-mt-10 relative">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground">
-                          {course.code}
+                          {session.courseName || "Online Class"}
                         </p>
                         <h3 className="font-semibold text-base sm:text-lg">
-                          {course.title}
+                          {session.title}
                         </h3>
                         <p className="text-[11px] sm:text-xs text-muted-foreground">
-                          {course.instructor} · {course.room}
+                          {session.displayTime}
                         </p>
                       </div>
-                      {course.isLive && (
+                      {session.isLive && (
                         <span className="px-3 py-1 rounded-full text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <span className="h-1.5 w-1.5 bg-destructive rounded-full animate-pulse" />{" "}
                           Live
@@ -853,31 +926,16 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.students} students
+                          Join from any device
                         </span>
-                        <span className="sm:hidden">{course.students}</span>
+                        <span className="sm:hidden">Online</span>
                       </div>
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.unread} new posts
+                          Live participation
                         </span>
-                        <span className="sm:hidden">{course.unread}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-1 sm:gap-2">
-                        <Link className="h-3 w-3 sm:h-4 sm:w-4 text-primary flex-shrink-0" />
-                        <span className="truncate text-[9px] sm:text-xs">
-                          {course.meetLink}
-                        </span>
-                      </div>
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-secondary/5 border border-secondary/10 flex items-center gap-1 sm:gap-2">
-                        <Clipboard className="h-3 w-3 sm:h-4 sm:w-4 text-secondary flex-shrink-0" />
-                        <span className="font-semibold truncate text-[9px] sm:text-xs">
-                          {course.joinCode}
-                        </span>
+                        <span className="sm:hidden">Live</span>
                       </div>
                     </div>
 
@@ -886,22 +944,23 @@ export default function Dashboard() {
                         <div className="h-2 w-16 sm:w-24 rounded-full bg-muted/60 overflow-hidden flex-shrink-0">
                           <div
                             className="h-2 bg-gradient-to-r from-primary to-secondary"
-                            style={{ width: `${course.progress}%` }}
+                            style={{ width: session.isLive ? "100%" : "40%" }}
                           />
                         </div>
                         <span className="font-semibold text-foreground">
-                          {course.progress}%
+                          {session.isLive ? "In progress" : "Scheduled"}
                         </span>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
-                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none"
-                          onClick={() => window.open(course.meetLink, "_blank")}
+                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none disabled:opacity-60"
+                          onClick={() =>
+                            session.meetLink &&
+                            window.open(session.meetLink, "_blank")
+                          }
+                          disabled={!session.isLive || !session.meetLink}
                         >
-                          Join Meet
-                        </button>
-                        <button className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs border border-border hover:border-primary/50 hover:text-primary flex-1 sm:flex-none">
-                          View Stream
+                          {session.isLive ? "Join Live Class" : "Join (when live)"}
                         </button>
                       </div>
                     </div>
@@ -978,10 +1037,11 @@ export default function Dashboard() {
                           </div>
                           <div className="text-right space-y-1 flex-shrink-0">
                             <span
-                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${isSubmitted
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}
+                              className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-full border block w-fit ml-auto ${
+                                isSubmitted
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}
                             >
                               {isSubmitted ? "Submitted" : "Pending"}
                             </span>
@@ -1005,9 +1065,15 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <div className="space-y-3">
-                  {classroomStream.map((post, i) => (
+                  {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      When there are scheduled Google Meet classes, they will show
+                      up here with a clear status and join button.
+                    </p>
+                  )}
+                  {formattedLiveSessions.map((session, i) => (
                     <motion.div
-                      key={`${post.course}-${i}`}
+                      key={session.id}
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
@@ -1016,20 +1082,29 @@ export default function Dashboard() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
                         <div className="space-y-1 flex-1">
                           <p className="text-xs sm:text-sm font-semibold">
-                            {post.course}
+                            {session.title}
                           </p>
                           <p className="text-[11px] sm:text-xs text-muted-foreground">
-                            {post.author}
+                            {session.courseName || "Online Class"}
                           </p>
                         </div>
                         <span className="text-[10px] sm:text-[11px] text-muted-foreground flex-shrink-0">
-                          {post.time}
+                          {session.displayTime}
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm mt-2">{post.message}</p>
                       <div className="flex items-center gap-2 mt-2 text-[10px] sm:text-[11px] text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
-                        {post.type}
+                        {session.isLive && (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
+                            Live now
+                          </>
+                        )}
+                        {!session.isLive && (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            Starts at {session.displayTime}
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -1048,16 +1123,22 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.map((meet, i) => (
+                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No upcoming online classes yet. When your lecturers schedule
+                    Google Meet sessions, they will appear here.
+                  </p>
+                )}
+                {formattedLiveSessions.map((session, i) => (
                   <UpcomingCard
-                    key={meet.course}
+                    key={session.id}
                     type={"class" as const}
-                    title={meet.course}
-                    course={meet.course}
-                    time={meet.starts}
-                    date={meet.isLive ? "Live" : "Today"}
-                    meetLink={meet.link}
-                    isUrgent={meet.isLive}
+                    title={session.title}
+                    course={session.courseName || "Online Class"}
+                    time={session.displayTime}
+                    date={session.isLive ? "Live" : session.displayDay}
+                    meetLink={session.meetLink || undefined}
+                    isUrgent={session.isLive}
                     delay={i * 0.1}
                   />
                 ))}
@@ -1072,9 +1153,15 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.map((session, i) => (
+                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No classes are live right now. When a Google Meet class is
+                    in progress, you will see a Join button here.
+                  </p>
+                )}
+                {formattedLiveSessions.map((session, i) => (
                   <motion.div
-                    key={session.link}
+                    key={session.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
@@ -1082,23 +1169,28 @@ export default function Dashboard() {
                   >
                     <div>
                       <p className="text-xs sm:text-sm font-semibold">
-                        {session.course}
+                        {session.title}
                       </p>
                       <p className="text-[11px] sm:text-xs text-muted-foreground">
-                        {session.starts}
+                        {session.displayTime}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {session.isLive && (
+                      {session.isLive && session.meetLink && (
                         <span className="px-2 py-1 rounded-full text-[10px] sm:text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <Mic className="h-3 w-3" /> Live
                         </span>
                       )}
                       <button
-                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0"
-                        onClick={() => window.open(session.link, "_blank")}
+                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0 disabled:opacity-60"
+                        onClick={() =>
+                          session.meetLink &&
+                          window.open(session.meetLink, "_blank")
+                        }
+                        disabled={!session.isLive || !session.meetLink}
                       >
-                        <Play className="h-4 w-4" /> Join
+                        <Play className="h-4 w-4" />{" "}
+                        {session.isLive ? "Join" : "Join (when live)"}
                       </button>
                     </div>
                   </motion.div>
@@ -1147,10 +1239,11 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "join"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground"
-                  }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "join"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
               >
                 Join Class
               </button>
@@ -1160,10 +1253,11 @@ export default function Dashboard() {
                   setJoinCode("");
                   setClassName("");
                 }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${classAction === "create"
-                  ? "bg-white text-foreground shadow-sm"
-                  : "text-muted-foreground"
-                  }`}
+                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
+                  classAction === "create"
+                    ? "bg-white text-foreground shadow-sm"
+                    : "text-muted-foreground"
+                }`}
               >
                 Create Class
               </button>

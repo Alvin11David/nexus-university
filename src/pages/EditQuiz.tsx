@@ -98,14 +98,58 @@ export default function EditQuiz() {
     timeLimit: 30,
     passingScore: 70,
     startDate: "",
+    startTime: "",
+    startTimePeriod: "AM" as "AM" | "PM",
     endDate: "",
+    endTime: "",
+    endTimePeriod: "PM" as "AM" | "PM",
     status: "draft" as "draft" | "active" | "closed",
     attemptsAllowed: 1,
     shuffleQuestions: false,
     showAnswers: false,
+    autoDeactivate: true,
   });
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
+
+  // Helper function to combine date, time, and AM/PM into ISO string
+  const combineDateTime = (
+    date: string,
+    time: string,
+    period: "AM" | "PM",
+  ): string => {
+    const [hours, minutes] = time.split(":");
+    let hour24 = parseInt(hours);
+
+    if (period === "PM" && hour24 !== 12) {
+      hour24 += 12;
+    } else if (period === "AM" && hour24 === 12) {
+      hour24 = 0;
+    }
+
+    const dateTime = new Date(date);
+    dateTime.setHours(hour24, parseInt(minutes), 0, 0);
+
+    return dateTime.toISOString();
+  };
+
+  // Helper function to parse datetime string into separate components
+  const parseDateTime = (dateTimeString: string) => {
+    const date = new Date(dateTimeString);
+    const dateString = date.toISOString().split("T")[0];
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+
+    const period: "AM" | "PM" = hours >= 12 ? "PM" : "AM";
+    const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    const timeString = `${hour12.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+
+    return {
+      date: dateString,
+      time: timeString,
+      period,
+    };
+  };
 
   // Load quiz data
   useEffect(() => {
@@ -135,6 +179,14 @@ export default function EditQuiz() {
 
       const qData = quizSnap.data();
 
+      // Parse start and end dates
+      const startDateTime = qData.start_date
+        ? parseDateTime(qData.start_date)
+        : { date: "", time: "", period: "AM" as "AM" | "PM" };
+      const endDateTime = qData.end_date
+        ? parseDateTime(qData.end_date)
+        : { date: "", time: "", period: "PM" as "AM" | "PM" };
+
       setQuizData({
         title: qData.title || "",
         description: qData.description || "",
@@ -143,12 +195,17 @@ export default function EditQuiz() {
         courseCode: qData.course_code || "",
         timeLimit: qData.time_limit || 30,
         passingScore: qData.passing_score || 70,
-        startDate: qData.start_date || "",
-        endDate: qData.end_date || "",
+        startDate: startDateTime.date,
+        startTime: startDateTime.time,
+        startTimePeriod: startDateTime.period,
+        endDate: endDateTime.date,
+        endTime: endDateTime.time,
+        endTimePeriod: endDateTime.period,
         status: (qData.status as any) || "draft",
         attemptsAllowed: qData.attempts_allowed || 1,
         shuffleQuestions: qData.shuffle_questions || false,
         showAnswers: qData.show_answers || false,
+        autoDeactivate: qData.auto_deactivate !== false, // Default to true if not set
       });
 
       // Load questions
@@ -182,6 +239,18 @@ export default function EditQuiz() {
       setSaving(true);
       if (!id) return;
 
+      // Combine date and time for storage
+      const startDateTime = combineDateTime(
+        quizData.startDate,
+        quizData.startTime,
+        quizData.startTimePeriod,
+      );
+      const endDateTime = combineDateTime(
+        quizData.endDate,
+        quizData.endTime,
+        quizData.endTimePeriod,
+      );
+
       // Update quiz data
       const quizRef = doc(db, "quizzes", id);
       await updateDoc(quizRef, {
@@ -192,12 +261,13 @@ export default function EditQuiz() {
         course_code: quizData.courseCode,
         time_limit: quizData.timeLimit,
         passing_score: quizData.passingScore,
-        start_date: quizData.startDate,
-        end_date: quizData.endDate,
+        start_date: startDateTime,
+        end_date: endDateTime,
         status: quizData.status,
         attempts_allowed: quizData.attemptsAllowed,
         shuffle_questions: quizData.shuffleQuestions,
         show_answers: quizData.showAnswers,
+        auto_deactivate: quizData.autoDeactivate,
         updated_at: Timestamp.now(),
       });
 
@@ -465,26 +535,70 @@ export default function EditQuiz() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={quizData.startDate}
-                    onChange={(e) =>
-                      setQuizData({ ...quizData, startDate: e.target.value })
-                    }
-                  />
+                  <Label>Start Date & Time</Label>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      type="date"
+                      value={quizData.startDate}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, startDate: e.target.value })
+                      }
+                    />
+                    <Input
+                      type="time"
+                      value={quizData.startTime}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, startTime: e.target.value })
+                      }
+                    />
+                    <Select
+                      value={quizData.startTimePeriod}
+                      onValueChange={(value: "AM" | "PM") =>
+                        setQuizData({ ...quizData, startTimePeriod: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={quizData.endDate}
-                    onChange={(e) =>
-                      setQuizData({ ...quizData, endDate: e.target.value })
-                    }
-                  />
+                  <Label>End Date & Time</Label>
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      type="date"
+                      value={quizData.endDate}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, endDate: e.target.value })
+                      }
+                    />
+                    <Input
+                      type="time"
+                      value={quizData.endTime}
+                      onChange={(e) =>
+                        setQuizData({ ...quizData, endTime: e.target.value })
+                      }
+                    />
+                    <Select
+                      value={quizData.endTimePeriod}
+                      onValueChange={(value: "AM" | "PM") =>
+                        setQuizData({ ...quizData, endTimePeriod: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="PM">PM</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
@@ -528,6 +642,18 @@ export default function EditQuiz() {
                   />
                   <Label htmlFor="showAnswers">
                     Show Answers After Submission
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="autoDeactivate"
+                    checked={quizData.autoDeactivate}
+                    onCheckedChange={(checked) =>
+                      setQuizData({ ...quizData, autoDeactivate: checked })
+                    }
+                  />
+                  <Label htmlFor="autoDeactivate">
+                    Auto-Deactivate on End Date
                   </Label>
                 </div>
               </div>

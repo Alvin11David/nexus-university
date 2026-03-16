@@ -104,7 +104,9 @@ export default function Enrollment() {
       const fullEnrollments = await Promise.all(
         enrollmentData.map(async (e) => {
           if (e.course_id) {
-            const courseDoc = await getDoc(doc(db, "courses", e.course_id));
+            const courseDoc = await getDoc(
+              doc(db, "course_units", e.course_id),
+            );
             if (courseDoc.exists()) {
               const c = courseDoc.data();
               return {
@@ -112,7 +114,7 @@ export default function Enrollment() {
                 course: {
                   id: courseDoc.id,
                   code: c.code,
-                  title: c.title,
+                  title: c.name, // Map 'name' to 'title'
                   credits: Number(c.credits) || 0,
                   semester: c.semester,
                 },
