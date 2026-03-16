@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Sparkles,
   X,
+  AlarmClock,
 } from "lucide-react";
 import {
   Dialog,
@@ -99,6 +100,17 @@ interface LiveSession {
   isLive: boolean;
 }
 
+interface DashboardQuiz {
+  id: string;
+  title: string;
+  courseTitle?: string | null;
+  courseCode?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  isLive: boolean;
+  isScheduled: boolean;
+}
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const displayName = profile?.full_name || user?.displayName || "Student";
@@ -123,6 +135,8 @@ export default function Dashboard() {
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
   const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
   const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
+  const [upcomingQuizzes, setUpcomingQuizzes] = useState<DashboardQuiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(true);
 
   const classroomCourses: any[] = [];
   const classroomStream: any[] = [];
@@ -331,6 +345,92 @@ export default function Dashboard() {
       }),
     [liveSessions],
   );
+
+  useEffect(() => {
+    const loadQuizzes = async () => {
+      if (!user) {
+        setUpcomingQuizzes([]);
+        return;
+      }
+
+      try {
+        setQuizzesLoading(true);
+
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setUpcomingQuizzes([]);
+          return;
+        }
+
+        // 2. Fetch quizzes for those courses
+        const quizzes: DashboardQuiz[] = [];
+        const quizzesRef = collection(db, "quizzes");
+        const now = new Date();
+
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qQuizzes = query(
+            quizzesRef,
+            where("course_id", "in", chunk),
+            where("status", "==", "active"),
+          );
+          const quizSnapshot = await getDocs(qQuizzes);
+
+          quizSnapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            const startRaw = data.start_date ?? null;
+            const endRaw = data.end_date ?? null;
+
+            const start = startRaw ? new Date(startRaw) : null;
+            const end = endRaw ? new Date(endRaw) : null;
+
+            const isLive =
+              (!!start ? now >= start : true) && (!!end ? now <= end : true);
+            const isScheduled = !!start && now < start;
+
+            // Hide quizzes that have fully closed
+            if (end && now > end) return;
+
+            quizzes.push({
+              id: d.id,
+              title: data.title || "Quiz",
+              courseTitle: data.course_title || null,
+              courseCode: data.course_code || null,
+              startDate: startRaw,
+              endDate: endRaw,
+              isLive,
+              isScheduled,
+            });
+          });
+        }
+
+        quizzes.sort((a, b) => {
+          const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+          const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+          return aTime - bTime;
+        });
+
+        setUpcomingQuizzes(quizzes);
+      } catch (error) {
+        console.error("Error loading upcoming quizzes", error);
+      } finally {
+        setQuizzesLoading(false);
+      }
+    };
+
+    loadQuizzes();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -1150,10 +1250,14 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                {formattedLiveSessions.length === 0 &&
+                  upcomingQuizzes.length === 0 &&
+                  !liveSessionsLoading &&
+                  !quizzesLoading && (
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    No upcoming online classes yet. When your lecturers schedule
-                    Google Meet sessions, they will appear here.
+                    No upcoming online classes or quizzes yet. When your
+                    lecturers schedule Google Meet sessions or quizzes, they
+                    will appear here.
                   </p>
                 )}
                 {formattedLiveSessions.map((session, i) => (
@@ -1169,6 +1273,39 @@ export default function Dashboard() {
                     delay={i * 0.1}
                   />
                 ))}
+                {upcomingQuizzes.map((quiz, i) => {
+                  const startLabel = quiz.startDate
+                    ? new Date(quiz.startDate).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Any time";
+
+                  return (
+                    <UpcomingCard
+                      key={quiz.id}
+                      type={"quiz" as const}
+                      title={quiz.title}
+                      course={
+                        quiz.courseTitle ||
+                        quiz.courseCode ||
+                        "Course Quiz"
+                      }
+                      time={startLabel}
+                      date={
+                        quiz.isLive
+                          ? "Live"
+                          : quiz.isScheduled
+                            ? "Scheduled"
+                            : "Open"
+                      }
+                      isUrgent={quiz.isLive}
+                      delay={formattedLiveSessions.length * 0.1 + i * 0.1}
+                    />
+                  );
+                })}
               </div>
             </div>
 
