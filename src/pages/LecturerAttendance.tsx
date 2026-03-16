@@ -45,7 +45,7 @@ export default function LecturerAttendance() {
   const [savedRecords, setSavedRecords] = useState<AttendanceRecord[]>([]);
   const [selectedCourse, setSelectedCourse] = useState("CS101");
   const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0]
+    new Date().toISOString().split("T")[0],
   );
   const [searchStudent, setSearchStudent] = useState("");
 
@@ -119,7 +119,8 @@ export default function LecturerAttendance() {
   const handleExport = () => {
     const header = "Student Name,Course Code,Date,Status,Remarks";
     const rows = filteredRecords.map(
-      (r) => `"${r.studentName}","${r.courseCode}","${r.date}","${r.status}","${r.remarks || ""}"`
+      (r) =>
+        `"${r.studentName}","${r.courseCode}","${r.date}","${r.status}","${r.remarks || ""}"`,
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -151,10 +152,18 @@ export default function LecturerAttendance() {
         };
       });
       setRecords((prev) => [
-        ...prev.filter((r) => !imported.some((im) => im.studentName === r.studentName && im.date === r.date)),
+        ...prev.filter(
+          (r) =>
+            !imported.some(
+              (im) => im.studentName === r.studentName && im.date === r.date,
+            ),
+        ),
         ...imported,
       ]);
-      toast({ title: "Imported", description: `${imported.length} records imported.` });
+      toast({
+        title: "Imported",
+        description: `${imported.length} records imported.`,
+      });
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -167,14 +176,17 @@ export default function LecturerAttendance() {
 
   const handleSaveAttendance = () => {
     setSavedRecords(records);
-    toast({ title: "Attendance Saved", description: `${filteredRecords.length} records saved for ${selectedCourse} on ${selectedDate}.` });
+    toast({
+      title: "Attendance Saved",
+      description: `${filteredRecords.length} records saved for ${selectedCourse} on ${selectedDate}.`,
+    });
   };
 
   const filteredRecords = records.filter(
     (r) =>
       r.courseCode === selectedCourse &&
       r.date === selectedDate &&
-      r.studentName.toLowerCase().includes(searchStudent.toLowerCase())
+      r.studentName.toLowerCase().includes(searchStudent.toLowerCase()),
   );
 
   const stats = {
@@ -187,15 +199,15 @@ export default function LecturerAttendance() {
   const attendanceRate =
     Math.round(
       ((stats.present + stats.late + stats.excused) / filteredRecords.length) *
-        100
+        100,
     ) || 0;
 
   const handleStatusChange = (
     id: string,
-    newStatus: "present" | "absent" | "late" | "excused"
+    newStatus: "present" | "absent" | "late" | "excused",
   ) => {
     setRecords(
-      records.map((r) => (r.id === id ? { ...r, status: newStatus } : r))
+      records.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
     );
   };
 
@@ -245,10 +257,18 @@ export default function LecturerAttendance() {
                 className="hidden"
                 onChange={handleImport}
               />
-              <Button variant="outline" className="gap-2" onClick={handleExport}>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleExport}
+              >
                 <Download className="h-4 w-4" /> Export
               </Button>
-              <Button variant="outline" className="gap-2" onClick={() => importInputRef.current?.click()}>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => importInputRef.current?.click()}
+              >
                 <Upload className="h-4 w-4" /> Import
               </Button>
             </div>
@@ -436,7 +456,7 @@ export default function LecturerAttendance() {
                           >
                             {status.charAt(0).toUpperCase() + status.slice(1)}
                           </button>
-                        )
+                        ),
                       )}
                     </div>
                   </motion.div>
@@ -447,8 +467,13 @@ export default function LecturerAttendance() {
         </Card>
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleCancel}>Cancel</Button>
-          <Button className="bg-gradient-to-r from-primary to-secondary" onClick={handleSaveAttendance}>
+          <Button variant="outline" onClick={handleCancel}>
+            Cancel
+          </Button>
+          <Button
+            className="bg-gradient-to-r from-primary to-secondary"
+            onClick={handleSaveAttendance}
+          >
             Save Attendance
           </Button>
         </div>

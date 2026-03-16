@@ -285,11 +285,13 @@ export default function LecturerSettings() {
 
   const handleDeleteAccount = async () => {
     const confirmed = window.confirm(
-      "Are you sure you want to delete your account? This action is permanent and cannot be undone."
+      "Are you sure you want to delete your account? This action is permanent and cannot be undone.",
     );
     if (!confirmed) return;
 
-    const password = window.prompt("Please enter your current password to confirm:");
+    const password = window.prompt(
+      "Please enter your current password to confirm:",
+    );
     if (!password) return;
 
     setDeletingAccount(true);
@@ -297,7 +299,10 @@ export default function LecturerSettings() {
       if (!auth.currentUser || !auth.currentUser.email) {
         throw new Error("No user logged in");
       }
-      const credential = EmailAuthProvider.credential(auth.currentUser.email, password);
+      const credential = EmailAuthProvider.credential(
+        auth.currentUser.email,
+        password,
+      );
       await reauthenticateWithCredential(auth.currentUser, credential);
 
       // Delete Firestore profile
@@ -308,7 +313,10 @@ export default function LecturerSettings() {
       // Delete Firebase Auth account
       await deleteUser(auth.currentUser);
 
-      toast({ title: "Account Deleted", description: "Your account has been permanently deleted." });
+      toast({
+        title: "Account Deleted",
+        description: "Your account has been permanently deleted.",
+      });
       navigate("/auth");
     } catch (error: any) {
       toast({
