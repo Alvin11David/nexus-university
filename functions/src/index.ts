@@ -72,9 +72,14 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
     data: SendMoMoPaymentRequest,
     context: functions.https.CallableContext,
   ) => {
-    // For now, we accept requests without Firebase auth
-    // Auth is handled on frontend via Supabase
-    // TODO: Implement Supabase auth token verification
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "You must be authenticated to initiate payments.",
+      );
+    }
+
+    const userId = context.auth.uid;
 
     // Ensure MTN credentials are configured
     ensureMTNConfig();
@@ -142,7 +147,6 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
 
       // Store payment record in Firestore
       const db = admin.firestore();
-      const userId = `user-${transactionId}`; // Placeholder until auth is implemented
       await db
         .collection("mtn_payments")
         .doc(transactionId)
@@ -176,7 +180,6 @@ export const sendMTNPaymentPrompt = functions.https.onCall(
 
       // Store failed attempt
       const db = admin.firestore();
-      const userId = `user-${transactionId}`; // Placeholder until auth is implemented
       await db
         .collection("mtn_payments")
         .doc(transactionId)
@@ -211,9 +214,12 @@ export const checkMTNPaymentStatus = functions.https.onCall(
     },
     context: functions.https.CallableContext,
   ) => {
-    // For now, we accept requests without Firebase auth
-    // Auth is handled on frontend via Supabase
-    // TODO: Implement Supabase auth token verification
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "You must be authenticated to check payment status.",
+      );
+    }
 
     // Ensure MTN credentials are configured
     ensureMTNConfig();
@@ -243,6 +249,13 @@ export const checkMTNPaymentStatus = functions.https.onCall(
       }
 
       const paymentData = paymentDoc.data();
+
+      if (paymentData?.userId && paymentData.userId !== context.auth.uid) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "You are not allowed to access this payment status.",
+        );
+      }
 
       // Check if already successfully processed
       if (paymentData?.status === "successful") {
@@ -359,9 +372,14 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
     data: SendMoMoPaymentRequest,
     context: functions.https.CallableContext,
   ) => {
-    // For now, we accept requests without Firebase auth
-    // Auth is handled on frontend via Supabase
-    // TODO: Implement Supabase auth token verification
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "You must be authenticated to initiate payments.",
+      );
+    }
+
+    const userId = context.auth.uid;
 
     // Ensure Airtel credentials are configured
     ensureAirtelConfig();
@@ -425,7 +443,6 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
 
       // Store payment record in Firestore
       const db = admin.firestore();
-      const userId = `user-${transactionId}`; // Placeholder until auth is implemented
       await db
         .collection("airtel_payments")
         .doc(transactionId)
@@ -460,7 +477,6 @@ export const sendAIRTELPaymentPrompt = functions.https.onCall(
 
       // Store failed attempt
       const db = admin.firestore();
-      const userId = `user-${transactionId}`; // Placeholder until auth is implemented
       await db
         .collection("airtel_payments")
         .doc(transactionId)
@@ -497,9 +513,12 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
     },
     context: functions.https.CallableContext,
   ) => {
-    // For now, we accept requests without Firebase auth
-    // Auth is handled on frontend via Supabase
-    // TODO: Implement Supabase auth token verification
+    if (!context.auth?.uid) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "You must be authenticated to check payment status.",
+      );
+    }
 
     // Ensure Airtel credentials are configured
     ensureAirtelConfig();
@@ -529,6 +548,13 @@ export const checkAIRTELPaymentStatus = functions.https.onCall(
       }
 
       const paymentData = paymentDoc.data();
+
+      if (paymentData?.userId && paymentData.userId !== context.auth.uid) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "You are not allowed to access this payment status.",
+        );
+      }
 
       // Check if already successfully processed
       if (paymentData?.status === "successful") {

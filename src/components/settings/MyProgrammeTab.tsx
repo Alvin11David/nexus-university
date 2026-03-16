@@ -62,10 +62,14 @@ export function MyProgrammeTab() {
 
   useEffect(() => {
     const fetchProgrammeData = async () => {
-      if (!profile) return;
+      if (!profile || !user?.uid) {
+        setLoading(false);
+        return;
+      }
 
       try {
         let targetCourseId = profile.course_id;
+        let resolvedTotalYears = 3;
 
         // Find course ID if missing
         if (!targetCourseId && profile.programme) {
@@ -98,6 +102,7 @@ export function MyProgrammeTab() {
           if (courseDoc.exists()) {
             const data = courseDoc.data();
             const durationYears = data.duration_years || 3;
+            resolvedTotalYears = durationYears;
             setProgrammeData((prev) => ({
               ...prev,
               totalYears: durationYears,
@@ -126,8 +131,131 @@ export function MyProgrammeTab() {
           }));
         }
 
-        // Fetch user's current progress/year (Simplified mock based on enrolled terms, or we can just mock the progression for now, but use actual totalYears)
-        // You can update this to fetch actual GPA/Completed Credits from DB
+        const safeTotalYears = Math.max(1, resolvedTotalYears || 3);
+
+        // Determine required credits from the selected course where available.
+        let requiredCredits = 120;
+        if (targetCourseId) {
+          const courseDoc = await getDoc(doc(db, "courses", targetCourseId));
+          if (courseDoc.exists()) {
+            const courseData = courseDoc.data() as any;
+            requiredCredits =
+              Number(courseData.required_credits) ||
+              Number(courseData.total_credits) ||
+              requiredCredits;
+          }
+        }
+
+        // Pull results from student_grades first, then fallback to exam_results.
+        let resultRows: any[] = [];
+        const studentGradesRef = collection(db, "student_grades");
+        const qStudentGrades = query(
+          studentGradesRef,
+          where("student_id", "==", user.uid),
+        );
+        const studentGradesSnap = await getDocs(qStudentGrades);
+        if (!studentGradesSnap.empty) {
+          resultRows = studentGradesSnap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }));
+        } else {
+          const examResultsRef = collection(db, "exam_results");
+          const qExamResults = query(
+            examResultsRef,
+            where("student_id", "==", user.uid),
+          );
+          const examResultsSnap = await getDocs(qExamResults);
+          resultRows = examResultsSnap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }));
+        }
+
+        // Build a map of course credits for weighted GPA and credit completion.
+        const courseIds = Array.from(
+          new Set(resultRows.map((r) => r.course_id).filter(Boolean)),
+        );
+        const creditMap = new Map<string, number>();
+
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const qUnits = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
+          const unitSnap = await getDocs(qUnits);
+          unitSnap.docs.forEach((d) => {
+            const data = d.data() as any;
+            creditMap.set(d.id, Number(data.credits) || 3);
+          });
+
+          const missing = chunk.filter((id) => !creditMap.has(id));
+          if (missing.length > 0) {
+            const qCourses = query(
+              collection(db, "courses"),
+              where("__name__", "in", missing),
+            );
+            const courseSnap = await getDocs(qCourses);
+            courseSnap.docs.forEach((d) => {
+              const data = d.data() as any;
+              creditMap.set(d.id, Number(data.credits) || 3);
+            });
+          }
+        }
+
+        let totalWeightedPoints = 0;
+        let totalWeightedCredits = 0;
+        let completedCredits = 0;
+
+        resultRows.forEach((row) => {
+          const credits = creditMap.get(row.course_id) || 3;
+          const gp = Number(row.gp ?? row.grade_point ?? 0);
+          totalWeightedPoints += gp * credits;
+          totalWeightedCredits += credits;
+
+          if (gp > 0) {
+            completedCredits += credits;
+          }
+        });
+
+        const cgpa =
+          totalWeightedCredits > 0
+            ? Number((totalWeightedPoints / totalWeightedCredits).toFixed(2))
+            : 0;
+
+        const coursesCompleted = resultRows.filter(
+          (row) => Number(row.gp ?? row.grade_point ?? 0) > 0,
+        ).length;
+        const approxTotalCourses = Math.max(
+          coursesCompleted,
+          Math.ceil(requiredCredits / 3),
+        );
+        const coursesRemaining = Math.max(
+          0,
+          approxTotalCourses - coursesCompleted,
+        );
+        const currentYear = Math.min(
+          safeTotalYears,
+          Math.max(
+            1,
+            Math.ceil(
+              (completedCredits / Math.max(1, requiredCredits)) *
+                safeTotalYears,
+            ),
+          ),
+        );
+
+        setProgrammeData((prev) => ({
+          ...prev,
+          requiredCredits,
+          completedCredits,
+          totalCredits: totalWeightedCredits,
+          gpa: cgpa,
+          currentYear,
+          coursesCompleted,
+          coursesRemaining,
+        }));
       } catch (error) {
         console.error("Error fetching programme data:", error);
       } finally {
@@ -136,7 +264,7 @@ export function MyProgrammeTab() {
     };
 
     fetchProgrammeData();
-  }, [profile]);
+  }, [profile, user?.uid]);
 
   const progressPercentage =
     (programmeData.completedCredits / programmeData.requiredCredits) * 100 || 0;

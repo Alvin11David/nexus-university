@@ -32,7 +32,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 const rise = {
@@ -65,30 +73,87 @@ export default function LecturerDashboard() {
 
   const loadStats = async () => {
     try {
-      // Get courses
-      const coursesRef = collection(db, "courses");
-      const qCourses = query(coursesRef, limit(10));
-      const coursesSnapshot = await getDocs(qCourses);
+      const lecturerUid = user?.uid;
+      if (!lecturerUid) return;
 
-      // Get total enrollments
-      const enrollmentsRef = collection(db, "enrollments");
-      const qEnrollments = query(enrollmentsRef, limit(100));
-      const enrollmentsSnapshot = await getDocs(qEnrollments);
+      const profileDoc = await getDoc(doc(db, "profiles", lecturerUid));
+      const profileData = profileDoc.exists() ? (profileDoc.data() as any) : {};
+
+      let lecturerCourseIds: string[] = (
+        profileData.assigned_course_units || []
+      ).filter(Boolean);
+
+      // Fallback to courses authored by lecturer when explicit assignments are unavailable.
+      if (lecturerCourseIds.length === 0) {
+        const coursesRef = collection(db, "courses");
+        const qCourses = query(
+          coursesRef,
+          where("lecturer_id", "==", lecturerUid),
+        );
+        const coursesSnapshot = await getDocs(qCourses);
+        lecturerCourseIds = coursesSnapshot.docs.map((d) => d.id);
+      }
+
+      const uniqueCourseIds = Array.from(new Set(lecturerCourseIds));
+
+      let students = 0;
+      let pendingMarks = 0;
+      let submissions = 0;
+
+      for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+        const chunk = uniqueCourseIds.slice(i, i + 10);
+
+        const qEnrollments = query(
+          collection(db, "enrollments"),
+          where("course_id", "in", chunk),
+        );
+        const enrollmentsSnapshot = await getDocs(qEnrollments);
+        students += enrollmentsSnapshot.size;
+
+        const qGrades = query(
+          collection(db, "student_grades"),
+          where("course_id", "in", chunk),
+        );
+        const gradesSnapshot = await getDocs(qGrades);
+        pendingMarks += gradesSnapshot.docs.filter((gradeDoc) => {
+          const grade = gradeDoc.data() as any;
+          return (
+            grade.grade == null || grade.gp == null || grade.grade_point == null
+          );
+        }).length;
+
+        const qAssignments = query(
+          collection(db, "Assignments"),
+          where("course_id", "in", chunk),
+        );
+        const assignmentsSnapshot = await getDocs(qAssignments);
+        const assignmentIds = assignmentsSnapshot.docs.map((d) => d.id);
+
+        for (let j = 0; j < assignmentIds.length; j += 10) {
+          const assignmentChunk = assignmentIds.slice(j, j + 10);
+          const qSubmissions = query(
+            collection(db, "submissions"),
+            where("assignment_id", "in", assignmentChunk),
+          );
+          const submissionsSnapshot = await getDocs(qSubmissions);
+          submissions += submissionsSnapshot.size;
+        }
+      }
 
       setStats({
-        courses: coursesSnapshot.size,
-        students: enrollmentsSnapshot.size,
-        pendingMarks: 12, // Mock data for now
-        submissions: 8, // Mock data for now
+        courses: uniqueCourseIds.length,
+        students,
+        pendingMarks,
+        submissions,
       });
     } catch (error) {
       console.error("Error loading stats:", error);
       // Set default values on error
       setStats({
-        courses: 6,
-        students: 150,
-        pendingMarks: 12,
-        submissions: 8,
+        courses: 0,
+        students: 0,
+        pendingMarks: 0,
+        submissions: 0,
       });
     } finally {
       setLoading(false);
@@ -122,7 +187,7 @@ export default function LecturerDashboard() {
         icon: CheckCircle2,
       },
     ],
-    [stats]
+    [stats],
   );
 
   const schedule = useMemo(
@@ -149,7 +214,7 @@ export default function LecturerDashboard() {
         mode: "On Campus",
       },
     ],
-    []
+    [],
   );
 
   const gradingQueue = useMemo(
@@ -158,7 +223,7 @@ export default function LecturerDashboard() {
       { course: "Systems Design", items: 10, due: "Tomorrow", progress: 40 },
       { course: "Data Mining", items: 8, due: "In 2 days", progress: 80 },
     ],
-    []
+    [],
   );
 
   const announcements = useMemo(
@@ -175,7 +240,7 @@ export default function LecturerDashboard() {
         when: "Yesterday",
       },
     ],
-    []
+    [],
   );
 
   const engagement = useMemo(
@@ -185,7 +250,7 @@ export default function LecturerDashboard() {
       { label: "Live participation", value: 64 },
       { label: "Feedback", value: 86 },
     ],
-    []
+    [],
   );
 
   const messages = useMemo(
@@ -202,7 +267,7 @@ export default function LecturerDashboard() {
         time: "Yesterday",
       },
     ],
-    []
+    [],
   );
 
   return (

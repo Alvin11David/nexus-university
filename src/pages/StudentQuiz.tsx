@@ -277,6 +277,15 @@ export default function StudentQuiz() {
     if (!takingQuiz || !quizStartTime || !user) return;
 
     try {
+      const attemptsRef = collection(db, "quiz_attempts");
+      const attemptCountQuery = query(
+        attemptsRef,
+        where("student_id", "==", user.uid),
+        where("quiz_id", "==", takingQuiz.id),
+      );
+      const attemptCountSnapshot = await getDocs(attemptCountQuery);
+      const attemptNumber = attemptCountSnapshot.size + 1;
+
       const timeTaken = Math.floor(
         (new Date().getTime() - quizStartTime.getTime()) / 1000,
       );
@@ -307,7 +316,7 @@ export default function StudentQuiz() {
         quiz_id: takingQuiz.id,
         student_id: user.uid,
         answers: answers,
-        attempt_number: 1, // TODO: Calculate actual attempt number
+        attempt_number: attemptNumber,
         started_at: quizStartTime.toISOString(),
         completed_at: new Date().toISOString(),
         score: totalScore, // Always record the calculated score automatically
