@@ -4,7 +4,6 @@ import {
   PlayCircle,
   Plus,
   Video,
-  Link as LinkIcon,
   Users,
   Clock,
   CheckCircle,
