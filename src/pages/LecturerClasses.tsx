@@ -27,7 +27,8 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { db, storage } from "@/integrations/firebase/client";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   Dialog,
   DialogContent,
@@ -58,6 +59,7 @@ interface LiveSessionDoc {
   meet_link?: string | null;
   attendees?: number | null;
   status?: "scheduled" | "ongoing" | "completed" | "cancelled";
+  recording_url?: string | null;
 }
 
 const rise = {
@@ -71,7 +73,7 @@ const rise = {
 
 export default function LecturerClasses() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
@@ -86,10 +88,16 @@ export default function LecturerClasses() {
   const [newDate, setNewDate] = useState("");
   const [newTime, setNewTime] = useState("");
   const [newDuration, setNewDuration] = useState("60");
+  const [resourceFile, setResourceFile] = useState<File | null>(null);
+  const [isUploadingResource, setIsUploadingResource] = useState(false);
 
   useEffect(() => {
+    if (!user || profile?.role !== "lecturer") {
+      setSessions([]);
+      return;
+    }
+
     const loadSessions = async () => {
-      if (!user) return;
       try {
         setIsLoading(true);
         const sessionsRef = collection(db, "live_sessions");
@@ -138,8 +146,7 @@ export default function LecturerClasses() {
             meetLink: doc.meet_link || undefined,
             attendees: doc.attendees ?? 0,
             duration: doc.duration_minutes ?? undefined,
-            recordingUrl: doc.recording_url ?? undefined,
-          } as ClassSession & { recordingUrl?: string };
+          };
         });
 
         setSessions(mapped);
@@ -225,10 +232,10 @@ export default function LecturerClasses() {
   };
 
   const handleNewSession = () => {
-    if (!user) {
+    if (!user || profile?.role !== "lecturer") {
       toast({
         title: "Sign in required",
-        description: "You need to be logged in as a lecturer to create a class.",
+        description: "Only lecturers can create online classes.",
         variant: "destructive",
       });
       return;
@@ -263,11 +270,26 @@ export default function LecturerClasses() {
     try {
       setIsSaving(true);
       const sessionsRef = collection(db, "live_sessions");
+      let resourceUrl: string | null = null;
+
+      if (resourceFile) {
+        setIsUploadingResource(true);
+        const storageRef = ref(
+          storage,
+          `class-resources/${user.uid}/${Date.now()}-${resourceFile.name}`,
+        );
+        const snapshot = await uploadBytes(storageRef, resourceFile);
+        resourceUrl = await getDownloadURL(snapshot.ref);
+      }
+
       await addDoc(sessionsRef, {
         title: newTitle.trim(),
+        course_id: newCourseName.trim() || null,
         course_name: newCourseName.trim() || null,
         description: newDescription.trim() || null,
         meet_link: newMeetLink.trim() || null,
+        resource_url: resourceUrl,
+        resource_name: resourceFile?.name || null,
         scheduled_at: scheduledAt.toISOString(),
         duration_minutes: durationMinutes,
         instructor_id: user.uid,
@@ -278,11 +300,12 @@ export default function LecturerClasses() {
       toast({
         title: "Live class scheduled",
         description:
-          "Your Google Meet session is now scheduled and will appear for students at the right time.",
+          "Your Google Meet session and resources are now scheduled for students.",
       });
 
       setShowNewSessionDialog(false);
       resetNewSessionForm();
+      setResourceFile(null);
 
       // Refresh list
       const q = query(
@@ -342,6 +365,7 @@ export default function LecturerClasses() {
       });
     } finally {
       setIsSaving(false);
+      setIsUploadingResource(false);
     }
   };
 
@@ -719,6 +743,22 @@ export default function LecturerClasses() {
               />
             </div>
 
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Upload Resource (optional)
+              </label>
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*"
+                onChange={(e) =>
+                  setResourceFile(e.target.files?.[0] ?? null)
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Attach slides, notes, or any document for this online class.
+              </p>
+            </div>
+
             <div className="flex gap-2 pt-2">
               <Button
                 type="button"
@@ -733,9 +773,11 @@ export default function LecturerClasses() {
                 type="button"
                 className="flex-1 bg-gradient-to-r from-primary to-secondary"
                 onClick={handleCreateSession}
-                disabled={isSaving}
+                disabled={isSaving || isUploadingResource}
               >
-                {isSaving ? "Saving..." : "Schedule Class"}
+                {isSaving || isUploadingResource
+                  ? "Saving..."
+                  : "Schedule Class"}
               </Button>
             </div>
           </div>

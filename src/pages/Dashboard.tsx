@@ -221,25 +221,55 @@ export default function Dashboard() {
 
   useEffect(() => {
     const loadLiveSessions = async () => {
+      if (!user) {
+        setLiveSessions([]);
+        setStats((prev) => ({ ...prev, liveMeets: 0 }));
+        return;
+      }
+
       try {
         setLiveSessionsLoading(true);
+
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setLiveSessions([]);
+          setStats((prev) => ({ ...prev, liveMeets: 0 }));
+          return;
+        }
+
+        // 2. Fetch live sessions only for enrolled courses (chunked for Firestore 'in' limit)
+        const sessions: LiveSession[] = [];
         const sessionsRef = collection(db, "live_sessions");
-        const snapshot = await getDocs(sessionsRef);
         const now = new Date();
 
-        const sessions: LiveSession[] = snapshot.docs
-          .map((d) => {
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qSessions = query(sessionsRef, where("course_id", "in", chunk));
+          const snapshot = await getDocs(qSessions);
+
+          snapshot.docs.forEach((d) => {
             const data = d.data() as any;
             const scheduledAt: string = data.scheduled_at;
-            if (!scheduledAt) return null;
+            if (!scheduledAt) return;
             const start = new Date(scheduledAt);
-            if (Number.isNaN(start.getTime())) return null;
+            if (Number.isNaN(start.getTime())) return;
 
             const duration = data.duration_minutes ?? 60;
             const end = new Date(start.getTime() + duration * 60000);
             const isLive = now >= start && now <= end;
 
-            return {
+            sessions.push({
               id: d.id,
               title: data.title || "Online Class",
               courseName: data.course_name || null,
@@ -247,14 +277,11 @@ export default function Dashboard() {
               durationMinutes: data.duration_minutes ?? null,
               meetLink: data.meet_link || null,
               isLive,
-            } as LiveSession;
-          })
-          .filter(Boolean) as LiveSession[];
+            });
+          });
+        }
 
-        sessions.sort((a, b) =>
-          a.scheduledAt.localeCompare(b.scheduledAt),
-        );
-
+        sessions.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
         setLiveSessions(sessions);
 
         const liveCount = sessions.filter((s) => s.isLive).length;
@@ -270,7 +297,7 @@ export default function Dashboard() {
     };
 
     loadLiveSessions();
-  }, []);
+  }, [user]);
 
   const activeMeetsCount = useMemo(
     () => liveSessions.filter((s) => s.isLive).length,
