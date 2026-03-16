@@ -38,29 +38,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-interface ClassSession {
-  id: string;
-  courseName?: string;
-  title: string;
-  scheduledAt: string;
-  status: "scheduled" | "ongoing" | "completed" | "cancelled";
-  meetLink?: string;
-  attendees: number;
-  duration?: number;
-  recordingUrl?: string;
-}
 
-interface LiveSessionDoc {
-  id: string;
-  title: string;
-  course_name?: string;
-  scheduled_at: string;
-  duration_minutes?: number | null;
-  meet_link?: string | null;
-  attendees?: number | null;
-  status?: "scheduled" | "ongoing" | "completed" | "cancelled";
-  recording_url?: string | null;
-}
 
 const rise = {
   hidden: { opacity: 0, y: 20 },
