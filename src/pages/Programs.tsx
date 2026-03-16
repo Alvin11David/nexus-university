@@ -13,8 +13,8 @@ import {
   Lock,
   TrendingUp,
 } from "lucide-react";
-import { Header } from "@/components/layout/Header";
-import { BottomNav } from "@/components/layout/BottomNav";
+import { StudentHeader } from "@/components/layout/StudentHeader";
+import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { db } from "@/firebase";
 import {
   collection,
@@ -197,7 +197,7 @@ export default function Programs() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-8">
-      <Header />
+      <StudentHeader />
 
       <main className="container py-8 md:py-12">
         {/* Hero Section */}
@@ -434,7 +434,7 @@ export default function Programs() {
         )}
       </main>
 
-      <BottomNav />
+      <StudentBottomNav />
     </div>
   );
 }

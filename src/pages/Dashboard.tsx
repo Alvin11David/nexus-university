@@ -396,11 +396,10 @@ export default function Dashboard() {
         setResultsLoading(true);
 
         const studentId = user.uid;
-        let data: any[] | null = null;
+        let data: any[] = [];
+        const gradesRef = collection(db, "student_grades");
 
-        // Try lecturer-side grade book first (student_grades)
         try {
-          const gradesRef = collection(db, "student_grades");
           const qGrades = query(
             gradesRef,
             where("student_id", "==", studentId),
@@ -408,51 +407,79 @@ export default function Dashboard() {
             orderBy("semester", "desc"),
           );
           const gradesSnapshot = await getDocs(qGrades);
-
-          if (!gradesSnapshot.empty) {
-            data = await Promise.all(
-              gradesSnapshot.docs.map(async (d) => {
-                const gradeData = d.data();
-                const courseDoc = await getDoc(
-                  doc(db, "courses", gradeData.course_id),
-                );
-                const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-                return { id: d.id, ...gradeData, courses: courseInfo };
-              }),
-            );
-          } else {
-            throw new Error("No student_grades rows");
-          }
+          data = gradesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
         } catch (sgError) {
-          // Fallback to exam_results
-          const resultsRef = collection(db, "exam_results");
-          const qResults = query(
-            resultsRef,
+          const qGradesSimple = query(
+            gradesRef,
             where("student_id", "==", studentId),
-            orderBy("academic_year", "desc"),
-            orderBy("semester", "desc"),
           );
-          const resultsSnapshot = await getDocs(qResults);
-          data = await Promise.all(
-            resultsSnapshot.docs.map(async (d) => {
-              const resultData = d.data();
-              const courseDoc = await getDoc(
-                doc(db, "courses", resultData.course_id),
-              );
-              const courseInfo = courseDoc.exists() ? courseDoc.data() : {};
-              return { id: d.id, ...resultData, courses: courseInfo };
-            }),
-          );
+          const gradesSnapshotSimple = await getDocs(qGradesSimple);
+          data = gradesSnapshotSimple.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }));
         }
 
-        const normalized = (data as any[] | null)?.map((row) => ({
-          ...row,
-          courseTitle: row.courses?.title || "Course",
-          courseCode: row.courses?.code || "",
-          credits: row.courses?.credits || 3,
-          marks: row.total || row.marks || 0,
-          grade_point: row.gp || row.grade_point || 0,
-        }));
+        if (data.length === 0) {
+          const resultsRef = collection(db, "exam_results");
+          try {
+            const qResults = query(
+              resultsRef,
+              where("student_id", "==", studentId),
+              orderBy("academic_year", "desc"),
+              orderBy("semester", "desc"),
+            );
+            const resultsSnapshot = await getDocs(qResults);
+            data = resultsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          } catch (erError) {
+            const qResultsSimple = query(
+              resultsRef,
+              where("student_id", "==", studentId),
+            );
+            const resultsSnapshotSimple = await getDocs(qResultsSimple);
+            data = resultsSnapshotSimple.docs.map((d) => ({
+              id: d.id,
+              ...d.data(),
+            }));
+          }
+        }
+
+        const uniqueCourseIds = Array.from(
+          new Set(data.map((r) => r.course_id).filter(Boolean)),
+        );
+        const courseMap = new Map<string, any>();
+
+        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+          const chunk = uniqueCourseIds.slice(i, i + 10);
+          const qCourseUnits = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
+          const courseUnitsSnap = await getDocs(qCourseUnits);
+          courseUnitsSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+
+          const missingIds = chunk.filter((id) => !courseMap.has(id));
+          if (missingIds.length > 0) {
+            const qCourses = query(
+              collection(db, "courses"),
+              where("__name__", "in", missingIds),
+            );
+            const coursesSnap = await getDocs(qCourses);
+            coursesSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+          }
+        }
+
+        const normalized = data.map((row) => {
+          const course = courseMap.get(row.course_id);
+          return {
+            ...row,
+            courseTitle: course?.name || course?.title || "Course",
+            courseCode: course?.code || "",
+            credits: course?.credits || 3,
+            marks: row.total || row.marks || 0,
+            grade_point: row.gp || row.grade_point || 0,
+          };
+        });
 
         const termMap = new Map<string, TermResult>();
 
