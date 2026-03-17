@@ -18,6 +18,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ResultCourse {
   title: string;
@@ -88,7 +90,9 @@ export default function Results() {
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
   const [cgpa, setCgpa] = useState(0);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const qrRef = useRef<HTMLDivElement>(null);
+  const transcriptRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -201,7 +205,7 @@ export default function Results() {
           const existing = termMap.get(term) || {
             term,
             gpa: 0,
-            cgpa: 0, // Placeholder
+            cgpa: 0,
             totalCredits: 0,
             entries: [],
           };
@@ -321,31 +325,199 @@ export default function Results() {
     gpa: number,
   ): { label: string; color: string; bgColor: string } => {
     if (gpa >= 4.5)
-      return {
-        label: "Excellent",
-        color: "text-emerald-700",
-        bgColor: "bg-emerald-50",
-      };
+      return { label: "Excellent", color: "text-emerald-700", bgColor: "bg-emerald-50" };
     if (gpa >= 4.0)
-      return {
-        label: "Very Good",
-        color: "text-blue-700",
-        bgColor: "bg-blue-50",
-      };
+      return { label: "Very Good", color: "text-blue-700", bgColor: "bg-blue-50" };
     if (gpa >= 3.5)
       return { label: "Good", color: "text-cyan-700", bgColor: "bg-cyan-50" };
     if (gpa >= 3.0)
-      return {
-        label: "Satisfactory",
-        color: "text-amber-700",
-        bgColor: "bg-amber-50",
-      };
-    return {
-      label: "Needs Improvement",
-      color: "text-orange-700",
-      bgColor: "bg-orange-50",
-    };
+      return { label: "Satisfactory", color: "text-amber-700", bgColor: "bg-amber-50" };
+    return { label: "Needs Improvement", color: "text-orange-700", bgColor: "bg-orange-50" };
   };
+
+  // ─── PDF Download ────────────────────────────────────────────────────────────
+  const handleDownloadPDF = async () => {
+    try {
+      setIsDownloading(true);
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPos = margin;
+
+      // ── Header bar ──
+      doc.setFillColor(15, 23, 42); // slate-900
+      doc.rect(0, 0, pageWidth, 28, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("OFFICIAL ACADEMIC TRANSCRIPT", pageWidth / 2, 12, { align: "center" });
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184); // slate-400
+      doc.text(`Generated on ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}`, pageWidth / 2, 20, { align: "center" });
+
+      yPos = 36;
+
+      // ── Student Info Box ──
+      doc.setFillColor(248, 250, 252); // slate-50
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.roundedRect(margin, yPos, pageWidth - margin * 2, 32, 2, 2, "FD");
+
+      const col1X = margin + 6;
+      const col2X = pageWidth / 2 + 6;
+
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(100, 116, 139); // slate-500
+
+      doc.text("FULL NAME", col1X, yPos + 8);
+      doc.text("STUDENT NUMBER", col2X, yPos + 8);
+      doc.text("PROGRAMME", col1X, yPos + 22);
+      doc.text("DEPARTMENT", col2X, yPos + 22);
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(15, 23, 42);
+
+      doc.text(profile?.full_name || "Not Available", col1X, yPos + 15);
+      doc.text(profile?.student_number || "Not Available", col2X, yPos + 15);
+      doc.text(profile?.programme || "Not Available", col1X, yPos + 29);
+      doc.text(profile?.department || "Not Available", col2X, yPos + 29);
+
+      yPos += 40;
+
+      // ── Per-term tables ──
+      termResults.forEach((term, termIdx) => {
+        // Check if we need a new page
+        const estimatedHeight = 14 + term.entries.length * 9 + 20;
+        if (yPos + estimatedHeight > pageHeight - 25) {
+          doc.addPage();
+          yPos = margin;
+        }
+
+        // Term heading
+        doc.setFillColor(30, 41, 59); // slate-800
+        doc.rect(margin, yPos, pageWidth - margin * 2, 9, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text(term.term, margin + 4, yPos + 6.2);
+        yPos += 9;
+
+        // Table
+        autoTable(doc, {
+          startY: yPos,
+          margin: { left: margin, right: margin },
+          head: [["Code", "Course Title", "Mark", "CUs", "Grade", "GD Pt", "Remark"]],
+          body: term.entries.map((c) => [
+            c.courseCode || "—",
+            c.courseTitle,
+            c.marks?.toFixed(1) ?? "0.0",
+            String(c.credits),
+            c.grade || "—",
+            c.grade_point?.toFixed(1) ?? "0.0",
+            c.semester_remark || "—",
+          ]),
+          headStyles: {
+            fillColor: [51, 65, 85],   // slate-700
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            fontSize: 7.5,
+            cellPadding: 3,
+          },
+          bodyStyles: {
+            fontSize: 8,
+            textColor: [30, 41, 59],
+            cellPadding: 3,
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          columnStyles: {
+            0: { cellWidth: 22, fontStyle: "bold", textColor: [37, 99, 235] },
+            1: { cellWidth: "auto" },
+            2: { cellWidth: 16, halign: "center" },
+            3: { cellWidth: 12, halign: "center" },
+            4: { cellWidth: 16, halign: "center", fontStyle: "bold" },
+            5: { cellWidth: 16, halign: "center" },
+            6: { cellWidth: 24, halign: "center", textColor: [5, 150, 105] },
+          },
+          tableLineColor: [226, 232, 240],
+          tableLineWidth: 0.3,
+          didDrawPage: () => { /* page break handled by autoTable */ },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 3;
+
+        // GPA / CGPA summary strip
+        doc.setFillColor(241, 245, 249); // slate-100
+        doc.setDrawColor(226, 232, 240);
+        doc.rect(margin, yPos, pageWidth - margin * 2, 12, "FD");
+
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(100, 116, 139);
+        doc.text("Semester Remark:", margin + 4, yPos + 5);
+        doc.text("GPA:", margin + 60, yPos + 5);
+        doc.text("CGPA:", margin + 95, yPos + 5);
+
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(5, 150, 105); // emerald-600
+        doc.text(term.remark || "NP", margin + 36, yPos + 5);
+
+        doc.setTextColor(37, 99, 235); // blue-600
+        doc.text(term.gpa.toFixed(2), margin + 73, yPos + 5);
+
+        doc.setTextColor(79, 70, 229); // violet-600
+        doc.text(cgpa.toFixed(2), margin + 110, yPos + 5);
+
+        yPos += 18;
+      });
+
+      // ── Final CGPA banner ──
+      if (yPos + 22 > pageHeight - 20) {
+        doc.addPage();
+        yPos = margin;
+      }
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(margin, yPos, pageWidth - margin * 2, 18, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text(`Cumulative GPA (CGPA): ${cgpa.toFixed(2)}`, pageWidth / 2, yPos + 7, { align: "center" });
+      const perf = getPerformanceLevel(cgpa);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Overall Performance: ${perf.label}`, pageWidth / 2, yPos + 14, { align: "center" });
+
+      // ── Footer on every page ──
+      const totalPages = (doc.internal as any).getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+        doc.setFontSize(7);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(148, 163, 184);
+        doc.text("This transcript is computer-generated and is valid without a signature.", margin, pageHeight - 7);
+        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+      }
+
+      doc.save(`academic-transcript-${profile?.student_number || user?.uid || "student"}.pdf`);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
@@ -380,20 +552,18 @@ export default function Results() {
               <Button
                 variant="outline"
                 size="sm"
-                className="flex-1 sm:flex-none gap-2"
-                onClick={() => {
-                  const html = document.documentElement.innerHTML;
-                  const blob = new Blob([html], { type: "text/html" });
-                  const url = URL.createObjectURL(blob);
-                  const link = document.createElement("a");
-                  link.href = url;
-                  link.download = `academic-transcript-${user?.uid}.html`;
-                  link.click();
-                  URL.revokeObjectURL(url);
-                }}
+                className="gap-2"
+                onClick={handleDownloadPDF}
+                disabled={isDownloading || termResults.length === 0}
               >
-                <Download className="h-4 w-4" />
-                <span className="hidden xs:inline sm:inline">Download</span>
+                <Download
+                  className={`h-4 w-4 ${
+                    isDownloading ? "animate-bounce" : ""
+                  }`}
+                />
+                <span className="hidden sm:inline">
+                  {isDownloading ? "Generating..." : "Download"}
+                </span>
               </Button>
               <Button
                 variant="outline"
@@ -421,7 +591,7 @@ export default function Results() {
               </p>
             </Card>
           ) : (
-            <div className="space-y-8">
+            <div className="space-y-8" ref={transcriptRef}>
               {/* Student Information Card */}
               <Card className="p-4 md:p-6 border">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
@@ -776,13 +946,22 @@ export default function Results() {
                 <Button
                   className="flex-1 gap-2"
                   onClick={() => {
-                    const link = document.createElement("a");
-                    const canvas = qrRef.current?.querySelector("canvas");
-                    if (canvas) {
+                    const svgEl = qrRef.current?.querySelector("svg");
+                    if (!svgEl) return;
+                    const svgData = new XMLSerializer().serializeToString(svgEl);
+                    const canvas = document.createElement("canvas");
+                    canvas.width = 256;
+                    canvas.height = 256;
+                    const ctx = canvas.getContext("2d");
+                    const img = new Image();
+                    img.onload = () => {
+                      ctx?.drawImage(img, 0, 0);
+                      const link = document.createElement("a");
                       link.href = canvas.toDataURL("image/png");
                       link.download = `results-qr-${user?.uid}.png`;
                       link.click();
-                    }
+                    };
+                    img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
                   }}
                 >
                   <Download className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Sparkles,
   X,
+  AlarmClock,
 } from "lucide-react";
 import {
   Dialog,
@@ -89,35 +90,26 @@ type DashboardAssignment = {
   rawStatus: string | null;
 };
 
-type DashboardClassroomCourse = {
+interface LiveSession {
   id: string;
   title: string;
-  code: string;
-  instructor: string;
-  room: string;
-  students: number;
-  banner: string;
-  joinCode: string;
-  meetLink: string;
-  progress: number;
-  unread: number;
-  isLive?: boolean;
-};
-
-type DashboardStreamItem = {
-  course: string;
-  message: string;
-  author: string;
-  time: string;
-  type: string;
-};
-
-type DashboardMeetSession = {
-  course: string;
-  starts: string;
-  link: string;
+  courseName?: string | null;
+  scheduledAt: string;
+  durationMinutes?: number | null;
+  meetLink?: string | null;
   isLive: boolean;
-};
+}
+
+interface DashboardQuiz {
+  id: string;
+  title: string;
+  courseTitle?: string | null;
+  courseCode?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  isLive: boolean;
+  isScheduled: boolean;
+}
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
@@ -141,21 +133,13 @@ export default function Dashboard() {
   const [assignments, setAssignments] = useState<DashboardAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
-  const [classroomCourses, setClassroomCourses] = useState<
-    DashboardClassroomCourse[]
-  >([]);
-  const [classroomStream, setClassroomStream] = useState<DashboardStreamItem[]>(
-    [],
-  );
-  const [meetSessions, setMeetSessions] = useState<DashboardMeetSession[]>([]);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
+  const [upcomingQuizzes, setUpcomingQuizzes] = useState<DashboardQuiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(true);
 
-  const bannerGradients = [
-    "from-indigo-500 via-blue-500 to-cyan-400",
-    "from-emerald-500 via-teal-500 to-cyan-400",
-    "from-amber-500 via-orange-500 to-rose-400",
-    "from-fuchsia-500 via-pink-500 to-rose-400",
-    "from-sky-500 via-blue-500 to-indigo-500",
-  ];
+  const classroomCourses: any[] = [];
+  const classroomStream: any[] = [];
 
   const formatDueDate = (date: string | null) => {
     if (!date) return "No due date";
@@ -261,12 +245,12 @@ export default function Dashboard() {
           }).length;
         }
 
-        setStats({
+        setStats((prev) => ({
+          ...prev,
           enrolled: enrolledCoursesCount,
           completed: completedCoursesCount,
           assignments: pendingAssignmentsCount,
-          liveMeets: 0,
-        });
+        }));
       } catch (error) {
         console.error("Error loading dashboard stats", error);
       } finally {
@@ -278,241 +262,202 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => {
-    setStats((prev) => ({
-      ...prev,
-      liveMeets: meetSessions.filter((session) => session.isLive).length,
-    }));
-  }, [meetSessions]);
+    const loadLiveSessions = async () => {
+      if (!user) {
+        setLiveSessions([]);
+        setStats((prev) => ({ ...prev, liveMeets: 0 }));
+        return;
+      }
 
-  useEffect(() => {
-    if (!user) return;
-
-    let isActive = true;
-
-    const loadClassroomData = async () => {
       try {
-        const enrollmentsQuery = query(
-          collection(db, "enrollments"),
-          where("student_id", "==", user.uid),
-        );
-        const enrollmentSnap = await getDocs(enrollmentsQuery);
-        const courseIds = Array.from(
-          new Set(
-            enrollmentSnap.docs
-              .map((docSnap) => docSnap.data().course_id)
-              .filter(Boolean),
-          ),
-        );
+        setLiveSessionsLoading(true);
 
-        if (!courseIds.length) {
-          if (isActive) {
-            setClassroomCourses([]);
-            setClassroomStream([]);
-            setMeetSessions([]);
-          }
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setLiveSessions([]);
+          setStats((prev) => ({ ...prev, liveMeets: 0 }));
           return;
         }
 
-        const courseMap = new Map<string, any>();
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
+        // 2. Fetch live sessions only for enrolled courses (chunked for Firestore 'in' limit)
+        const sessions: LiveSession[] = [];
+        const sessionsRef = collection(db, "live_sessions");
+        const now = new Date();
 
-          const unitSnap = await getDocs(
-            query(
-              collection(db, "course_units"),
-              where("__name__", "in", chunk),
-            ),
-          );
-          unitSnap.docs.forEach((docSnap) => {
-            courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
-          });
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qSessions = query(sessionsRef, where("course_id", "in", chunk));
+          const snapshot = await getDocs(qSessions);
 
-          const missingIds = chunk.filter((id) => !courseMap.has(id));
-          if (missingIds.length) {
-            const courseSnap = await getDocs(
-              query(
-                collection(db, "courses"),
-                where("__name__", "in", missingIds),
-              ),
-            );
-            courseSnap.docs.forEach((docSnap) => {
-              courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+          snapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            const scheduledAt: string = data.scheduled_at;
+            if (!scheduledAt) return;
+            const start = new Date(scheduledAt);
+            if (Number.isNaN(start.getTime())) return;
+
+            const duration = data.duration_minutes ?? 60;
+            const end = new Date(start.getTime() + duration * 60000);
+            const isLive = now >= start && now <= end;
+
+            sessions.push({
+              id: d.id,
+              title: data.title || "Online Class",
+              courseName: data.course_name || null,
+              scheduledAt,
+              durationMinutes: data.duration_minutes ?? null,
+              meetLink: data.meet_link || null,
+              isLive,
             });
-          }
-        }
-
-        const lecturerIds = Array.from(
-          new Set(
-            Array.from(courseMap.values())
-              .map((course: any) => course.lecturer_id)
-              .filter(Boolean),
-          ),
-        );
-        const lecturerMap = new Map<string, string>();
-        for (let i = 0; i < lecturerIds.length; i += 10) {
-          const chunk = lecturerIds.slice(i, i + 10);
-          const profileSnap = await getDocs(
-            query(collection(db, "profiles"), where("__name__", "in", chunk)),
-          );
-          profileSnap.docs.forEach((docSnap) => {
-            lecturerMap.set(
-              docSnap.id,
-              (docSnap.data() as any).full_name || "Lecturer",
-            );
           });
         }
 
-        const studentCounts = new Map<string, number>();
-        const announcementCounts = new Map<string, number>();
-        const sessionDocs: any[] = [];
-        const announcementDocs: any[] = [];
+        sessions.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+        setLiveSessions(sessions);
 
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-
-          const classmatesSnap = await getDocs(
-            query(
-              collection(db, "classroom_enrollments"),
-              where("classroom_id", "in", chunk),
-            ),
-          );
-          classmatesSnap.docs.forEach((docSnap) => {
-            const classroomId = docSnap.data().classroom_id;
-            studentCounts.set(
-              classroomId,
-              (studentCounts.get(classroomId) || 0) + 1,
-            );
-          });
-
-          const announcementsSnap = await getDocs(
-            query(
-              collection(db, "announcements"),
-              where("course_id", "in", chunk),
-              limit(10),
-            ),
-          );
-          announcementsSnap.docs.forEach((docSnap) => {
-            const announcement = { id: docSnap.id, ...docSnap.data() } as any;
-            announcementDocs.push(announcement);
-            announcementCounts.set(
-              announcement.course_id,
-              (announcementCounts.get(announcement.course_id) || 0) + 1,
-            );
-          });
-
-          const sessionsSnap = await getDocs(
-            query(
-              collection(db, "google_classroom_sessions"),
-              where("classroom_id", "in", chunk),
-              limit(10),
-            ),
-          );
-          sessionsSnap.docs.forEach((docSnap) => {
-            sessionDocs.push({ id: docSnap.id, ...docSnap.data() });
-          });
-        }
-
-        const liveSessionMap = new Map<string, any>();
-        sessionDocs.forEach((session) => {
-          const existing = liveSessionMap.get(session.classroom_id);
-          if (
-            !existing ||
-            (session.status === "live" && existing.status !== "live")
-          ) {
-            liveSessionMap.set(session.classroom_id, session);
-          }
-        });
-
-        const nextCourses = courseIds.map((courseId, index) => {
-          const course = courseMap.get(courseId) || {};
-          const liveSession = liveSessionMap.get(courseId);
-          return {
-            id: courseId,
-            title: course.name || course.title || "Course",
-            code: course.code || course.course_unit_code || "COURSE",
-            instructor: lecturerMap.get(course.lecturer_id) || "Lecturer",
-            room:
-              course.room ||
-              course.location ||
-              (liveSession?.meeting_link ? "Online" : "TBA"),
-            students: studentCounts.get(courseId) || 0,
-            banner: bannerGradients[index % bannerGradients.length],
-            joinCode: course.class_code || course.join_code || "No code",
-            meetLink: liveSession?.meeting_link || course.meeting_link || "",
-            progress: Math.min(
-              100,
-              Math.max(
-                0,
-                Math.round((announcementCounts.get(courseId) || 0) * 20),
-              ),
-            ),
-            unread: announcementCounts.get(courseId) || 0,
-            isLive: liveSession?.status === "live",
-          };
-        });
-
-        const nextStream = announcementDocs
-          .sort((a, b) => {
-            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
-            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
-            return bTime - aTime;
-          })
-          .slice(0, 5)
-          .map((announcement) => {
-            const course = courseMap.get(announcement.course_id) || {};
-            return {
-              course: course.name || course.title || "Course",
-              message:
-                announcement.content ||
-                announcement.message ||
-                announcement.title ||
-                "New classroom update",
-              author:
-                announcement.author_name ||
-                lecturerMap.get(course.lecturer_id) ||
-                "Lecturer",
-              time: formatRelativeTime(announcement.created_at),
-              type: announcement.category || "announcement",
-            };
-          });
-
-        const nextMeetSessions = sessionDocs
-          .sort((a, b) => {
-            const aTime = a.start_time?.toDate?.()?.getTime?.() || 0;
-            const bTime = b.start_time?.toDate?.()?.getTime?.() || 0;
-            return aTime - bTime;
-          })
-          .slice(0, 5)
-          .map((session) => {
-            const course = courseMap.get(session.classroom_id) || {};
-            return {
-              course: course.name || course.title || "Course",
-              starts: formatSessionLabel(session.start_time),
-              link: session.meeting_link || "",
-              isLive: session.status === "live",
-            };
-          });
-
-        if (isActive) {
-          setClassroomCourses(nextCourses);
-          setClassroomStream(nextStream);
-          setMeetSessions(nextMeetSessions);
-        }
+        const liveCount = sessions.filter((s) => s.isLive).length;
+        setStats((prev) => ({
+          ...prev,
+          liveMeets: liveCount,
+        }));
       } catch (error) {
-        console.error("Error loading classroom data:", error);
-        if (isActive) {
-          setClassroomCourses([]);
-          setClassroomStream([]);
-          setMeetSessions([]);
-        }
+        console.error("Error loading live sessions", error);
+      } finally {
+        setLiveSessionsLoading(false);
       }
     };
 
-    loadClassroomData();
+    loadLiveSessions();
+  }, [user]);
 
-    return () => {
-      isActive = false;
+  const activeMeetsCount = useMemo(
+    () => liveSessions.filter((s) => s.isLive).length,
+    [liveSessions],
+  );
+
+  const formattedLiveSessions = useMemo(
+    () =>
+      liveSessions.map((session) => {
+        const start = new Date(session.scheduledAt);
+        const now = new Date();
+        const isToday = start.toDateString() === now.toDateString();
+
+        const timeLabel = start.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+
+        const dayLabel = isToday
+          ? "Today"
+          : start.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            });
+
+        return {
+          ...session,
+          displayTime: `${dayLabel} · ${timeLabel}`,
+          displayDay: session.isLive ? "Live" : dayLabel,
+        };
+      }),
+    [liveSessions],
+  );
+
+  useEffect(() => {
+    const loadQuizzes = async () => {
+      if (!user) {
+        setUpcomingQuizzes([]);
+        return;
+      }
+
+      try {
+        setQuizzesLoading(true);
+
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setUpcomingQuizzes([]);
+          return;
+        }
+
+        // 2. Fetch quizzes for those courses
+        const quizzes: DashboardQuiz[] = [];
+        const quizzesRef = collection(db, "quizzes");
+        const now = new Date();
+
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qQuizzes = query(
+            quizzesRef,
+            where("course_id", "in", chunk),
+            where("status", "==", "active"),
+          );
+          const quizSnapshot = await getDocs(qQuizzes);
+
+          quizSnapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            const startRaw = data.start_date ?? null;
+            const endRaw = data.end_date ?? null;
+
+            const start = startRaw ? new Date(startRaw) : null;
+            const end = endRaw ? new Date(endRaw) : null;
+
+            const isLive =
+              (!!start ? now >= start : true) && (!!end ? now <= end : true);
+            const isScheduled = !!start && now < start;
+
+            // Hide quizzes that have fully closed
+            if (end && now > end) return;
+
+            quizzes.push({
+              id: d.id,
+              title: data.title || "Quiz",
+              courseTitle: data.course_title || null,
+              courseCode: data.course_code || null,
+              startDate: startRaw,
+              endDate: endRaw,
+              isLive,
+              isScheduled,
+            });
+          });
+        }
+
+        quizzes.sort((a, b) => {
+          const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+          const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+          return aTime - bTime;
+        });
+
+        setUpcomingQuizzes(quizzes);
+      } catch (error) {
+        console.error("Error loading upcoming quizzes", error);
+      } finally {
+        setQuizzesLoading(false);
+      }
     };
+
+    loadQuizzes();
   }, [user]);
 
   useEffect(() => {
@@ -925,7 +870,10 @@ export default function Dashboard() {
               </p>
               <div className="flex items-center gap-2 text-xs sm:text-sm">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-semibold">2 active Meets</span>
+                <span className="font-semibold">
+                  {activeMeetsCount} active Meet
+                  {activeMeetsCount === 1 ? "" : "s"}
+                </span>
               </div>
             </div>
           </div>
@@ -956,7 +904,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Live Meets"
-            value={loadingStats ? "…" : stats.liveMeets.toString()}
+            value={loadingStats && liveSessionsLoading ? "…" : stats.liveMeets.toString()}
             subtitle="Happening now"
             icon={Video}
             delay={0.4}
@@ -1101,7 +1049,7 @@ export default function Dashboard() {
         <div className="grid xl:grid-cols-3 gap-6">
           {/* Classrooms & Assignments */}
           <div className="xl:col-span-2 space-y-6">
-            {/* Google Classrooms */}
+            {/* Google Classrooms (placeholder, can be wired to real data later) */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-secondary" />
@@ -1119,37 +1067,36 @@ export default function Dashboard() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
-              {classroomCourses.length === 0 && (
-                <div className="md:col-span-2 rounded-2xl border border-dashed border-border/60 bg-card/60 p-6 text-sm text-muted-foreground">
-                  You have not joined any classrooms yet.
+              {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                <div className="col-span-full text-xs sm:text-sm text-muted-foreground">
+                  When your lecturers schedule Google Meet classes, they will
+                  appear here with join links.
                 </div>
               )}
 
-              {classroomCourses.map((course, i) => (
+              {formattedLiveSessions.map((session, i) => (
                 <motion.div
-                  key={course.id}
+                  key={session.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg shadow-lg"
                 >
-                  <div
-                    className={`h-20 sm:h-24 w-full bg-gradient-to-r ${course.banner} opacity-90`}
-                  />
+                  <div className="h-20 sm:h-24 w-full bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 opacity-90" />
                   <div className="p-4 sm:p-5 space-y-3 -mt-8 sm:-mt-10 relative">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground">
-                          {course.code}
+                          {session.courseName || "Online Class"}
                         </p>
                         <h3 className="font-semibold text-base sm:text-lg">
-                          {course.title}
+                          {session.title}
                         </h3>
                         <p className="text-[11px] sm:text-xs text-muted-foreground">
-                          {course.instructor} · {course.room}
+                          {session.displayTime}
                         </p>
                       </div>
-                      {course.isLive && (
+                      {session.isLive && (
                         <span className="px-3 py-1 rounded-full text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <span className="h-1.5 w-1.5 bg-destructive rounded-full animate-pulse" />{" "}
                           Live
@@ -1161,31 +1108,16 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.students} students
+                          Join from any device
                         </span>
-                        <span className="sm:hidden">{course.students}</span>
+                        <span className="sm:hidden">Online</span>
                       </div>
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.unread} new posts
+                          Live participation
                         </span>
-                        <span className="sm:hidden">{course.unread}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-1 sm:gap-2">
-                        <Link className="h-3 w-3 sm:h-4 sm:w-4 text-primary flex-shrink-0" />
-                        <span className="truncate text-[9px] sm:text-xs">
-                          {course.meetLink}
-                        </span>
-                      </div>
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-secondary/5 border border-secondary/10 flex items-center gap-1 sm:gap-2">
-                        <Clipboard className="h-3 w-3 sm:h-4 sm:w-4 text-secondary flex-shrink-0" />
-                        <span className="font-semibold truncate text-[9px] sm:text-xs">
-                          {course.joinCode}
-                        </span>
+                        <span className="sm:hidden">Live</span>
                       </div>
                     </div>
 
@@ -1194,23 +1126,23 @@ export default function Dashboard() {
                         <div className="h-2 w-16 sm:w-24 rounded-full bg-muted/60 overflow-hidden flex-shrink-0">
                           <div
                             className="h-2 bg-gradient-to-r from-primary to-secondary"
-                            style={{ width: `${course.progress}%` }}
+                            style={{ width: session.isLive ? "100%" : "40%" }}
                           />
                         </div>
                         <span className="font-semibold text-foreground">
-                          {course.progress}%
+                          {session.isLive ? "In progress" : "Scheduled"}
                         </span>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
-                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none"
-                          disabled={!course.meetLink}
-                          onClick={() => window.open(course.meetLink, "_blank")}
+                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none disabled:opacity-60"
+                          onClick={() =>
+                            session.meetLink &&
+                            window.open(session.meetLink, "_blank")
+                          }
+                          disabled={!session.isLive || !session.meetLink}
                         >
-                          Join Meet
-                        </button>
-                        <button className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs border border-border hover:border-primary/50 hover:text-primary flex-1 sm:flex-none">
-                          View Stream
+                          {session.isLive ? "Join Live Class" : "Join (when live)"}
                         </button>
                       </div>
                     </div>
@@ -1315,15 +1247,15 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <div className="space-y-3">
-                  {classroomStream.length === 0 && (
+                  {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
                     <p className="text-xs sm:text-sm text-muted-foreground">
-                      No classroom posts yet.
+                      When there are scheduled Google Meet classes, they will show
+                      up here with a clear status and join button.
                     </p>
                   )}
-
-                  {classroomStream.map((post, i) => (
+                  {formattedLiveSessions.map((session, i) => (
                     <motion.div
-                      key={`${post.course}-${i}`}
+                      key={session.id}
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
@@ -1332,20 +1264,29 @@ export default function Dashboard() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
                         <div className="space-y-1 flex-1">
                           <p className="text-xs sm:text-sm font-semibold">
-                            {post.course}
+                            {session.title}
                           </p>
                           <p className="text-[11px] sm:text-xs text-muted-foreground">
-                            {post.author}
+                            {session.courseName || "Online Class"}
                           </p>
                         </div>
                         <span className="text-[10px] sm:text-[11px] text-muted-foreground flex-shrink-0">
-                          {post.time}
+                          {session.displayTime}
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm mt-2">{post.message}</p>
                       <div className="flex items-center gap-2 mt-2 text-[10px] sm:text-[11px] text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
-                        {post.type}
+                        {session.isLive && (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
+                            Live now
+                          </>
+                        )}
+                        {!session.isLive && (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            Starts at {session.displayTime}
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -1364,25 +1305,62 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.length === 0 && (
+                {formattedLiveSessions.length === 0 &&
+                  upcomingQuizzes.length === 0 &&
+                  !liveSessionsLoading &&
+                  !quizzesLoading && (
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    No upcoming sessions.
+                    No upcoming online classes or quizzes yet. When your
+                    lecturers schedule Google Meet sessions or quizzes, they
+                    will appear here.
                   </p>
                 )}
-
-                {meetSessions.map((meet, i) => (
+                {formattedLiveSessions.map((session, i) => (
                   <UpcomingCard
-                    key={meet.course}
+                    key={session.id}
                     type={"class" as const}
-                    title={meet.course}
-                    course={meet.course}
-                    time={meet.starts}
-                    date={meet.isLive ? "Live" : "Today"}
-                    meetLink={meet.link}
-                    isUrgent={meet.isLive}
+                    title={session.title}
+                    course={session.courseName || "Online Class"}
+                    time={session.displayTime}
+                    date={session.isLive ? "Live" : session.displayDay}
+                    meetLink={session.meetLink || undefined}
+                    isUrgent={session.isLive}
                     delay={i * 0.1}
                   />
                 ))}
+                {upcomingQuizzes.map((quiz, i) => {
+                  const startLabel = quiz.startDate
+                    ? new Date(quiz.startDate).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Any time";
+
+                  return (
+                    <UpcomingCard
+                      key={quiz.id}
+                      type={"quiz" as const}
+                      title={quiz.title}
+                      course={
+                        quiz.courseTitle ||
+                        quiz.courseCode ||
+                        "Course Quiz"
+                      }
+                      time={startLabel}
+                      date={
+                        quiz.isLive
+                          ? "Live"
+                          : quiz.isScheduled
+                            ? "Scheduled"
+                            : "Open"
+                      }
+                      isUrgent={quiz.isLive}
+                      delay={formattedLiveSessions.length * 0.1 + i * 0.1}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -1394,15 +1372,15 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.length === 0 && (
+                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
                   <p className="text-xs sm:text-sm text-muted-foreground">
-                    No live or scheduled Meet sessions.
+                    No classes are live right now. When a Google Meet class is
+                    in progress, you will see a Join button here.
                   </p>
                 )}
-
-                {meetSessions.map((session, i) => (
+                {formattedLiveSessions.map((session, i) => (
                   <motion.div
-                    key={session.link}
+                    key={session.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
@@ -1410,24 +1388,28 @@ export default function Dashboard() {
                   >
                     <div>
                       <p className="text-xs sm:text-sm font-semibold">
-                        {session.course}
+                        {session.title}
                       </p>
                       <p className="text-[11px] sm:text-xs text-muted-foreground">
-                        {session.starts}
+                        {session.displayTime}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {session.isLive && (
+                      {session.isLive && session.meetLink && (
                         <span className="px-2 py-1 rounded-full text-[10px] sm:text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <Mic className="h-3 w-3" /> Live
                         </span>
                       )}
                       <button
-                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0"
-                        disabled={!session.link}
-                        onClick={() => window.open(session.link, "_blank")}
+                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0 disabled:opacity-60"
+                        onClick={() =>
+                          session.meetLink &&
+                          window.open(session.meetLink, "_blank")
+                        }
+                        disabled={!session.isLive || !session.meetLink}
                       >
-                        <Play className="h-4 w-4" /> Join
+                        <Play className="h-4 w-4" />{" "}
+                        {session.isLive ? "Join" : "Join (when live)"}
                       </button>
                     </div>
                   </motion.div>
