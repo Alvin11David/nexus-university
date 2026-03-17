@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { motion } from "framer-motion";
 import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   BookOpen,
   CheckCircle2,
@@ -260,6 +261,189 @@ export function EnrollmentRegistrationTab() {
     }
   };
 
+  const handleDownloadSlip = () => {
+    try {
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPos = margin;
+
+      // Header
+      doc.setFillColor(30, 64, 175);
+      doc.rect(0, 0, pageWidth, 24, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.text("PROOF OF ENROLLMENT AND REGISTRATION", pageWidth / 2, 10, {
+        align: "center",
+      });
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("Nexus University", pageWidth / 2, 17, { align: "center" });
+
+      yPos = 32;
+
+      // Student details
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Student Details", margin, yPos);
+      yPos += 6;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Name: ${profile?.full_name || "N/A"}`, margin, yPos);
+      yPos += 5;
+      doc.text(
+        `Student Number: ${profile?.student_number || "N/A"}`,
+        margin,
+        yPos,
+      );
+      yPos += 5;
+      doc.text(`Programme: ${profile?.programme || "N/A"}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Department: ${profile?.department || "N/A"}`, margin, yPos);
+      yPos += 8;
+
+      // Summary
+      const totalFees = fees.reduce(
+        (sum: number, fee: any) => sum + (fee.amount || 0),
+        0,
+      );
+      const totalPaid = fees.reduce(
+        (sum: number, fee: any) => sum + (fee.paid_amount || 0),
+        0,
+      );
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Registration Summary", margin, yPos);
+      yPos += 6;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`Academic Year: 2026`, margin, yPos);
+      yPos += 5;
+      doc.text(`Semester: Semester 1`, margin, yPos);
+      yPos += 5;
+      doc.text(`Registered Courses: ${currentSemester.length}`, margin, yPos);
+      yPos += 5;
+      doc.text(`Total Credits: ${totalCredits}`, margin, yPos);
+      yPos += 5;
+      doc.text(
+        `Fees Paid: UGX ${Number(totalPaid).toLocaleString()} / UGX ${Number(totalFees).toLocaleString()}`,
+        margin,
+        yPos,
+      );
+      yPos += 5;
+      doc.text(
+        `Payment Percentage: ${paymentPercentage.toFixed(1)}%`,
+        margin,
+        yPos,
+      );
+      yPos += 8;
+
+      // Courses table
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Registered Courses", margin, yPos);
+      yPos += 6;
+
+      const colX = [margin, margin + 35, margin + 125, margin + 145];
+      const rowHeight = 7;
+
+      const drawTableHeader = () => {
+        doc.setFillColor(51, 65, 85);
+        doc.rect(margin, yPos, pageWidth - margin * 2, rowHeight, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.text("Code", colX[0] + 2, yPos + 4.7);
+        doc.text("Course Title", colX[1] + 2, yPos + 4.7);
+        doc.text("Credits", colX[2] + 2, yPos + 4.7);
+        doc.text("Status", colX[3] + 2, yPos + 4.7);
+        yPos += rowHeight;
+      };
+
+      drawTableHeader();
+
+      const tableRows =
+        currentSemester.length > 0 ? currentSemester : enrollments;
+      tableRows.forEach((enrollment, idx) => {
+        if (yPos + rowHeight > pageHeight - 25) {
+          doc.addPage();
+          yPos = margin;
+          drawTableHeader();
+        }
+
+        if (idx % 2 === 1) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, yPos, pageWidth - margin * 2, rowHeight, "F");
+        }
+
+        doc.setTextColor(15, 23, 42);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+        doc.text(enrollment.course?.code || "N/A", colX[0] + 2, yPos + 4.7, {
+          maxWidth: 30,
+        });
+        doc.text(enrollment.course?.title || "N/A", colX[1] + 2, yPos + 4.7, {
+          maxWidth: 85,
+        });
+        doc.text(
+          String(enrollment.course?.credits || 0),
+          colX[2] + 2,
+          yPos + 4.7,
+        );
+        doc.text(enrollment.status || "N/A", colX[3] + 2, yPos + 4.7, {
+          maxWidth: 25,
+        });
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(
+          margin,
+          yPos + rowHeight,
+          pageWidth - margin,
+          yPos + rowHeight,
+        );
+        yPos += rowHeight;
+      });
+
+      // Footer
+      if (yPos + 18 > pageHeight - 10) {
+        doc.addPage();
+        yPos = margin;
+      }
+
+      yPos += 4;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(100, 116, 139);
+      doc.text(
+        `Verification URL: ${getEnrollmentShareUrl(user?.uid || "")}`,
+        margin,
+        yPos,
+      );
+      yPos += 5;
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString()} - Document ID: ${user?.uid || "N/A"}`,
+        margin,
+        yPos,
+      );
+
+      doc.save(
+        `enrollment-slip-${profile?.student_number || user?.uid || "student"}.pdf`,
+      );
+    } catch (error) {
+      console.error("Error generating enrollment slip PDF:", error);
+      alert("Failed to download enrollment slip. Please try again.");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Status Overview */}
@@ -505,7 +689,11 @@ export function EnrollmentRegistrationTab() {
                 <Printer className="h-4 w-4" />
                 Print Proof
               </Button>
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={handleDownloadSlip}
+              >
                 <Download className="h-4 w-4" />
                 Download Slip
               </Button>

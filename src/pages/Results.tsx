@@ -28,10 +28,17 @@ function createPDFTable(
   startY: number,
   headers: string[],
   rows: (string | number)[][],
-  options: { colWidths?: number[]; margin?: number; headerBg?: number[] } = {},
+  options: {
+    colWidths?: number[];
+    margin?: number;
+    headerBg?: number[];
+    bottomMargin?: number;
+  } = {},
 ) {
   const margin = options.margin || 10;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomMargin = options.bottomMargin || 20;
   const colCount = headers.length;
   const colWidths =
     options.colWidths ||
@@ -40,20 +47,23 @@ function createPDFTable(
   let yPos = startY;
   const rowHeight = 6;
 
-  // Draw header
-  doc.setFillColor(51, 65, 85);
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(7.5);
-  doc.setFont("helvetica", "bold");
+  const drawHeader = () => {
+    doc.setFillColor(51, 65, 85);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
 
-  let xPos = margin;
-  headers.forEach((header, i) => {
-    doc.rect(xPos, yPos, colWidths[i], rowHeight, "F");
-    doc.text(header, xPos + 2, yPos + 4.5, { maxWidth: colWidths[i] - 4 });
-    xPos += colWidths[i];
-  });
+    let headerX = margin;
+    headers.forEach((header, i) => {
+      doc.rect(headerX, yPos, colWidths[i], rowHeight, "F");
+      doc.text(header, headerX + 2, yPos + 4.5, { maxWidth: colWidths[i] - 4 });
+      headerX += colWidths[i];
+    });
 
-  yPos += rowHeight;
+    yPos += rowHeight;
+  };
+
+  drawHeader();
 
   // Draw rows
   doc.setFont("helvetica", "normal");
@@ -61,12 +71,21 @@ function createPDFTable(
   doc.setTextColor(30, 41, 59);
 
   rows.forEach((row, rowIndex) => {
+    if (yPos + rowHeight > pageHeight - bottomMargin) {
+      doc.addPage();
+      yPos = margin;
+      drawHeader();
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+    }
+
     if (rowIndex % 2 === 1) {
       doc.setFillColor(248, 250, 252);
       doc.rect(margin, yPos, pageWidth - margin * 2, rowHeight, "F");
     }
 
-    xPos = margin;
+    let xPos = margin;
     row.forEach((cell, colIndex) => {
       doc.text(String(cell), xPos + 2, yPos + 4.5, {
         maxWidth: colWidths[colIndex] - 4,
@@ -512,9 +531,16 @@ export default function Results() {
           {
             margin,
             colWidths: [22, 45, 16, 12, 16, 16, 24],
+            bottomMargin: 20,
           },
         );
         yPos += 3;
+
+        if (yPos + 12 > pageHeight - 20) {
+          doc.addPage();
+          yPos = margin;
+        }
+
         // GPA / CGPA summary strip
         doc.setFillColor(241, 245, 249); // slate-100
         doc.setDrawColor(226, 232, 240);
