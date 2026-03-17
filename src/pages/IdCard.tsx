@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
+import { QRCodeSVG } from "qrcode.react";
+import { getIdCardShareUrl } from "@/lib/config";
 
 const InfoRow = ({ label, value }: { label: string; value: string }) => (
   <div className="flex justify-between text-[11px] sm:text-xs text-muted-foreground border-b border-border/60 py-1 last:border-b-0">
@@ -198,7 +200,14 @@ export default function IdCard() {
                     </div>
                     <div className="flex flex-col items-center gap-2">
                       <div className="bg-white p-2 rounded-lg border">
-                        <QrCode className="h-16 w-16" />
+                        <QRCodeSVG
+                          value={getIdCardShareUrl(user?.uid || "")}
+                          size={80}
+                          level="H"
+                          includeMargin={true}
+                          fgColor="#000000"
+                          bgColor="#ffffff"
+                        />
                       </div>
                       <p className="text-[11px] text-muted-foreground text-center">
                         Scan for verification

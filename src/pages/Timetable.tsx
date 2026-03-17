@@ -24,6 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getTimetableShareUrl } from "@/lib/config";
 import {
   collection,
   query,
@@ -300,7 +301,7 @@ export default function Timetable() {
   const { toast } = useToast();
 
   const currentDay = days[new Date().getDay() - 1] || "Monday";
-  const timetableUrl = window.location.origin + "/timetable";
+  const timetableUrl = getTimetableShareUrl();
 
   // Helper to get color for a course index
   const getCourseColors = (index: number) => {

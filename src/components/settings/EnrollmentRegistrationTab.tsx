@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { motion } from "framer-motion";
+import html2canvas from "html2canvas";
 import {
   BookOpen,
   CheckCircle2,
@@ -15,6 +16,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { getEnrollmentShareUrl } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -370,7 +372,7 @@ export function EnrollmentRegistrationTab() {
                     qrContainer.style.display = "none";
                     document.body.appendChild(qrContainer);
 
-                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.uid}&semester=1-2026`;
+                    const qrValue = getEnrollmentShareUrl(user?.uid || "");
 
                     const html = `
                       <html>

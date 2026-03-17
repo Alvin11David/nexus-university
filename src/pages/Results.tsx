@@ -7,6 +7,7 @@ import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { getResultsShareUrl } from "@/lib/config";
 import {
   collection,
   query,
@@ -920,7 +921,7 @@ export default function Results() {
               <div className="bg-white rounded-xl p-3 flex items-center justify-center mb-4 border border-border">
                 <div ref={qrRef} className="w-full max-w-[200px]">
                   <QRCodeSVG
-                    value={`https://universityportal2026.web.app/results?student=${user?.uid}`}
+                    value={getResultsShareUrl(user?.uid || "")}
                     size={200}
                     level="H"
                     includeMargin={true}

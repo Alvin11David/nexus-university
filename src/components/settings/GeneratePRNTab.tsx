@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
+import { getPRNShareUrl } from "@/lib/config";
 import {
   Receipt,
   Copy,
