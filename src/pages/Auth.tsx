@@ -165,7 +165,7 @@ export default function Auth() {
       });
 
       toast({
-        title: "OTP Sent (Demo Mode)",
+        title: "OTP Sent",
         description: `Your verification code is: ${otp}`,
         duration: 10000,
       });
@@ -203,7 +203,7 @@ export default function Auth() {
       });
 
       toast({
-        title: "OTP Sent (Demo Mode)",
+        title: "OTP Sent",
         description: `Your verification code is: ${otp}`,
         duration: 10000,
       });
@@ -295,7 +295,7 @@ export default function Auth() {
 
       // Show OTP in toast for testing
       toast({
-        title: "OTP Sent (Demo Mode)",
+        title: "OTP Sent",
         description: `Your verification code is: ${otp}`,
         duration: 10000,
       });
@@ -1149,7 +1149,7 @@ export default function Auth() {
                 type="button"
                 onClick={() => {
                   toast({
-                    title: "OTP Resent (Demo Mode)",
+                    title: "OTP Resent",
                     description: `Your verification code is: ${generatedOtp}`,
                     duration: 10000,
                   });

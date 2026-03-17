@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, ReactNode } from "react";
 import { motion } from "framer-motion";
+import html2canvas from "html2canvas";
 import {
   BookOpen,
   CheckCircle2,
@@ -15,6 +16,7 @@ import {
   BookMarked,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { getEnrollmentShareUrl, generateQRCodeDataUrl } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -370,7 +372,7 @@ export function EnrollmentRegistrationTab() {
                     qrContainer.style.display = "none";
                     document.body.appendChild(qrContainer);
 
-                    const qrValue = `https://nexus-university.vercel.app/enrollment-verification?student=${user?.uid}&semester=1-2026`;
+                    const qrValue = getEnrollmentShareUrl(user?.uid || "");
 
                     const html = `
                       <html>
@@ -400,10 +402,7 @@ export function EnrollmentRegistrationTab() {
                         <body>
                           <div class="header">
                             <div class="qr-code">
-                              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="100%" height="100%">
-                                <rect width="200" height="200" fill="white"/>
-                                <text x="100" y="100" text-anchor="middle" dy=".3em" font-size="14">QR Code</text>
-                              </svg>
+                              <img src="${generateQRCodeDataUrl(qrValue, 120)}" alt="QR Code" style="width: 100%; height: 100%;" />
                               <div class="qr-label">Scan to verify</div>
                             </div>
                             <h1>PROOF OF ENROLLMENT AND REGISTRATION</h1>

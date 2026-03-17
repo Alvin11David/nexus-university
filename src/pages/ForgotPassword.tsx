@@ -85,7 +85,7 @@ export default function ForgotPassword() {
 
       // Show OTP in toast for testing
       toast({
-        title: "OTP Sent (Demo Mode)",
+        title: "OTP Sent",
         description: `Your verification code is: ${otp}`,
         duration: 10000,
       });
@@ -156,7 +156,7 @@ export default function ForgotPassword() {
     try {
       const { error } = await resetPassword(
         formData.identifier,
-        formData.password
+        formData.password,
       );
       if (error) throw error;
 
@@ -342,7 +342,7 @@ export default function ForgotPassword() {
                 type="button"
                 onClick={() => {
                   toast({
-                    title: "OTP Resent (Demo Mode)",
+                    title: "OTP Resent",
                     description: `Your verification code is: ${generatedOtp}`,
                     duration: 10000,
                   });
@@ -691,8 +691,8 @@ export default function ForgotPassword() {
                 {step === "identifier"
                   ? "Forgot your password?"
                   : step === "otp"
-                  ? "Verify your identity"
-                  : "Create new password"}
+                    ? "Verify your identity"
+                    : "Create new password"}
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0 }}
@@ -703,8 +703,8 @@ export default function ForgotPassword() {
                 {step === "identifier"
                   ? "Don't worry, we'll help you reset it"
                   : step === "otp"
-                  ? "Enter the code we sent you"
-                  : "Choose a strong password"}
+                    ? "Enter the code we sent you"
+                    : "Choose a strong password"}
               </motion.p>
             </div>
           )}

@@ -18,14 +18,34 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  serverTimestamp,
+  where,
+} from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface AttendanceRecord {
   id: string;
+  studentId: string;
+  courseId: string;
   studentName: string;
   courseCode: string;
   date: string;
-  status: "present" | "absent" | "late" | "excused";
+  status: "present" | "absent" | "late" | "excused" | "unmarked";
   remarks?: string;
+}
+
+interface CourseOption {
+  id: string;
+  code: string;
+  title: string;
 }
 
 const rise = {
@@ -40,81 +60,176 @@ const rise = {
 export default function LecturerAttendance() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const importInputRef = useRef<HTMLInputElement>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [savedRecords, setSavedRecords] = useState<AttendanceRecord[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState("CS101");
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState("");
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0],
   );
   const [searchStudent, setSearchStudent] = useState("");
-
-  // Mock data
-  const mockRecords: AttendanceRecord[] = [
-    {
-      id: "1",
-      studentName: "John Doe",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "present",
-    },
-    {
-      id: "2",
-      studentName: "Jane Smith",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "present",
-    },
-    {
-      id: "3",
-      studentName: "Mike Johnson",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "late",
-      remarks: "Traffic",
-    },
-    {
-      id: "4",
-      studentName: "Sarah Williams",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "absent",
-    },
-    {
-      id: "5",
-      studentName: "Alex Brown",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "excused",
-      remarks: "Medical",
-    },
-    {
-      id: "6",
-      studentName: "Emma Davis",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "present",
-    },
-    {
-      id: "7",
-      studentName: "Chris Miller",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "present",
-    },
-    {
-      id: "8",
-      studentName: "Lisa Wilson",
-      courseCode: "CS101",
-      date: "2025-01-03",
-      status: "absent",
-    },
-  ];
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setRecords(mockRecords);
-    setSavedRecords(mockRecords);
-  }, []);
+    if (!user?.uid) {
+      setCourses([]);
+      setRecords([]);
+      setSavedRecords([]);
+      setLoading(false);
+      return;
+    }
+
+    const loadCourses = async () => {
+      try {
+        setLoading(true);
+
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        const profileData = profileDoc.exists()
+          ? (profileDoc.data() as any)
+          : {};
+        let courseIds: string[] = (
+          profileData.assigned_course_units || []
+        ).filter(Boolean);
+
+        if (courseIds.length === 0) {
+          const fallbackCoursesQuery = query(
+            collection(db, "courses"),
+            where("lecturer_id", "==", user.uid),
+          );
+          const fallbackCoursesSnap = await getDocs(fallbackCoursesQuery);
+          const fallbackCourses = fallbackCoursesSnap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          })) as any[];
+
+          const mappedFallback = fallbackCourses.map((course) => ({
+            id: course.id,
+            code: course.code || "COURSE",
+            title: course.title || course.name || "Course",
+          }));
+
+          setCourses(mappedFallback);
+          setSelectedCourse((prev) => prev || mappedFallback[0]?.id || "");
+          return;
+        }
+
+        const resolvedCourses: CourseOption[] = [];
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const unitQuery = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
+          const unitSnap = await getDocs(unitQuery);
+          unitSnap.docs.forEach((docSnap) => {
+            const course = docSnap.data() as any;
+            resolvedCourses.push({
+              id: docSnap.id,
+              code: course.code || course.course_unit_code || "COURSE",
+              title: course.name || course.course_unit_name || "Course",
+            });
+          });
+        }
+
+        setCourses(resolvedCourses);
+        setSelectedCourse((prev) => prev || resolvedCourses[0]?.id || "");
+      } catch (error) {
+        console.error("Error loading attendance courses:", error);
+        setCourses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourses();
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!selectedCourse) {
+      setRecords([]);
+      setSavedRecords([]);
+      return;
+    }
+
+    const loadAttendance = async () => {
+      try {
+        setLoading(true);
+
+        const selectedCourseData = courses.find(
+          (course) => course.id === selectedCourse,
+        );
+        const enrollmentsQuery = query(
+          collection(db, "enrollments"),
+          where("course_id", "==", selectedCourse),
+        );
+        const enrollmentsSnap = await getDocs(enrollmentsQuery);
+        const studentIds = Array.from(
+          new Set(
+            enrollmentsSnap.docs
+              .map((docSnap) => docSnap.data().student_id)
+              .filter(Boolean),
+          ),
+        );
+
+        const profileMap = new Map<string, any>();
+        for (let i = 0; i < studentIds.length; i += 10) {
+          const chunk = studentIds.slice(i, i + 10);
+          const profilesQuery = query(
+            collection(db, "profiles"),
+            where("__name__", "in", chunk),
+          );
+          const profilesSnap = await getDocs(profilesQuery);
+          profilesSnap.docs.forEach((docSnap) =>
+            profileMap.set(docSnap.id, docSnap.data()),
+          );
+        }
+
+        const attendanceQuery = query(
+          collection(db, "attendance"),
+          where("course_id", "==", selectedCourse),
+          where("attendance_date", "==", selectedDate),
+        );
+        const attendanceSnap = await getDocs(attendanceQuery);
+        const attendanceMap = new Map<string, any>();
+        attendanceSnap.docs.forEach((docSnap) => {
+          const data = docSnap.data();
+          attendanceMap.set(data.student_id, { id: docSnap.id, ...data });
+        });
+
+        const mergedRecords: AttendanceRecord[] = studentIds
+          .map((studentId) => {
+            const existing = attendanceMap.get(studentId);
+            const profileData = profileMap.get(studentId) || {};
+            return {
+              id:
+                existing?.id ||
+                `${selectedCourse}_${studentId}_${selectedDate}`,
+              studentId,
+              courseId: selectedCourse,
+              studentName: profileData.full_name || "Unknown Student",
+              courseCode: selectedCourseData?.code || "COURSE",
+              date: selectedDate,
+              status: existing?.status || "unmarked",
+              remarks: existing?.remarks || undefined,
+            };
+          })
+          .sort((a, b) => a.studentName.localeCompare(b.studentName));
+
+        setRecords(mergedRecords);
+        setSavedRecords(mergedRecords);
+      } catch (error) {
+        console.error("Error loading attendance:", error);
+        setRecords([]);
+        setSavedRecords([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAttendance();
+  }, [courses, selectedCourse, selectedDate]);
 
   const handleExport = () => {
     const header = "Student Name,Course Code,Date,Status,Remarks";
@@ -144,10 +259,12 @@ export default function LecturerAttendance() {
         const cols = line.split(",").map((c) => c.replace(/^"|"$/g, ""));
         return {
           id: `import-${i}`,
+          studentId: `${selectedCourse}-${i}`,
+          courseId: selectedCourse,
           studentName: cols[0] || "",
           courseCode: cols[1] || selectedCourse,
           date: cols[2] || selectedDate,
-          status: (cols[3] as AttendanceRecord["status"]) || "present",
+          status: (cols[3] as AttendanceRecord["status"]) || "unmarked",
           remarks: cols[4] || undefined,
         };
       });
@@ -174,17 +291,49 @@ export default function LecturerAttendance() {
     toast({ title: "Cancelled", description: "Changes have been discarded." });
   };
 
-  const handleSaveAttendance = () => {
-    setSavedRecords(records);
-    toast({
-      title: "Attendance Saved",
-      description: `${filteredRecords.length} records saved for ${selectedCourse} on ${selectedDate}.`,
-    });
+  const handleSaveAttendance = async () => {
+    try {
+      await Promise.all(
+        filteredRecords
+          .filter((record) => record.status !== "unmarked")
+          .map((record) =>
+            setDoc(
+              doc(
+                db,
+                "attendance",
+                `${record.courseId}_${record.studentId}_${record.date}`,
+              ),
+              {
+                student_id: record.studentId,
+                course_id: record.courseId,
+                attendance_date: record.date,
+                status: record.status,
+                remarks: record.remarks || null,
+                updated_at: serverTimestamp(),
+              },
+              { merge: true },
+            ),
+          ),
+      );
+
+      setSavedRecords(records);
+      toast({
+        title: "Attendance Saved",
+        description: `${filteredRecords.length} records saved for ${selectedDate}.`,
+      });
+    } catch (error) {
+      console.error("Error saving attendance:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not save attendance records.",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredRecords = records.filter(
     (r) =>
-      r.courseCode === selectedCourse &&
+      r.courseId === selectedCourse &&
       r.date === selectedDate &&
       r.studentName.toLowerCase().includes(searchStudent.toLowerCase()),
   );
@@ -198,13 +347,14 @@ export default function LecturerAttendance() {
 
   const attendanceRate =
     Math.round(
-      ((stats.present + stats.late + stats.excused) / filteredRecords.length) *
+      ((stats.present + stats.late + stats.excused) /
+        Math.max(1, filteredRecords.length)) *
         100,
     ) || 0;
 
   const handleStatusChange = (
     id: string,
-    newStatus: "present" | "absent" | "late" | "excused",
+    newStatus: "present" | "absent" | "late" | "excused" | "unmarked",
   ) => {
     setRecords(
       records.map((r) => (r.id === id ? { ...r, status: newStatus } : r)),
@@ -221,6 +371,8 @@ export default function LecturerAttendance() {
         return "bg-amber-500/20 text-amber-700 border-amber-300/30";
       case "excused":
         return "bg-blue-500/20 text-blue-700 border-blue-300/30";
+      case "unmarked":
+        return "bg-muted/60 text-muted-foreground border-border/60";
       default:
         return "bg-muted/60";
     }
@@ -384,9 +536,15 @@ export default function LecturerAttendance() {
               onChange={(e) => setSelectedCourse(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border/60 bg-muted/50 focus:outline-none focus:ring-2 focus:ring-primary/50"
             >
-              <option value="CS101">CS101 - Algorithms</option>
-              <option value="CS201">CS201 - Systems Design</option>
-              <option value="CS301">CS301 - Data Mining</option>
+              {courses.length === 0 ? (
+                <option value="">No courses available</option>
+              ) : (
+                courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.code} - {course.title}
+                  </option>
+                ))
+              )}
             </select>
           </div>
           <div className="flex-1 min-w-64">
@@ -418,7 +576,7 @@ export default function LecturerAttendance() {
             <div className="space-y-2">
               {filteredRecords.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No records found
+                  {loading ? "Loading attendance..." : "No records found"}
                 </div>
               ) : (
                 filteredRecords.map((record, i) => (
@@ -441,23 +599,27 @@ export default function LecturerAttendance() {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      {(["present", "absent", "late", "excused"] as const).map(
-                        (status) => (
-                          <button
-                            key={status}
-                            onClick={() =>
-                              handleStatusChange(record.id, status)
-                            }
-                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-all border ${
-                              record.status === status
-                                ? getStatusColor(status)
-                                : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60"
-                            }`}
-                          >
-                            {status.charAt(0).toUpperCase() + status.slice(1)}
-                          </button>
-                        ),
-                      )}
+                      {(
+                        [
+                          "present",
+                          "absent",
+                          "late",
+                          "excused",
+                          "unmarked",
+                        ] as const
+                      ).map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => handleStatusChange(record.id, status)}
+                          className={`px-3 py-1 rounded-lg text-xs font-medium transition-all border ${
+                            record.status === status
+                              ? getStatusColor(status)
+                              : "bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60"
+                          }`}
+                        >
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </button>
+                      ))}
                     </div>
                   </motion.div>
                 ))

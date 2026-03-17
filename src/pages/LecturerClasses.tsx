@@ -20,13 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  getDocs,
-  addDoc,
-  query,
-  where,
-} from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
 import { db, storage } from "@/integrations/firebase/client";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
@@ -37,7 +31,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-
 
 interface ClassSession {
   id: string;
@@ -75,6 +68,7 @@ export default function LecturerClasses() {
   const { toast } = useToast();
   const { user, profile } = useAuth();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
   >("all");
@@ -360,7 +354,8 @@ export default function LecturerClasses() {
       console.error("Failed to create live session", error);
       toast({
         title: "Could not schedule class",
-        description: "Please try again. If the problem persists, contact support.",
+        description:
+          "Please try again. If the problem persists, contact support.",
         variant: "destructive",
       });
     } finally {
@@ -380,7 +375,7 @@ export default function LecturerClasses() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-            <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-lg">
                 <Video className="h-6 w-6 text-primary" />
@@ -562,7 +557,9 @@ export default function LecturerClasses() {
                               <div className="flex gap-2 mt-2 flex-wrap">
                                 <Badge variant="outline" className="text-xs">
                                   <Calendar className="h-3 w-3 mr-1 inline" />
-                                  {new Date(session.scheduledAt).toLocaleString()}
+                                  {new Date(
+                                    session.scheduledAt,
+                                  ).toLocaleString()}
                                 </Badge>
                                 <Badge variant="secondary" className="text-xs">
                                   <Users className="h-3 w-3 mr-1" />
@@ -646,7 +643,10 @@ export default function LecturerClasses() {
       </main>
 
       {/* New Live Session Dialog */}
-      <Dialog open={showNewSessionDialog} onOpenChange={setShowNewSessionDialog}>
+      <Dialog
+        open={showNewSessionDialog}
+        onOpenChange={setShowNewSessionDialog}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Schedule Google Meet Class</DialogTitle>
@@ -750,9 +750,7 @@ export default function LecturerClasses() {
               <Input
                 type="file"
                 accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*"
-                onChange={(e) =>
-                  setResourceFile(e.target.files?.[0] ?? null)
-                }
+                onChange={(e) => setResourceFile(e.target.files?.[0] ?? null)}
               />
               <p className="text-xs text-muted-foreground">
                 Attach slides, notes, or any document for this online class.

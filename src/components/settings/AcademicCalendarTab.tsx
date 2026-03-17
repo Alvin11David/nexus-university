@@ -81,178 +81,15 @@ interface Assignment {
   }>;
 }
 
-const academicEvents: CalendarEvent[] = [
-  {
-    id: "1",
-    title: "Semester 1 Begins",
-    date: "2026-01-05",
-    type: "academic",
-    important: true,
-  },
-  {
-    id: "2",
-    title: "Late Registration Deadline",
-    date: "2026-01-19",
-    type: "deadline",
-  },
-  {
-    id: "3",
-    title: "Course Add/Drop Period Ends",
-    date: "2026-01-26",
-    type: "deadline",
-  },
-  { id: "4", title: "Martyrs Day", date: "2026-06-03", type: "holiday" },
-  { id: "5", title: "Independence Day", date: "2026-10-09", type: "holiday" },
-  {
-    id: "6",
-    title: "Mid-Semester Examinations",
-    date: "2026-03-09",
-    endDate: "2026-03-20",
-    type: "exam",
-    important: true,
-  },
-  {
-    id: "7",
-    title: "Easter Break",
-    date: "2026-04-03",
-    endDate: "2026-04-06",
-    type: "holiday",
-  },
-  {
-    id: "8",
-    title: "End of Semester Examinations",
-    date: "2026-05-18",
-    endDate: "2026-06-05",
-    type: "exam",
-    important: true,
-  },
-  {
-    id: "9",
-    title: "Semester 1 Ends",
-    date: "2026-06-05",
-    type: "academic",
-    important: true,
-  },
-  {
-    id: "10",
-    title: "Semester Break",
-    date: "2026-06-06",
-    endDate: "2026-08-02",
-    type: "holiday",
-  },
-  {
-    id: "11",
-    title: "Semester 2 Begins",
-    date: "2026-08-03",
-    type: "academic",
-    important: true,
-  },
-  {
-    id: "12",
-    title: "Graduation Ceremony",
-    date: "2026-02-27",
-    type: "event",
-    important: true,
-  },
-];
-
-// Mock assignment data - kept for reference but not used; real data comes from Firestore
-/*
-const assignmentsData: Assignment[] = [
-  {
-    id: "asg-1",
-    title: "Binary Trees Implementation",
-    course: "Advanced Data Structures",
-    dueDate: "2026-01-08",
-    points: 30,
-    status: "pending",
-    type: "coding",
-    instructions:
-      "Implement a complete binary search tree with insert, delete, and search operations. Include AVL tree self-balancing. Submit your code with comprehensive comments.",
-    attachments: [
-      {
-        id: "att-1",
-        name: "BST_Template.java",
-        type: "doc",
-        url: "https://example.com/bst-template.java",
-        size: "12 KB",
-      },
-      {
-        id: "att-2",
-        name: "Assignment_Rubric.pdf",
-        type: "pdf",
-        url: "https://example.com/rubric.pdf",
-        size: "245 KB",
-      },
-    ],
-    submissions: [],
-  },
-  {
-    id: "asg-2",
-    title: "SQL Replication Lab",
-    course: "Database Systems & Cloud",
-    dueDate: "2026-01-09",
-    points: 25,
-    status: "pending",
-    type: "lab",
-    instructions:
-      "Set up master-slave replication in MySQL. Document the configuration steps and test failover scenarios.",
-    attachments: [
-      {
-        id: "att-3",
-        name: "Replication_Guide.pdf",
-        type: "pdf",
-        url: "https://example.com/replication-guide.pdf",
-        size: "567 KB",
-      },
-      {
-        id: "att-4",
-        name: "Lab_Sheet.docx",
-        type: "docx",
-        url: "https://example.com/lab-sheet.docx",
-        size: "134 KB",
-      },
-    ],
-    submissions: [
-      {
-        id: "sub-1",
-        date: "2026-01-08T14:30:00",
-        fileName: "SQL_Replication_Solution.zip",
-      },
-    ],
-  },
-  {
-    id: "asg-3",
-    title: "Design Review: Sprint 2",
-    course: "Software Engineering Studio",
-    dueDate: "2026-01-12",
-    points: 20,
-    status: "graded",
-    type: "presentation",
-    instructions:
-      "Present your design mockups and architecture decisions. Include wireframes, user flows, and technical architecture diagrams.",
-    attachments: [
-      {
-        id: "att-5",
-        name: "Design_Template.pptx",
-        type: "doc",
-        url: "https://example.com/design-template.pptx",
-        size: "8.2 MB",
-      },
-    ],
-    submissions: [
-      {
-        id: "sub-2",
-        date: "2026-01-12T10:00:00",
-        grade: 95,
-        feedback:
-          "Excellent presentation! The architecture is well-thought-out and scalable.",
-        fileName: "Sprint2_Design_Review.pdf",
-      },
-    ],
-  },
-];
-*/
+const normalizeEventType = (
+  category?: string | null,
+): CalendarEvent["type"] => {
+  const value = (category || "").toLowerCase();
+  if (["academic", "exam", "holiday", "deadline", "event"].includes(value)) {
+    return value as CalendarEvent["type"];
+  }
+  return "event";
+};
 
 const months = [
   "January",
@@ -291,6 +128,7 @@ export function AcademicCalendarTab() {
   const [dynamicAssignments, setDynamicAssignments] = useState<CalendarEvent[]>(
     [],
   );
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [firestoreAssignments, setFirestoreAssignments] = useState<
     Array<{
       id: string;
@@ -307,6 +145,37 @@ export function AcademicCalendarTab() {
     Map<string, string>
   >(new Map());
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchCalendarEvents = async () => {
+      try {
+        const eventsQ = query(
+          collection(db, "academic_calendar_events"),
+          orderBy("start_date", "asc"),
+          limit(200),
+        );
+        const eventsSnap = await getDocs(eventsQ);
+        const mappedEvents: CalendarEvent[] = eventsSnap.docs.map((docSnap) => {
+          const data = docSnap.data() as any;
+          return {
+            id: docSnap.id,
+            title: data.title || "Academic Event",
+            date: data.start_date || "",
+            endDate: data.end_date || undefined,
+            type: normalizeEventType(data.category),
+            description: data.description || "",
+            important: data.status === "current" || data.status === "open",
+          };
+        });
+        setCalendarEvents(mappedEvents);
+      } catch (error) {
+        console.error("Error loading academic calendar events:", error);
+        setCalendarEvents([]);
+      }
+    };
+
+    fetchCalendarEvents();
+  }, []);
 
   // Fetch assignments from Firestore and convert to calendar events
   useEffect(() => {
@@ -423,7 +292,7 @@ export function AcademicCalendarTab() {
     return () => unsub();
   }, [user]);
 
-  // Convert Firestore assignments to mock Assignment format for display
+  // Convert Firestore assignments to assignment-card format for display
   const displayAssignments: Assignment[] = firestoreAssignments.map((fAsg) => {
     const submissionStatus = submissionStatuses.get(fAsg.id) || "pending";
     return {
@@ -450,8 +319,8 @@ export function AcademicCalendarTab() {
     };
   });
 
-  // Combine static academic events with dynamic assignments
-  const allEvents = [...academicEvents, ...dynamicAssignments];
+  // Combine live calendar events with assignment due dates
+  const allEvents = [...calendarEvents, ...dynamicAssignments];
 
   const getEventTypeColor = (type: string) => {
     switch (type) {
