@@ -89,6 +89,36 @@ type DashboardAssignment = {
   rawStatus: string | null;
 };
 
+type DashboardClassroomCourse = {
+  id: string;
+  title: string;
+  code: string;
+  instructor: string;
+  room: string;
+  students: number;
+  banner: string;
+  joinCode: string;
+  meetLink: string;
+  progress: number;
+  unread: number;
+  isLive?: boolean;
+};
+
+type DashboardStreamItem = {
+  course: string;
+  message: string;
+  author: string;
+  time: string;
+  type: string;
+};
+
+type DashboardMeetSession = {
+  course: string;
+  starts: string;
+  link: string;
+  isLive: boolean;
+};
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const displayName = profile?.full_name || user?.displayName || "Student";
@@ -111,89 +141,20 @@ export default function Dashboard() {
   const [assignments, setAssignments] = useState<DashboardAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const [classroomCourses, setClassroomCourses] = useState<
+    DashboardClassroomCourse[]
+  >([]);
+  const [classroomStream, setClassroomStream] = useState<DashboardStreamItem[]>(
+    [],
+  );
+  const [meetSessions, setMeetSessions] = useState<DashboardMeetSession[]>([]);
 
-  const classroomCourses = [
-    {
-      id: "gclass-1",
-      title: "Advanced Data Structures",
-      code: "GCL-ADS-2026",
-      instructor: "Dr. Sarah Chen",
-      room: "Main Campus - Lab 4",
-      students: 156,
-      banner: "from-indigo-500 via-blue-500 to-cyan-400",
-      joinCode: "ads-26-x2z",
-      meetLink: "https://meet.google.com/ads-26-x2z",
-      progress: 72,
-      unread: 3,
-    },
-    {
-      id: "gclass-2",
-      title: "Database Systems & Cloud",
-      code: "GCL-DBS-2026",
-      instructor: "Prof. James Okonkwo",
-      room: "Innovation Hub",
-      students: 189,
-      banner: "from-emerald-500 via-teal-500 to-cyan-400",
-      joinCode: "dbs-26-r7m",
-      meetLink: "https://meet.google.com/dbs-26-r7m",
-      progress: 54,
-      unread: 1,
-      isLive: true,
-    },
-    {
-      id: "gclass-3",
-      title: "Software Engineering Studio",
-      code: "GCL-SE-2026",
-      instructor: "Dr. Emily Nakamura",
-      room: "SE Studio",
-      students: 120,
-      banner: "from-purple-500 via-fuchsia-500 to-pink-500",
-      joinCode: "se-26-wip",
-      meetLink: "https://meet.google.com/se-26-wip",
-      progress: 86,
-      unread: 0,
-    },
-  ];
-
-  const classroomStream = [
-    {
-      course: "Advanced Data Structures",
-      message: "Posted Lecture 5 slides + code samples on AVL Trees.",
-      author: "Dr. Sarah Chen",
-      time: "18m ago",
-      type: "material",
-    },
-    {
-      course: "Database Systems & Cloud",
-      message:
-        "Reminder: Live lab on replication + sharding starts at 10:00 AM (Meet).",
-      author: "Prof. James Okonkwo",
-      time: "1h ago",
-      type: "live",
-    },
-    {
-      course: "Software Engineering Studio",
-      message:
-        "Sprint 2 backlog is updated. Please check your tickets and story points.",
-      author: "Dr. Emily Nakamura",
-      time: "3h ago",
-      type: "announcement",
-    },
-  ];
-
-  const meetSessions = [
-    {
-      course: "Database Systems & Cloud",
-      starts: "Today · 10:00 AM",
-      link: "https://meet.google.com/dbs-26-r7m",
-      isLive: true,
-    },
-    {
-      course: "Advanced Data Structures",
-      starts: "Today · 2:00 PM",
-      link: "https://meet.google.com/ads-26-x2z",
-      isLive: false,
-    },
+  const bannerGradients = [
+    "from-indigo-500 via-blue-500 to-cyan-400",
+    "from-emerald-500 via-teal-500 to-cyan-400",
+    "from-amber-500 via-orange-500 to-rose-400",
+    "from-fuchsia-500 via-pink-500 to-rose-400",
+    "from-sky-500 via-blue-500 to-indigo-500",
   ];
 
   const formatDueDate = (date: string | null) => {
@@ -204,6 +165,34 @@ export default function Dashboard() {
     return parsed.toLocaleString("en-US", {
       month: "short",
       day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+
+  const formatRelativeTime = (value: any) => {
+    const rawDate = value?.toDate?.() ?? (value ? new Date(value) : null);
+    if (!(rawDate instanceof Date) || Number.isNaN(rawDate.getTime())) {
+      return "Recently";
+    }
+
+    const diffMs = Date.now() - rawDate.getTime();
+    const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    const diffHours = Math.round(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.round(diffHours / 24);
+    return `${diffDays}d ago`;
+  };
+
+  const formatSessionLabel = (value: any) => {
+    const rawDate = value?.toDate?.() ?? (value ? new Date(value) : null);
+    if (!(rawDate instanceof Date) || Number.isNaN(rawDate.getTime())) {
+      return "Scheduled";
+    }
+
+    return rawDate.toLocaleString("en-US", {
+      weekday: "short",
       hour: "numeric",
       minute: "2-digit",
     });
@@ -276,7 +265,7 @@ export default function Dashboard() {
           enrolled: enrolledCoursesCount,
           completed: completedCoursesCount,
           assignments: pendingAssignmentsCount,
-          liveMeets: meetSessions.filter((m) => m.isLive).length,
+          liveMeets: 0,
         });
       } catch (error) {
         console.error("Error loading dashboard stats", error);
@@ -286,6 +275,244 @@ export default function Dashboard() {
     };
 
     loadStats();
+  }, [user]);
+
+  useEffect(() => {
+    setStats((prev) => ({
+      ...prev,
+      liveMeets: meetSessions.filter((session) => session.isLive).length,
+    }));
+  }, [meetSessions]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let isActive = true;
+
+    const loadClassroomData = async () => {
+      try {
+        const enrollmentsQuery = query(
+          collection(db, "enrollments"),
+          where("student_id", "==", user.uid),
+        );
+        const enrollmentSnap = await getDocs(enrollmentsQuery);
+        const courseIds = Array.from(
+          new Set(
+            enrollmentSnap.docs
+              .map((docSnap) => docSnap.data().course_id)
+              .filter(Boolean),
+          ),
+        );
+
+        if (!courseIds.length) {
+          if (isActive) {
+            setClassroomCourses([]);
+            setClassroomStream([]);
+            setMeetSessions([]);
+          }
+          return;
+        }
+
+        const courseMap = new Map<string, any>();
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+
+          const unitSnap = await getDocs(
+            query(
+              collection(db, "course_units"),
+              where("__name__", "in", chunk),
+            ),
+          );
+          unitSnap.docs.forEach((docSnap) => {
+            courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+          });
+
+          const missingIds = chunk.filter((id) => !courseMap.has(id));
+          if (missingIds.length) {
+            const courseSnap = await getDocs(
+              query(
+                collection(db, "courses"),
+                where("__name__", "in", missingIds),
+              ),
+            );
+            courseSnap.docs.forEach((docSnap) => {
+              courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+            });
+          }
+        }
+
+        const lecturerIds = Array.from(
+          new Set(
+            Array.from(courseMap.values())
+              .map((course: any) => course.lecturer_id)
+              .filter(Boolean),
+          ),
+        );
+        const lecturerMap = new Map<string, string>();
+        for (let i = 0; i < lecturerIds.length; i += 10) {
+          const chunk = lecturerIds.slice(i, i + 10);
+          const profileSnap = await getDocs(
+            query(collection(db, "profiles"), where("__name__", "in", chunk)),
+          );
+          profileSnap.docs.forEach((docSnap) => {
+            lecturerMap.set(
+              docSnap.id,
+              (docSnap.data() as any).full_name || "Lecturer",
+            );
+          });
+        }
+
+        const studentCounts = new Map<string, number>();
+        const announcementCounts = new Map<string, number>();
+        const sessionDocs: any[] = [];
+        const announcementDocs: any[] = [];
+
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+
+          const classmatesSnap = await getDocs(
+            query(
+              collection(db, "classroom_enrollments"),
+              where("classroom_id", "in", chunk),
+            ),
+          );
+          classmatesSnap.docs.forEach((docSnap) => {
+            const classroomId = docSnap.data().classroom_id;
+            studentCounts.set(
+              classroomId,
+              (studentCounts.get(classroomId) || 0) + 1,
+            );
+          });
+
+          const announcementsSnap = await getDocs(
+            query(
+              collection(db, "announcements"),
+              where("course_id", "in", chunk),
+              limit(10),
+            ),
+          );
+          announcementsSnap.docs.forEach((docSnap) => {
+            const announcement = { id: docSnap.id, ...docSnap.data() } as any;
+            announcementDocs.push(announcement);
+            announcementCounts.set(
+              announcement.course_id,
+              (announcementCounts.get(announcement.course_id) || 0) + 1,
+            );
+          });
+
+          const sessionsSnap = await getDocs(
+            query(
+              collection(db, "google_classroom_sessions"),
+              where("classroom_id", "in", chunk),
+              limit(10),
+            ),
+          );
+          sessionsSnap.docs.forEach((docSnap) => {
+            sessionDocs.push({ id: docSnap.id, ...docSnap.data() });
+          });
+        }
+
+        const liveSessionMap = new Map<string, any>();
+        sessionDocs.forEach((session) => {
+          const existing = liveSessionMap.get(session.classroom_id);
+          if (
+            !existing ||
+            (session.status === "live" && existing.status !== "live")
+          ) {
+            liveSessionMap.set(session.classroom_id, session);
+          }
+        });
+
+        const nextCourses = courseIds.map((courseId, index) => {
+          const course = courseMap.get(courseId) || {};
+          const liveSession = liveSessionMap.get(courseId);
+          return {
+            id: courseId,
+            title: course.name || course.title || "Course",
+            code: course.code || course.course_unit_code || "COURSE",
+            instructor: lecturerMap.get(course.lecturer_id) || "Lecturer",
+            room:
+              course.room ||
+              course.location ||
+              (liveSession?.meeting_link ? "Online" : "TBA"),
+            students: studentCounts.get(courseId) || 0,
+            banner: bannerGradients[index % bannerGradients.length],
+            joinCode: course.class_code || course.join_code || "No code",
+            meetLink: liveSession?.meeting_link || course.meeting_link || "",
+            progress: Math.min(
+              100,
+              Math.max(
+                0,
+                Math.round((announcementCounts.get(courseId) || 0) * 20),
+              ),
+            ),
+            unread: announcementCounts.get(courseId) || 0,
+            isLive: liveSession?.status === "live",
+          };
+        });
+
+        const nextStream = announcementDocs
+          .sort((a, b) => {
+            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
+            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
+            return bTime - aTime;
+          })
+          .slice(0, 5)
+          .map((announcement) => {
+            const course = courseMap.get(announcement.course_id) || {};
+            return {
+              course: course.name || course.title || "Course",
+              message:
+                announcement.content ||
+                announcement.message ||
+                announcement.title ||
+                "New classroom update",
+              author:
+                announcement.author_name ||
+                lecturerMap.get(course.lecturer_id) ||
+                "Lecturer",
+              time: formatRelativeTime(announcement.created_at),
+              type: announcement.category || "announcement",
+            };
+          });
+
+        const nextMeetSessions = sessionDocs
+          .sort((a, b) => {
+            const aTime = a.start_time?.toDate?.()?.getTime?.() || 0;
+            const bTime = b.start_time?.toDate?.()?.getTime?.() || 0;
+            return aTime - bTime;
+          })
+          .slice(0, 5)
+          .map((session) => {
+            const course = courseMap.get(session.classroom_id) || {};
+            return {
+              course: course.name || course.title || "Course",
+              starts: formatSessionLabel(session.start_time),
+              link: session.meeting_link || "",
+              isLive: session.status === "live",
+            };
+          });
+
+        if (isActive) {
+          setClassroomCourses(nextCourses);
+          setClassroomStream(nextStream);
+          setMeetSessions(nextMeetSessions);
+        }
+      } catch (error) {
+        console.error("Error loading classroom data:", error);
+        if (isActive) {
+          setClassroomCourses([]);
+          setClassroomStream([]);
+          setMeetSessions([]);
+        }
+      }
+    };
+
+    loadClassroomData();
+
+    return () => {
+      isActive = false;
+    };
   }, [user]);
 
   useEffect(() => {
@@ -892,6 +1119,12 @@ export default function Dashboard() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
+              {classroomCourses.length === 0 && (
+                <div className="md:col-span-2 rounded-2xl border border-dashed border-border/60 bg-card/60 p-6 text-sm text-muted-foreground">
+                  You have not joined any classrooms yet.
+                </div>
+              )}
+
               {classroomCourses.map((course, i) => (
                 <motion.div
                   key={course.id}
@@ -971,6 +1204,7 @@ export default function Dashboard() {
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
                           className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none"
+                          disabled={!course.meetLink}
                           onClick={() => window.open(course.meetLink, "_blank")}
                         >
                           Join Meet
@@ -1081,6 +1315,12 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <div className="space-y-3">
+                  {classroomStream.length === 0 && (
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      No classroom posts yet.
+                    </p>
+                  )}
+
                   {classroomStream.map((post, i) => (
                     <motion.div
                       key={`${post.course}-${i}`}
@@ -1124,6 +1364,12 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
+                {meetSessions.length === 0 && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No upcoming sessions.
+                  </p>
+                )}
+
                 {meetSessions.map((meet, i) => (
                   <UpcomingCard
                     key={meet.course}
@@ -1148,6 +1394,12 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
+                {meetSessions.length === 0 && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No live or scheduled Meet sessions.
+                  </p>
+                )}
+
                 {meetSessions.map((session, i) => (
                   <motion.div
                     key={session.link}
@@ -1172,6 +1424,7 @@ export default function Dashboard() {
                       )}
                       <button
                         className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0"
+                        disabled={!session.link}
                         onClick={() => window.open(session.link, "_blank")}
                       >
                         <Play className="h-4 w-4" /> Join

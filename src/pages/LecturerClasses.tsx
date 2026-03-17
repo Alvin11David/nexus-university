@@ -17,6 +17,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 interface ClassSession {
   id: string;
@@ -42,71 +45,151 @@ const rise = {
 
 export default function LecturerClasses() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
   >("all");
 
-  // Mock data
-  const mockSessions: ClassSession[] = [
-    {
-      id: "1",
-      courseCode: "CS101",
-      courseName: "Algorithms",
-      title: "Introduction to Sorting Algorithms",
-      scheduledTime: "2025-01-03 10:30",
-      status: "ongoing",
-      meetingLink: "https://meet.google.com/abc-def-ghi",
-      attendees: 28,
-      duration: 45,
-    },
-    {
-      id: "2",
-      courseCode: "CS101",
-      courseName: "Algorithms",
-      title: "Dynamic Programming Workshop",
-      scheduledTime: "2025-01-05 14:00",
-      status: "scheduled",
-      meetingLink: "https://meet.google.com/jkl-mno-pqr",
-      attendees: 0,
-    },
-    {
-      id: "3",
-      courseCode: "CS201",
-      courseName: "Systems Design",
-      title: "Architecture Patterns Deep Dive",
-      scheduledTime: "2025-01-02 11:00",
-      status: "completed",
-      attendees: 31,
-      duration: 120,
-      recordingUrl: "https://drive.google.com/recording",
-    },
-    {
-      id: "4",
-      courseCode: "CS201",
-      courseName: "Systems Design",
-      title: "Scalability Techniques",
-      scheduledTime: "2025-01-04 09:00",
-      status: "scheduled",
-      meetingLink: "https://meet.google.com/stu-vwx-yz",
-      attendees: 0,
-    },
-    {
-      id: "5",
-      courseCode: "CS301",
-      courseName: "Data Mining",
-      title: "Machine Learning Models",
-      scheduledTime: "2025-01-01 15:30",
-      status: "completed",
-      attendees: 25,
-      duration: 90,
-      recordingUrl: "https://drive.google.com/recording",
-    },
-  ];
-
   useEffect(() => {
-    setSessions(mockSessions);
-  }, []);
+    if (!user?.uid) {
+      setSessions([]);
+      setLoadingSessions(false);
+      return;
+    }
+
+    const loadSessions = async () => {
+      try {
+        setLoadingSessions(true);
+
+        const sessionsQuery = query(
+          collection(db, "google_classroom_sessions"),
+          where("lecturer_id", "==", user.uid),
+        );
+        const sessionsSnapshot = await getDocs(sessionsQuery);
+        const rawSessions = sessionsSnapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data(),
+        })) as Array<Record<string, any>>;
+
+        if (rawSessions.length === 0) {
+          setSessions([]);
+          return;
+        }
+
+        const courseIds = Array.from(
+          new Set(
+            rawSessions.map((session) => session.course_id).filter(Boolean),
+          ),
+        );
+        const classroomIds = Array.from(
+          new Set(
+            rawSessions.map((session) => session.classroom_id).filter(Boolean),
+          ),
+        );
+
+        const courseMap = new Map<string, any>();
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const unitQuery = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
+          const unitSnap = await getDocs(unitQuery);
+          unitSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+
+          const missing = chunk.filter((id) => !courseMap.has(id));
+          if (missing.length > 0) {
+            const coursesQuery = query(
+              collection(db, "courses"),
+              where("__name__", "in", missing),
+            );
+            const courseSnap = await getDocs(coursesQuery);
+            courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+          }
+        }
+
+        const attendeeMap = new Map<string, number>();
+        for (let i = 0; i < classroomIds.length; i += 10) {
+          const chunk = classroomIds.slice(i, i + 10);
+          const enrollmentsQuery = query(
+            collection(db, "classroom_enrollments"),
+            where("classroom_id", "in", chunk),
+          );
+          const enrollmentSnap = await getDocs(enrollmentsQuery);
+          enrollmentSnap.docs.forEach((d) => {
+            const classroomId = d.data().classroom_id;
+            attendeeMap.set(
+              classroomId,
+              (attendeeMap.get(classroomId) || 0) + 1,
+            );
+          });
+        }
+
+        const mappedSessions: ClassSession[] = rawSessions
+          .map((session) => {
+            const course = courseMap.get(session.course_id);
+            const startTime = session.start_time
+              ? new Date(session.start_time)
+              : null;
+            const endTime = session.end_time
+              ? new Date(session.end_time)
+              : null;
+            const duration =
+              startTime && endTime
+                ? Math.max(
+                    0,
+                    Math.round(
+                      (endTime.getTime() - startTime.getTime()) / (1000 * 60),
+                    ),
+                  )
+                : undefined;
+
+            return {
+              id: session.id,
+              courseCode: course?.code || session.classroom_code || "CLASS",
+              courseName:
+                course?.name ||
+                course?.title ||
+                session.classroom_name ||
+                "Classroom Session",
+              title:
+                session.description ||
+                session.classroom_name ||
+                "Class Session",
+              scheduledTime: startTime
+                ? startTime.toLocaleString()
+                : session.created_at || "Unscheduled",
+              status:
+                session.status === "ongoing" ||
+                session.status === "completed" ||
+                session.status === "cancelled"
+                  ? session.status
+                  : "scheduled",
+              meetingLink: session.meeting_link || undefined,
+              attendees: attendeeMap.get(session.classroom_id) || 0,
+              duration,
+              recordingUrl: session.recording_link || undefined,
+            };
+          })
+          .sort(
+            (a, b) =>
+              new Date(b.scheduledTime).getTime() -
+              new Date(a.scheduledTime).getTime(),
+          );
+
+        setSessions(mappedSessions);
+      } catch (error) {
+        console.error("Error loading class sessions:", error);
+        setSessions([]);
+      } finally {
+        setLoadingSessions(false);
+      }
+    };
+
+    loadSessions();
+  }, [user?.uid]);
 
   const filteredSessions =
     filter === "all" ? sessions : sessions.filter((s) => s.status === filter);
@@ -167,7 +250,8 @@ export default function LecturerClasses() {
   const handleNewSession = () => {
     toast({
       title: "New Session",
-      description: "Session scheduling will be available in a future update.",
+      description:
+        "Create a session from your classroom tools once scheduling details are available.",
     });
   };
 
@@ -314,7 +398,16 @@ export default function LecturerClasses() {
 
         {/* Sessions Grid */}
         <div className="space-y-3">
-          {filteredSessions.length === 0 ? (
+          {loadingSessions ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12"
+            >
+              <Video className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3 animate-pulse" />
+              <p className="text-muted-foreground">Loading sessions...</p>
+            </motion.div>
+          ) : filteredSessions.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

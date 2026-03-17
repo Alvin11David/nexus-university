@@ -10,6 +10,8 @@ import {
   where,
   doc,
   getDoc,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
+import { useToast } from "@/hooks/use-toast";
 
 interface StudentMark {
   id: string;
@@ -73,6 +76,7 @@ const calculateSemesterRemark = (gp: number, grade: string): string => {
 
 export default function MarksManagement() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [students, setStudents] = useState<StudentMark[]>([]);
@@ -131,33 +135,47 @@ export default function MarksManagement() {
 
       const validProfiles = profiles.filter((p) => p !== null) as any[];
 
-      const marks =
-        validProfiles.map((p) => {
-          const cw = Math.round(Math.random() * 30 * 10) / 10;
-          const test = Math.round(Math.random() * 10 * 10) / 10;
-          const quiz = Math.round(Math.random() * 10 * 10) / 10;
-          const assign = Math.round(Math.random() * 20 * 10) / 10;
-          const mid = Math.round(Math.random() * 15 * 10) / 10;
-          const final = Math.round(Math.random() * 100 * 10) / 10;
-          const total =
-            Math.round((cw + test + quiz + assign + mid + final) * 10) / 10;
-          const { grade, gp } = calculateGrade(total);
+      const gradesRef = collection(db, "student_grades");
+      const gradesQuery = query(gradesRef, where("course_id", "==", course.id));
+      const gradesSnapshot = await getDocs(gradesQuery);
+      const gradesMap = new Map<string, any>();
+      gradesSnapshot.docs.forEach((gradeDoc) => {
+        const gradeData = gradeDoc.data();
+        gradesMap.set(gradeData.student_id, { id: gradeDoc.id, ...gradeData });
+      });
 
-          return {
-            id: p.id,
-            student_id: p.id,
-            student_name: p.full_name || "Unknown Student",
-            coursework: cw,
-            test,
-            quiz,
-            assignment: assign,
-            mid_exam: mid,
-            final_exam: final,
-            total,
-            grade,
-            gp,
-          };
-        }) || [];
+      const marks = validProfiles.map((p) => {
+        const existingGrade = gradesMap.get(p.id);
+        const coursework = Number(existingGrade?.assignment1 ?? 0);
+        const test = Number(existingGrade?.assignment2 ?? 0);
+        const quiz = Number(existingGrade?.participation ?? 0);
+        const assignment = Number(existingGrade?.coursework_extra ?? 0);
+        const mid_exam = Number(existingGrade?.midterm ?? 0);
+        const final_exam = Number(existingGrade?.final_exam ?? 0);
+        const total = Number(
+          existingGrade?.total ??
+            Math.round(
+              (coursework + test + quiz + assignment + mid_exam + final_exam) *
+                10,
+            ) / 10,
+        );
+        const computed = calculateGrade(total);
+
+        return {
+          id: p.id,
+          student_id: p.id,
+          student_name: p.full_name || "Unknown Student",
+          coursework,
+          test,
+          quiz,
+          assignment,
+          mid_exam,
+          final_exam,
+          total,
+          grade: existingGrade?.grade || computed.grade,
+          gp: Number(existingGrade?.gp ?? computed.gp),
+        };
+      });
 
       setStudents(
         marks.sort((a, b) => a.student_name.localeCompare(b.student_name)),
@@ -172,7 +190,9 @@ export default function MarksManagement() {
     setEditValues(student);
   };
 
-  const handleSave = (student: StudentMark) => {
+  const handleSave = async (student: StudentMark) => {
+    if (!selectedCourse || !user) return;
+
     const cw = editValues.coursework ?? student.coursework;
     const test = editValues.test ?? student.test;
     const quiz = editValues.quiz ?? student.quiz;
@@ -185,7 +205,7 @@ export default function MarksManagement() {
 
     const updated = {
       ...student,
-      cw,
+      coursework: cw,
       test,
       quiz,
       assignment: assign,
@@ -195,12 +215,61 @@ export default function MarksManagement() {
       grade,
       gp,
     };
-    setStudents(students.map((s) => (s.id === student.id ? updated : s)));
-    setEditing(null);
-    setEditValues({});
-    alert(
-      "Marks updated successfully! (Persistence requires database migration)",
-    );
+
+    try {
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const semester =
+        currentMonth >= 9 || currentMonth <= 2 ? "Fall" : "Spring";
+      const academicYear =
+        currentMonth >= 9
+          ? `${currentYear}-${currentYear + 1}`
+          : `${currentYear - 1}-${currentYear}`;
+
+      const gradeRef = doc(
+        db,
+        "student_grades",
+        `${student.student_id}_${selectedCourse.id}`,
+      );
+
+      await setDoc(
+        gradeRef,
+        {
+          student_id: student.student_id,
+          course_id: selectedCourse.id,
+          lecturer_id: user.uid,
+          assignment1: cw,
+          assignment2: test,
+          participation: quiz,
+          coursework_extra: assign,
+          midterm: mid,
+          final_exam: final,
+          total,
+          grade,
+          gp,
+          semester,
+          academic_year: academicYear,
+          updated_at: serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      setStudents(students.map((s) => (s.id === student.id ? updated : s)));
+      setEditing(null);
+      setEditValues({});
+      toast({
+        title: "Marks saved",
+        description: `${student.student_name}'s marks were updated successfully.`,
+      });
+    } catch (error) {
+      console.error("Error saving marks:", error);
+      toast({
+        title: "Save failed",
+        description: "Could not persist marks. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {

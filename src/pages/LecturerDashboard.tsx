@@ -43,6 +43,46 @@ import {
 } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
+type ScheduleItem = {
+  time: string;
+  title: string;
+  type: string;
+  room: string;
+  mode: string;
+};
+
+type GradingQueueItem = {
+  course: string;
+  items: number;
+  due: string;
+  progress: number;
+};
+
+type AnnouncementItem = {
+  title: string;
+  audience: string;
+  when: string;
+};
+
+type EngagementItem = {
+  label: string;
+  value: number;
+};
+
+type MessageItem = {
+  from: string;
+  text: string;
+  time: string;
+};
+
+type InsightItem = {
+  title: string;
+  value: string;
+  trend: string;
+  icon: any;
+  color: string;
+};
+
 const rise = {
   hidden: { opacity: 0, y: 16 },
   visible: (i: number) => ({
@@ -65,6 +105,12 @@ export default function LecturerDashboard() {
     submissions: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
+  const [gradingQueue, setGradingQueue] = useState<GradingQueueItem[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementItem[]>([]);
+  const [engagement, setEngagement] = useState<EngagementItem[]>([]);
+  const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [insights, setInsights] = useState<InsightItem[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -190,85 +236,351 @@ export default function LecturerDashboard() {
     [stats],
   );
 
-  const schedule = useMemo(
-    () => [
-      {
-        time: "08:30",
-        title: "Advanced Algorithms",
-        type: "Lecture",
-        room: "B2-201",
-        mode: "On Campus",
-      },
-      {
-        time: "11:00",
-        title: "Systems Design",
-        type: "Seminar",
-        room: "Online",
-        mode: "Live",
-      },
-      {
-        time: "14:00",
-        title: "Research Lab",
-        type: "Lab",
-        room: "Innovation Hub",
-        mode: "On Campus",
-      },
-    ],
-    [],
-  );
+  useEffect(() => {
+    if (!user?.uid) return;
 
-  const gradingQueue = useMemo(
-    () => [
-      { course: "Algorithms", items: 24, due: "Today", progress: 62 },
-      { course: "Systems Design", items: 10, due: "Tomorrow", progress: 40 },
-      { course: "Data Mining", items: 8, due: "In 2 days", progress: 80 },
-    ],
-    [],
-  );
+    const formatRelativeTime = (value: any) => {
+      const rawDate = value?.toDate?.() ?? (value ? new Date(value) : null);
+      if (!(rawDate instanceof Date) || Number.isNaN(rawDate.getTime())) {
+        return "Recently";
+      }
 
-  const announcements = useMemo(
-    () => [
-      { title: "Capstone checkpoints", audience: "Year 4", when: "In 30m" },
-      {
-        title: "Midterm rubrics posted",
-        audience: "All cohorts",
-        when: "2h ago",
-      },
-      {
-        title: "Guest lecture confirmed",
-        audience: "Year 3",
-        when: "Yesterday",
-      },
-    ],
-    [],
-  );
+      const diffMs = Date.now() - rawDate.getTime();
+      const diffMinutes = Math.max(1, Math.round(diffMs / 60000));
+      if (diffMinutes < 60) return `${diffMinutes}m ago`;
+      const diffHours = Math.round(diffMinutes / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.round(diffHours / 24);
+      return `${diffDays}d ago`;
+    };
 
-  const engagement = useMemo(
-    () => [
-      { label: "Attendance", value: 92 },
-      { label: "Assignments", value: 78 },
-      { label: "Live participation", value: 64 },
-      { label: "Feedback", value: 86 },
-    ],
-    [],
-  );
+    const formatDueLabel = (value: any) => {
+      const rawDate = value?.toDate?.() ?? (value ? new Date(value) : null);
+      if (!(rawDate instanceof Date) || Number.isNaN(rawDate.getTime())) {
+        return "No due date";
+      }
 
-  const messages = useMemo(
-    () => [
-      {
-        from: "Dept. Admin",
-        text: "Room change approved for Thursday.",
-        time: "08:15",
-      },
-      { from: "TA Sarah", text: "Graded 12 more submissions.", time: "07:50" },
-      {
-        from: "Student Council",
-        text: "Can we extend Q&A by 10 mins?",
-        time: "Yesterday",
-      },
-    ],
-    [],
-  );
+      const now = new Date();
+      const diffDays = Math.round(
+        (rawDate.setHours(0, 0, 0, 0) - now.setHours(0, 0, 0, 0)) / 86400000,
+      );
+      if (diffDays <= 0) return "Today";
+      if (diffDays === 1) return "Tomorrow";
+      return `In ${diffDays} days`;
+    };
+
+    const loadWidgets = async () => {
+      try {
+        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
+        const profileData = profileDoc.exists()
+          ? (profileDoc.data() as any)
+          : {};
+
+        let courseIds: string[] = (
+          profileData.assigned_course_units || []
+        ).filter(Boolean);
+        if (courseIds.length === 0) {
+          const courseSnap = await getDocs(
+            query(
+              collection(db, "courses"),
+              where("lecturer_id", "==", user.uid),
+            ),
+          );
+          courseIds = courseSnap.docs.map((docSnap) => docSnap.id);
+        }
+
+        courseIds = Array.from(new Set(courseIds));
+
+        const courseMap = new Map<string, any>();
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const unitSnap = await getDocs(
+            query(
+              collection(db, "course_units"),
+              where("__name__", "in", chunk),
+            ),
+          );
+          unitSnap.docs.forEach((docSnap) => {
+            courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+          });
+
+          const missingIds = chunk.filter((id) => !courseMap.has(id));
+          if (missingIds.length) {
+            const courseSnap = await getDocs(
+              query(
+                collection(db, "courses"),
+                where("__name__", "in", missingIds),
+              ),
+            );
+            courseSnap.docs.forEach((docSnap) => {
+              courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+            });
+          }
+        }
+
+        const sessions: any[] = [];
+        const announcementDocs: any[] = [];
+        const submissionsByCourse = new Map<
+          string,
+          { total: number; graded: number; due?: any }
+        >();
+        let attendanceTotals = { present: 0, total: 0 };
+
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+
+          const sessionsSnap = await getDocs(
+            query(
+              collection(db, "google_classroom_sessions"),
+              where("classroom_id", "in", chunk),
+              limit(10),
+            ),
+          );
+          sessionsSnap.docs.forEach((docSnap) =>
+            sessions.push({ id: docSnap.id, ...docSnap.data() }),
+          );
+
+          const announcementsSnap = await getDocs(
+            query(
+              collection(db, "announcements"),
+              where("course_id", "in", chunk),
+              limit(10),
+            ),
+          );
+          announcementsSnap.docs.forEach((docSnap) => {
+            announcementDocs.push({ id: docSnap.id, ...docSnap.data() });
+          });
+
+          const attendanceSnap = await getDocs(
+            query(
+              collection(db, "attendance"),
+              where("course_id", "in", chunk),
+              limit(50),
+            ),
+          );
+          attendanceSnap.docs.forEach((docSnap) => {
+            const attendance = docSnap.data() as any;
+            attendanceTotals.total += 1;
+            if (["present", "late", "excused"].includes(attendance.status)) {
+              attendanceTotals.present += 1;
+            }
+          });
+
+          const assignmentsSnap = await getDocs(
+            query(
+              collection(db, "Assignments"),
+              where("course_id", "in", chunk),
+              limit(25),
+            ),
+          );
+          const assignmentDocs = assignmentsSnap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          })) as any[];
+
+          for (let j = 0; j < assignmentDocs.length; j += 10) {
+            const assignmentChunk = assignmentDocs.slice(j, j + 10);
+            const submissionSnap = await getDocs(
+              query(
+                collection(db, "submissions"),
+                where(
+                  "assignment_id",
+                  "in",
+                  assignmentChunk.map((assignment) => assignment.id),
+                ),
+              ),
+            );
+
+            submissionSnap.docs.forEach((docSnap) => {
+              const submission = docSnap.data() as any;
+              const assignment = assignmentChunk.find(
+                (item) => item.id === submission.assignment_id,
+              );
+              if (!assignment?.course_id) return;
+              const current = submissionsByCourse.get(assignment.course_id) || {
+                total: 0,
+                graded: 0,
+                due: assignment.due_date,
+              };
+              current.total += 1;
+              if (
+                submission.grade != null ||
+                submission.score != null ||
+                submission.status === "graded"
+              ) {
+                current.graded += 1;
+              }
+              current.due = assignment.due_date || current.due;
+              submissionsByCourse.set(assignment.course_id, current);
+            });
+          }
+        }
+
+        const nextSchedule = sessions
+          .sort((a, b) => {
+            const aTime = a.start_time?.toDate?.()?.getTime?.() || 0;
+            const bTime = b.start_time?.toDate?.()?.getTime?.() || 0;
+            return aTime - bTime;
+          })
+          .slice(0, 5)
+          .map((session) => {
+            const course = courseMap.get(session.classroom_id) || {};
+            const startDate = session.start_time?.toDate?.() || null;
+            return {
+              time: startDate
+                ? startDate.toLocaleTimeString("en-US", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })
+                : "TBA",
+              title:
+                course.name || course.title || session.title || "Class Session",
+              type: session.title || session.session_type || "Session",
+              room: session.meeting_link
+                ? "Online"
+                : course.room || course.location || "TBA",
+              mode: session.status === "live" ? "Live" : "Scheduled",
+            };
+          });
+
+        const nextGradingQueue = Array.from(submissionsByCourse.entries())
+          .map(([courseId, value]) => {
+            const course = courseMap.get(courseId) || {};
+            const progress = value.total
+              ? Math.round((value.graded / value.total) * 100)
+              : 0;
+            return {
+              course: course.name || course.title || "Course",
+              items: Math.max(0, value.total - value.graded),
+              due: formatDueLabel(value.due),
+              progress,
+            };
+          })
+          .filter((item) => item.items > 0)
+          .sort((a, b) => b.items - a.items)
+          .slice(0, 5);
+
+        const nextAnnouncements = announcementDocs
+          .sort((a, b) => {
+            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
+            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
+            return bTime - aTime;
+          })
+          .slice(0, 5)
+          .map((announcement) => {
+            const course = courseMap.get(announcement.course_id) || {};
+            return {
+              title:
+                announcement.title || announcement.content || "Announcement",
+              audience: course.name || course.title || "Course cohort",
+              when: formatRelativeTime(announcement.created_at),
+            };
+          });
+
+        const attendanceRate = attendanceTotals.total
+          ? Math.round(
+              (attendanceTotals.present / attendanceTotals.total) * 100,
+            )
+          : 0;
+        const assignmentRate = nextGradingQueue.length
+          ? Math.max(
+              0,
+              100 -
+                Math.round(
+                  nextGradingQueue.reduce((sum, item) => sum + item.items, 0) /
+                    nextGradingQueue.length,
+                ),
+            )
+          : 0;
+        const liveRate = nextSchedule.length
+          ? Math.round(
+              (nextSchedule.filter((item) => item.mode === "Live").length /
+                nextSchedule.length) *
+                100,
+            )
+          : 0;
+        const announcementRate = nextAnnouncements.length
+          ? Math.min(100, nextAnnouncements.length * 20)
+          : 0;
+
+        const nextEngagement = [
+          { label: "Attendance", value: attendanceRate },
+          { label: "Assignments", value: assignmentRate },
+          { label: "Live participation", value: liveRate },
+          { label: "Announcements", value: announcementRate },
+        ];
+
+        const messageSnap = await getDocs(
+          query(
+            collection(db, "messages"),
+            where("receiver_id", "==", user.uid),
+            limit(5),
+          ),
+        );
+        const nextMessages = messageSnap.docs
+          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as any)
+          .sort((a, b) => {
+            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
+            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
+            return bTime - aTime;
+          })
+          .map((message) => ({
+            from: message.sender_name || message.from_name || "Message",
+            text: message.content || message.text || "New message received",
+            time: formatRelativeTime(message.created_at),
+          }));
+
+        const nextInsights = [
+          {
+            title: "Attendance stability",
+            value: `${attendanceRate}%`,
+            trend: `${attendanceRate >= 70 ? "+" : ""}${attendanceRate}% current`,
+            icon: Users,
+            color: "emerald",
+          },
+          {
+            title: "Assignment on-time",
+            value: `${assignmentRate}%`,
+            trend: `${nextGradingQueue.length} active queues`,
+            icon: CheckCircle2,
+            color: "blue",
+          },
+          {
+            title: "Live join rate",
+            value: `${liveRate}%`,
+            trend: `${nextSchedule.filter((item) => item.mode === "Live").length} live sessions`,
+            icon: PlayCircle,
+            color: "cyan",
+          },
+          {
+            title: "Feedback response",
+            value: `${announcementRate}%`,
+            trend: `${nextAnnouncements.length} recent posts`,
+            icon: MessageCircle,
+            color: "pink",
+          },
+        ];
+
+        setSchedule(nextSchedule);
+        setGradingQueue(nextGradingQueue);
+        setAnnouncements(nextAnnouncements);
+        setEngagement(nextEngagement);
+        setMessages(nextMessages);
+        setInsights(nextInsights);
+      } catch (error) {
+        console.error("Error loading lecturer dashboard widgets:", error);
+        setSchedule([]);
+        setGradingQueue([]);
+        setAnnouncements([]);
+        setEngagement([]);
+        setMessages([]);
+        setInsights([]);
+      }
+    };
+
+    loadWidgets();
+  }, [user?.uid]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 text-foreground">
@@ -418,6 +730,12 @@ export default function LecturerDashboard() {
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {schedule.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No sessions scheduled yet.
+                    </p>
+                  )}
+
                   {schedule.map((item, idx) => (
                     <motion.div
                       key={item.time}
@@ -468,6 +786,12 @@ export default function LecturerDashboard() {
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {gradingQueue.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No submissions waiting for grading.
+                    </p>
+                  )}
+
                   {gradingQueue.map((item, idx) => (
                     <motion.div
                       key={item.course}
@@ -535,6 +859,12 @@ export default function LecturerDashboard() {
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {announcements.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No announcements posted yet.
+                    </p>
+                  )}
+
                   {announcements.map((item, idx) => (
                     <motion.div
                       key={item.title}
@@ -574,6 +904,13 @@ export default function LecturerDashboard() {
                   </motion.div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {engagement.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Engagement metrics will appear when attendance and
+                      submissions are recorded.
+                    </p>
+                  )}
+
                   {engagement.map((item, idx) => (
                     <motion.div
                       key={item.label}
@@ -633,36 +970,14 @@ export default function LecturerDashboard() {
                   </Badge>
                 </CardHeader>
                 <CardContent className="grid gap-3 sm:grid-cols-2">
-                  {[
-                    {
-                      title: "Attendance stability",
-                      value: "92%",
-                      trend: "+3% week",
-                      icon: Users,
-                      color: "emerald",
-                    },
-                    {
-                      title: "Assignment on-time",
-                      value: "78%",
-                      trend: "-2% week",
-                      icon: CheckCircle2,
-                      color: "blue",
-                    },
-                    {
-                      title: "Live join rate",
-                      value: "64%",
-                      trend: "+5% week",
-                      icon: PlayCircle,
-                      color: "cyan",
-                    },
-                    {
-                      title: "Feedback response",
-                      value: "86%",
-                      trend: "+1% week",
-                      icon: MessageCircle,
-                      color: "pink",
-                    },
-                  ].map((item, idx) => (
+                  {insights.length === 0 && (
+                    <p className="text-sm text-muted-foreground sm:col-span-2">
+                      Cohort insights will appear once course activity is
+                      recorded.
+                    </p>
+                  )}
+
+                  {insights.map((item, idx) => (
                     <motion.div
                       key={item.title}
                       initial={{ opacity: 0, y: 10 }}
@@ -719,6 +1034,12 @@ export default function LecturerDashboard() {
                   </Badge>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  {messages.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No recent messages.
+                    </p>
+                  )}
+
                   {messages.map((item, idx) => (
                     <motion.div
                       key={item.text}
