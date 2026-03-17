@@ -134,6 +134,22 @@ export function BioDataTab() {
     { icon: GraduationCap, label: "College", key: "college", editable: true },
   ];
 
+  const getLastUpdatedLabel = () => {
+    const updatedRaw = (profile as any)?.updated_at;
+    if (!updatedRaw) return "Recently";
+
+    const updatedDate =
+      typeof updatedRaw?.toDate === "function"
+        ? updatedRaw.toDate()
+        : new Date(updatedRaw);
+
+    if (!(updatedDate instanceof Date) || Number.isNaN(updatedDate.getTime())) {
+      return "Recently";
+    }
+
+    return formatDistanceToNow(updatedDate, { addSuffix: true });
+  };
+
   return (
     <div className="space-y-6">
       {/* Profile Header */}
@@ -286,11 +302,7 @@ export function BioDataTab() {
                   { label: "Member Since", value: "Active" },
                   {
                     label: "Last Updated",
-                    value: profile?.updated_at
-                      ? formatDistanceToNow(new Date(profile.updated_at), {
-                        addSuffix: true,
-                      })
-                      : "Recently",
+                    value: getLastUpdatedLabel(),
                   },
                   { label: "Profile Status", value: "Complete" },
                   { label: "Account Type", value: "Student" },
