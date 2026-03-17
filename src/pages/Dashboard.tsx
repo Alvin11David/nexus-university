@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -19,6 +19,7 @@ import {
   MessageCircle,
   Sparkles,
   X,
+  AlarmClock,
 } from "lucide-react";
 import {
   Dialog,
@@ -89,6 +90,27 @@ type DashboardAssignment = {
   rawStatus: string | null;
 };
 
+interface LiveSession {
+  id: string;
+  title: string;
+  courseName?: string | null;
+  scheduledAt: string;
+  durationMinutes?: number | null;
+  meetLink?: string | null;
+  isLive: boolean;
+}
+
+interface DashboardQuiz {
+  id: string;
+  title: string;
+  courseTitle?: string | null;
+  courseCode?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  isLive: boolean;
+  isScheduled: boolean;
+}
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const displayName = profile?.full_name || user?.displayName || "Student";
@@ -111,90 +133,13 @@ export default function Dashboard() {
   const [assignments, setAssignments] = useState<DashboardAssignment[]>([]);
   const [assignmentsLoading, setAssignmentsLoading] = useState(true);
   const [assignmentsError, setAssignmentsError] = useState<string | null>(null);
+  const [liveSessions, setLiveSessions] = useState<LiveSession[]>([]);
+  const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
+  const [upcomingQuizzes, setUpcomingQuizzes] = useState<DashboardQuiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(true);
 
-  const classroomCourses = [
-    {
-      id: "gclass-1",
-      title: "Advanced Data Structures",
-      code: "GCL-ADS-2026",
-      instructor: "Dr. Sarah Chen",
-      room: "Main Campus - Lab 4",
-      students: 156,
-      banner: "from-indigo-500 via-blue-500 to-cyan-400",
-      joinCode: "ads-26-x2z",
-      meetLink: "https://meet.google.com/ads-26-x2z",
-      progress: 72,
-      unread: 3,
-    },
-    {
-      id: "gclass-2",
-      title: "Database Systems & Cloud",
-      code: "GCL-DBS-2026",
-      instructor: "Prof. James Okonkwo",
-      room: "Innovation Hub",
-      students: 189,
-      banner: "from-emerald-500 via-teal-500 to-cyan-400",
-      joinCode: "dbs-26-r7m",
-      meetLink: "https://meet.google.com/dbs-26-r7m",
-      progress: 54,
-      unread: 1,
-      isLive: true,
-    },
-    {
-      id: "gclass-3",
-      title: "Software Engineering Studio",
-      code: "GCL-SE-2026",
-      instructor: "Dr. Emily Nakamura",
-      room: "SE Studio",
-      students: 120,
-      banner: "from-purple-500 via-fuchsia-500 to-pink-500",
-      joinCode: "se-26-wip",
-      meetLink: "https://meet.google.com/se-26-wip",
-      progress: 86,
-      unread: 0,
-    },
-  ];
-
-  const classroomStream = [
-    {
-      course: "Advanced Data Structures",
-      message: "Posted Lecture 5 slides + code samples on AVL Trees.",
-      author: "Dr. Sarah Chen",
-      time: "18m ago",
-      type: "material",
-    },
-    {
-      course: "Database Systems & Cloud",
-      message:
-        "Reminder: Live lab on replication + sharding starts at 10:00 AM (Meet).",
-      author: "Prof. James Okonkwo",
-      time: "1h ago",
-      type: "live",
-    },
-    {
-      course: "Software Engineering Studio",
-      message:
-        "Sprint 2 backlog is updated. Please check your tickets and story points.",
-      author: "Dr. Emily Nakamura",
-      time: "3h ago",
-      type: "announcement",
-    },
-  ];
-
-  const meetSessions = [
-    {
-      course: "Database Systems & Cloud",
-      starts: "Today · 10:00 AM",
-      link: "https://meet.google.com/dbs-26-r7m",
-      isLive: true,
-    },
-    {
-      course: "Advanced Data Structures",
-      starts: "Today · 2:00 PM",
-      link: "https://meet.google.com/ads-26-x2z",
-      isLive: false,
-    },
-  ];
+  const classroomCourses: any[] = [];
+  const classroomStream: any[] = [];
 
   const formatDueDate = (date: string | null) => {
     if (!date) return "No due date";
@@ -272,12 +217,12 @@ export default function Dashboard() {
           }).length;
         }
 
-        setStats({
+        setStats((prev) => ({
+          ...prev,
           enrolled: enrolledCoursesCount,
           completed: completedCoursesCount,
           assignments: pendingAssignmentsCount,
-          liveMeets: meetSessions.filter((m) => m.isLive).length,
-        });
+        }));
       } catch (error) {
         console.error("Error loading dashboard stats", error);
       } finally {
@@ -286,6 +231,205 @@ export default function Dashboard() {
     };
 
     loadStats();
+  }, [user]);
+
+  useEffect(() => {
+    const loadLiveSessions = async () => {
+      if (!user) {
+        setLiveSessions([]);
+        setStats((prev) => ({ ...prev, liveMeets: 0 }));
+        return;
+      }
+
+      try {
+        setLiveSessionsLoading(true);
+
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setLiveSessions([]);
+          setStats((prev) => ({ ...prev, liveMeets: 0 }));
+          return;
+        }
+
+        // 2. Fetch live sessions only for enrolled courses (chunked for Firestore 'in' limit)
+        const sessions: LiveSession[] = [];
+        const sessionsRef = collection(db, "live_sessions");
+        const now = new Date();
+
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qSessions = query(sessionsRef, where("course_id", "in", chunk));
+          const snapshot = await getDocs(qSessions);
+
+          snapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            const scheduledAt: string = data.scheduled_at;
+            if (!scheduledAt) return;
+            const start = new Date(scheduledAt);
+            if (Number.isNaN(start.getTime())) return;
+
+            const duration = data.duration_minutes ?? 60;
+            const end = new Date(start.getTime() + duration * 60000);
+            const isLive = now >= start && now <= end;
+
+            sessions.push({
+              id: d.id,
+              title: data.title || "Online Class",
+              courseName: data.course_name || null,
+              scheduledAt,
+              durationMinutes: data.duration_minutes ?? null,
+              meetLink: data.meet_link || null,
+              isLive,
+            });
+          });
+        }
+
+        sessions.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+        setLiveSessions(sessions);
+
+        const liveCount = sessions.filter((s) => s.isLive).length;
+        setStats((prev) => ({
+          ...prev,
+          liveMeets: liveCount,
+        }));
+      } catch (error) {
+        console.error("Error loading live sessions", error);
+      } finally {
+        setLiveSessionsLoading(false);
+      }
+    };
+
+    loadLiveSessions();
+  }, [user]);
+
+  const activeMeetsCount = useMemo(
+    () => liveSessions.filter((s) => s.isLive).length,
+    [liveSessions],
+  );
+
+  const formattedLiveSessions = useMemo(
+    () =>
+      liveSessions.map((session) => {
+        const start = new Date(session.scheduledAt);
+        const now = new Date();
+        const isToday = start.toDateString() === now.toDateString();
+
+        const timeLabel = start.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        });
+
+        const dayLabel = isToday
+          ? "Today"
+          : start.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            });
+
+        return {
+          ...session,
+          displayTime: `${dayLabel} · ${timeLabel}`,
+          displayDay: session.isLive ? "Live" : dayLabel,
+        };
+      }),
+    [liveSessions],
+  );
+
+  useEffect(() => {
+    const loadQuizzes = async () => {
+      if (!user) {
+        setUpcomingQuizzes([]);
+        return;
+      }
+
+      try {
+        setQuizzesLoading(true);
+
+        // 1. Fetch student's enrolled course IDs
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setUpcomingQuizzes([]);
+          return;
+        }
+
+        // 2. Fetch quizzes for those courses
+        const quizzes: DashboardQuiz[] = [];
+        const quizzesRef = collection(db, "quizzes");
+        const now = new Date();
+
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qQuizzes = query(
+            quizzesRef,
+            where("course_id", "in", chunk),
+            where("status", "==", "active"),
+          );
+          const quizSnapshot = await getDocs(qQuizzes);
+
+          quizSnapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            const startRaw = data.start_date ?? null;
+            const endRaw = data.end_date ?? null;
+
+            const start = startRaw ? new Date(startRaw) : null;
+            const end = endRaw ? new Date(endRaw) : null;
+
+            const isLive =
+              (!!start ? now >= start : true) && (!!end ? now <= end : true);
+            const isScheduled = !!start && now < start;
+
+            // Hide quizzes that have fully closed
+            if (end && now > end) return;
+
+            quizzes.push({
+              id: d.id,
+              title: data.title || "Quiz",
+              courseTitle: data.course_title || null,
+              courseCode: data.course_code || null,
+              startDate: startRaw,
+              endDate: endRaw,
+              isLive,
+              isScheduled,
+            });
+          });
+        }
+
+        quizzes.sort((a, b) => {
+          const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
+          const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
+          return aTime - bTime;
+        });
+
+        setUpcomingQuizzes(quizzes);
+      } catch (error) {
+        console.error("Error loading upcoming quizzes", error);
+      } finally {
+        setQuizzesLoading(false);
+      }
+    };
+
+    loadQuizzes();
   }, [user]);
 
   useEffect(() => {
@@ -671,7 +815,10 @@ export default function Dashboard() {
               </p>
               <div className="flex items-center gap-2 text-xs sm:text-sm">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="font-semibold">2 active Meets</span>
+                <span className="font-semibold">
+                  {activeMeetsCount} active Meet
+                  {activeMeetsCount === 1 ? "" : "s"}
+                </span>
               </div>
             </div>
           </div>
@@ -702,7 +849,7 @@ export default function Dashboard() {
           />
           <StatCard
             title="Live Meets"
-            value={loadingStats ? "…" : stats.liveMeets.toString()}
+            value={loadingStats && liveSessionsLoading ? "…" : stats.liveMeets.toString()}
             subtitle="Happening now"
             icon={Video}
             delay={0.4}
@@ -847,7 +994,7 @@ export default function Dashboard() {
         <div className="grid xl:grid-cols-3 gap-6">
           {/* Classrooms & Assignments */}
           <div className="xl:col-span-2 space-y-6">
-            {/* Google Classrooms */}
+            {/* Google Classrooms (placeholder, can be wired to real data later) */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-2">
                 <Users className="h-5 w-5 text-secondary" />
@@ -865,31 +1012,36 @@ export default function Dashboard() {
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
-              {classroomCourses.map((course, i) => (
+              {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                <div className="col-span-full text-xs sm:text-sm text-muted-foreground">
+                  When your lecturers schedule Google Meet classes, they will
+                  appear here with join links.
+                </div>
+              )}
+
+              {formattedLiveSessions.map((session, i) => (
                 <motion.div
-                  key={course.id}
+                  key={session.id}
                   initial={{ opacity: 0, y: 15 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
                   className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg shadow-lg"
                 >
-                  <div
-                    className={`h-20 sm:h-24 w-full bg-gradient-to-r ${course.banner} opacity-90`}
-                  />
+                  <div className="h-20 sm:h-24 w-full bg-gradient-to-r from-indigo-500 via-blue-500 to-cyan-400 opacity-90" />
                   <div className="p-4 sm:p-5 space-y-3 -mt-8 sm:-mt-10 relative">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs text-muted-foreground">
-                          {course.code}
+                          {session.courseName || "Online Class"}
                         </p>
                         <h3 className="font-semibold text-base sm:text-lg">
-                          {course.title}
+                          {session.title}
                         </h3>
                         <p className="text-[11px] sm:text-xs text-muted-foreground">
-                          {course.instructor} · {course.room}
+                          {session.displayTime}
                         </p>
                       </div>
-                      {course.isLive && (
+                      {session.isLive && (
                         <span className="px-3 py-1 rounded-full text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <span className="h-1.5 w-1.5 bg-destructive rounded-full animate-pulse" />{" "}
                           Live
@@ -901,31 +1053,16 @@ export default function Dashboard() {
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.students} students
+                          Join from any device
                         </span>
-                        <span className="sm:hidden">{course.students}</span>
+                        <span className="sm:hidden">Online</span>
                       </div>
                       <div className="flex items-center gap-1 text-muted-foreground">
                         <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">
-                          {course.unread} new posts
+                          Live participation
                         </span>
-                        <span className="sm:hidden">{course.unread}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-primary/5 border border-primary/10 flex items-center gap-1 sm:gap-2">
-                        <Link className="h-3 w-3 sm:h-4 sm:w-4 text-primary flex-shrink-0" />
-                        <span className="truncate text-[9px] sm:text-xs">
-                          {course.meetLink}
-                        </span>
-                      </div>
-                      <div className="p-2 sm:p-3 rounded-lg sm:rounded-xl bg-secondary/5 border border-secondary/10 flex items-center gap-1 sm:gap-2">
-                        <Clipboard className="h-3 w-3 sm:h-4 sm:w-4 text-secondary flex-shrink-0" />
-                        <span className="font-semibold truncate text-[9px] sm:text-xs">
-                          {course.joinCode}
-                        </span>
+                        <span className="sm:hidden">Live</span>
                       </div>
                     </div>
 
@@ -934,22 +1071,23 @@ export default function Dashboard() {
                         <div className="h-2 w-16 sm:w-24 rounded-full bg-muted/60 overflow-hidden flex-shrink-0">
                           <div
                             className="h-2 bg-gradient-to-r from-primary to-secondary"
-                            style={{ width: `${course.progress}%` }}
+                            style={{ width: session.isLive ? "100%" : "40%" }}
                           />
                         </div>
                         <span className="font-semibold text-foreground">
-                          {course.progress}%
+                          {session.isLive ? "In progress" : "Scheduled"}
                         </span>
                       </div>
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
-                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none"
-                          onClick={() => window.open(course.meetLink, "_blank")}
+                          className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none disabled:opacity-60"
+                          onClick={() =>
+                            session.meetLink &&
+                            window.open(session.meetLink, "_blank")
+                          }
+                          disabled={!session.isLive || !session.meetLink}
                         >
-                          Join Meet
-                        </button>
-                        <button className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs border border-border hover:border-primary/50 hover:text-primary flex-1 sm:flex-none">
-                          View Stream
+                          {session.isLive ? "Join Live Class" : "Join (when live)"}
                         </button>
                       </div>
                     </div>
@@ -1054,9 +1192,15 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <div className="space-y-3">
-                  {classroomStream.map((post, i) => (
+                  {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      When there are scheduled Google Meet classes, they will show
+                      up here with a clear status and join button.
+                    </p>
+                  )}
+                  {formattedLiveSessions.map((session, i) => (
                     <motion.div
-                      key={`${post.course}-${i}`}
+                      key={session.id}
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: i * 0.05 }}
@@ -1065,20 +1209,29 @@ export default function Dashboard() {
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
                         <div className="space-y-1 flex-1">
                           <p className="text-xs sm:text-sm font-semibold">
-                            {post.course}
+                            {session.title}
                           </p>
                           <p className="text-[11px] sm:text-xs text-muted-foreground">
-                            {post.author}
+                            {session.courseName || "Online Class"}
                           </p>
                         </div>
                         <span className="text-[10px] sm:text-[11px] text-muted-foreground flex-shrink-0">
-                          {post.time}
+                          {session.displayTime}
                         </span>
                       </div>
-                      <p className="text-xs sm:text-sm mt-2">{post.message}</p>
                       <div className="flex items-center gap-2 mt-2 text-[10px] sm:text-[11px] text-muted-foreground">
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
-                        {post.type}
+                        {session.isLive && (
+                          <>
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
+                            Live now
+                          </>
+                        )}
+                        {!session.isLive && (
+                          <>
+                            <Clock className="h-3 w-3" />
+                            Starts at {session.displayTime}
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -1097,19 +1250,62 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.map((meet, i) => (
+                {formattedLiveSessions.length === 0 &&
+                  upcomingQuizzes.length === 0 &&
+                  !liveSessionsLoading &&
+                  !quizzesLoading && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No upcoming online classes or quizzes yet. When your
+                    lecturers schedule Google Meet sessions or quizzes, they
+                    will appear here.
+                  </p>
+                )}
+                {formattedLiveSessions.map((session, i) => (
                   <UpcomingCard
-                    key={meet.course}
+                    key={session.id}
                     type={"class" as const}
-                    title={meet.course}
-                    course={meet.course}
-                    time={meet.starts}
-                    date={meet.isLive ? "Live" : "Today"}
-                    meetLink={meet.link}
-                    isUrgent={meet.isLive}
+                    title={session.title}
+                    course={session.courseName || "Online Class"}
+                    time={session.displayTime}
+                    date={session.isLive ? "Live" : session.displayDay}
+                    meetLink={session.meetLink || undefined}
+                    isUrgent={session.isLive}
                     delay={i * 0.1}
                   />
                 ))}
+                {upcomingQuizzes.map((quiz, i) => {
+                  const startLabel = quiz.startDate
+                    ? new Date(quiz.startDate).toLocaleString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })
+                    : "Any time";
+
+                  return (
+                    <UpcomingCard
+                      key={quiz.id}
+                      type={"quiz" as const}
+                      title={quiz.title}
+                      course={
+                        quiz.courseTitle ||
+                        quiz.courseCode ||
+                        "Course Quiz"
+                      }
+                      time={startLabel}
+                      date={
+                        quiz.isLive
+                          ? "Live"
+                          : quiz.isScheduled
+                            ? "Scheduled"
+                            : "Open"
+                      }
+                      isUrgent={quiz.isLive}
+                      delay={formattedLiveSessions.length * 0.1 + i * 0.1}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -1121,9 +1317,15 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div className="space-y-3">
-                {meetSessions.map((session, i) => (
+                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
+                  <p className="text-xs sm:text-sm text-muted-foreground">
+                    No classes are live right now. When a Google Meet class is
+                    in progress, you will see a Join button here.
+                  </p>
+                )}
+                {formattedLiveSessions.map((session, i) => (
                   <motion.div
-                    key={session.link}
+                    key={session.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.05 }}
@@ -1131,23 +1333,28 @@ export default function Dashboard() {
                   >
                     <div>
                       <p className="text-xs sm:text-sm font-semibold">
-                        {session.course}
+                        {session.title}
                       </p>
                       <p className="text-[11px] sm:text-xs text-muted-foreground">
-                        {session.starts}
+                        {session.displayTime}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {session.isLive && (
+                      {session.isLive && session.meetLink && (
                         <span className="px-2 py-1 rounded-full text-[10px] sm:text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
                           <Mic className="h-3 w-3" /> Live
                         </span>
                       )}
                       <button
-                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0"
-                        onClick={() => window.open(session.link, "_blank")}
+                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0 disabled:opacity-60"
+                        onClick={() =>
+                          session.meetLink &&
+                          window.open(session.meetLink, "_blank")
+                        }
+                        disabled={!session.isLive || !session.meetLink}
                       >
-                        <Play className="h-4 w-4" /> Join
+                        <Play className="h-4 w-4" />{" "}
+                        {session.isLive ? "Join" : "Join (when live)"}
                       </button>
                     </div>
                   </motion.div>

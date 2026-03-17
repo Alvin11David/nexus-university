@@ -10,6 +10,8 @@ import {
   AlertCircle,
   Download,
   Copy,
+  Link as LinkIcon,
+  Calendar,
 } from "lucide-react";
 import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -17,20 +19,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  query,
+  where,
+} from "firebase/firestore";
+import { db, storage } from "@/integrations/firebase/client";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+
 
 interface ClassSession {
   id: string;
-  courseCode: string;
-  courseName: string;
+  courseName?: string;
   title: string;
-  scheduledTime: string;
+  scheduledAt: string;
   status: "scheduled" | "ongoing" | "completed" | "cancelled";
-  meetingLink?: string;
+  meetLink?: string;
   attendees: number;
   duration?: number;
   recordingUrl?: string;
 }
 
+interface LiveSessionDoc {
+  id: string;
+  title: string;
+  course_name?: string;
+  scheduled_at: string;
+  duration_minutes?: number | null;
+  meet_link?: string | null;
+  attendees?: number | null;
+  status?: "scheduled" | "ongoing" | "completed" | "cancelled";
+  recording_url?: string | null;
+}
 const rise = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
@@ -42,71 +73,97 @@ const rise = {
 
 export default function LecturerClasses() {
   const { toast } = useToast();
+  const { user, profile } = useAuth();
   const [sessions, setSessions] = useState<ClassSession[]>([]);
   const [filter, setFilter] = useState<
     "all" | "scheduled" | "ongoing" | "completed"
   >("all");
-
-  // Mock data
-  const mockSessions: ClassSession[] = [
-    {
-      id: "1",
-      courseCode: "CS101",
-      courseName: "Algorithms",
-      title: "Introduction to Sorting Algorithms",
-      scheduledTime: "2025-01-03 10:30",
-      status: "ongoing",
-      meetingLink: "https://meet.google.com/abc-def-ghi",
-      attendees: 28,
-      duration: 45,
-    },
-    {
-      id: "2",
-      courseCode: "CS101",
-      courseName: "Algorithms",
-      title: "Dynamic Programming Workshop",
-      scheduledTime: "2025-01-05 14:00",
-      status: "scheduled",
-      meetingLink: "https://meet.google.com/jkl-mno-pqr",
-      attendees: 0,
-    },
-    {
-      id: "3",
-      courseCode: "CS201",
-      courseName: "Systems Design",
-      title: "Architecture Patterns Deep Dive",
-      scheduledTime: "2025-01-02 11:00",
-      status: "completed",
-      attendees: 31,
-      duration: 120,
-      recordingUrl: "https://drive.google.com/recording",
-    },
-    {
-      id: "4",
-      courseCode: "CS201",
-      courseName: "Systems Design",
-      title: "Scalability Techniques",
-      scheduledTime: "2025-01-04 09:00",
-      status: "scheduled",
-      meetingLink: "https://meet.google.com/stu-vwx-yz",
-      attendees: 0,
-    },
-    {
-      id: "5",
-      courseCode: "CS301",
-      courseName: "Data Mining",
-      title: "Machine Learning Models",
-      scheduledTime: "2025-01-01 15:30",
-      status: "completed",
-      attendees: 25,
-      duration: 90,
-      recordingUrl: "https://drive.google.com/recording",
-    },
-  ];
+  const [isLoading, setIsLoading] = useState(false);
+  const [showNewSessionDialog, setShowNewSessionDialog] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newCourseName, setNewCourseName] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newMeetLink, setNewMeetLink] = useState("");
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("");
+  const [newDuration, setNewDuration] = useState("60");
+  const [resourceFile, setResourceFile] = useState<File | null>(null);
+  const [isUploadingResource, setIsUploadingResource] = useState(false);
 
   useEffect(() => {
-    setSessions(mockSessions);
-  }, []);
+    if (!user || profile?.role !== "lecturer") {
+      setSessions([]);
+      return;
+    }
+
+    const loadSessions = async () => {
+      try {
+        setIsLoading(true);
+        const sessionsRef = collection(db, "live_sessions");
+        const q = query(sessionsRef, where("instructor_id", "==", user.uid));
+        const snapshot = await getDocs(q);
+
+        const docs: LiveSessionDoc[] = snapshot.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            title: data.title,
+            course_name: data.course_name,
+            scheduled_at: data.scheduled_at,
+            duration_minutes: data.duration_minutes,
+            meet_link: data.meet_link,
+            attendees: data.attendees,
+            status: data.status,
+          };
+        });
+
+        docs.sort((a, b) =>
+          (a.scheduled_at || "").localeCompare(b.scheduled_at || ""),
+        );
+
+        const now = new Date();
+        const mapped: ClassSession[] = docs.map((doc) => {
+          const start = new Date(doc.scheduled_at);
+          const duration = doc.duration_minutes ?? 60;
+          const end = new Date(start.getTime() + duration * 60000);
+          let status: ClassSession["status"] = "scheduled";
+
+          if (doc.status) {
+            status = doc.status;
+          } else if (now >= start && now <= end) {
+            status = "ongoing";
+          } else if (now > end) {
+            status = "completed";
+          }
+
+          return {
+            id: doc.id,
+            courseName: doc.course_name,
+            title: doc.title,
+            scheduledAt: doc.scheduled_at,
+            status,
+            meetLink: doc.meet_link || undefined,
+            attendees: doc.attendees ?? 0,
+            duration: doc.duration_minutes ?? undefined,
+          };
+        });
+
+        setSessions(mapped);
+      } catch (error) {
+        console.error("Failed to load live sessions", error);
+        toast({
+          title: "Could not load sessions",
+          description: "Live classes will still work, please try again later.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSessions();
+  }, [user, toast]);
 
   const filteredSessions =
     filter === "all" ? sessions : sessions.filter((s) => s.status === filter);
@@ -164,11 +221,152 @@ export default function LecturerClasses() {
     window.open(url, "_blank");
   };
 
+  const resetNewSessionForm = () => {
+    setNewTitle("");
+    setNewCourseName("");
+    setNewDescription("");
+    setNewMeetLink("");
+    setNewDate("");
+    setNewTime("");
+    setNewDuration("60");
+  };
+
   const handleNewSession = () => {
-    toast({
-      title: "New Session",
-      description: "Session scheduling will be available in a future update.",
-    });
+    if (!user || profile?.role !== "lecturer") {
+      toast({
+        title: "Sign in required",
+        description: "Only lecturers can create online classes.",
+        variant: "destructive",
+      });
+      return;
+    }
+    resetNewSessionForm();
+    setShowNewSessionDialog(true);
+  };
+
+  const handleCreateSession = async () => {
+    if (!user) return;
+    if (!newTitle.trim() || !newDate || !newTime) {
+      toast({
+        title: "Missing details",
+        description: "Please add a title, date and time for the class.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const scheduledAt = new Date(`${newDate}T${newTime}`);
+    if (Number.isNaN(scheduledAt.getTime())) {
+      toast({
+        title: "Invalid date or time",
+        description: "Please check the scheduled date and time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const durationMinutes = parseInt(newDuration || "60", 10) || 60;
+
+    try {
+      setIsSaving(true);
+      const sessionsRef = collection(db, "live_sessions");
+      let resourceUrl: string | null = null;
+
+      if (resourceFile) {
+        setIsUploadingResource(true);
+        const storageRef = ref(
+          storage,
+          `class-resources/${user.uid}/${Date.now()}-${resourceFile.name}`,
+        );
+        const snapshot = await uploadBytes(storageRef, resourceFile);
+        resourceUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      await addDoc(sessionsRef, {
+        title: newTitle.trim(),
+        course_id: newCourseName.trim() || null,
+        course_name: newCourseName.trim() || null,
+        description: newDescription.trim() || null,
+        meet_link: newMeetLink.trim() || null,
+        resource_url: resourceUrl,
+        resource_name: resourceFile?.name || null,
+        scheduled_at: scheduledAt.toISOString(),
+        duration_minutes: durationMinutes,
+        instructor_id: user.uid,
+        created_at: new Date().toISOString(),
+        status: "scheduled",
+      });
+
+      toast({
+        title: "Live class scheduled",
+        description:
+          "Your Google Meet session and resources are now scheduled for students.",
+      });
+
+      setShowNewSessionDialog(false);
+      resetNewSessionForm();
+      setResourceFile(null);
+
+      // Refresh list
+      const q = query(
+        collection(db, "live_sessions"),
+        where("instructor_id", "==", user.uid),
+      );
+      const snapshot = await getDocs(q);
+      const docs: LiveSessionDoc[] = snapshot.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          title: data.title,
+          course_name: data.course_name,
+          scheduled_at: data.scheduled_at,
+          duration_minutes: data.duration_minutes,
+          meet_link: data.meet_link,
+          attendees: data.attendees,
+          status: data.status,
+        };
+      });
+      docs.sort((a, b) =>
+        (a.scheduled_at || "").localeCompare(b.scheduled_at || ""),
+      );
+      const now = new Date();
+      const mapped: ClassSession[] = docs.map((doc) => {
+        const start = new Date(doc.scheduled_at);
+        const duration = doc.duration_minutes ?? 60;
+        const end = new Date(start.getTime() + duration * 60000);
+        let status: ClassSession["status"] = "scheduled";
+
+        if (doc.status) {
+          status = doc.status;
+        } else if (now >= start && now <= end) {
+          status = "ongoing";
+        } else if (now > end) {
+          status = "completed";
+        }
+
+        return {
+          id: doc.id,
+          courseName: doc.course_name,
+          title: doc.title,
+          scheduledAt: doc.scheduled_at,
+          status,
+          meetLink: doc.meet_link || undefined,
+          attendees: doc.attendees ?? 0,
+          duration: doc.duration_minutes ?? undefined,
+        };
+      });
+      setSessions(mapped);
+    } catch (error) {
+      console.error("Failed to create live session", error);
+      toast({
+        title: "Could not schedule class",
+        description: "Please try again. If the problem persists, contact support.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+      setIsUploadingResource(false);
+    }
   };
 
   return (
@@ -182,7 +380,7 @@ export default function LecturerClasses() {
           animate={{ opacity: 1, y: 0 }}
           className="space-y-4"
         >
-          <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-primary/10 rounded-lg">
                 <Video className="h-6 w-6 text-primary" />
@@ -314,7 +512,15 @@ export default function LecturerClasses() {
 
         {/* Sessions Grid */}
         <div className="space-y-3">
-          {filteredSessions.length === 0 ? (
+          {isLoading ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-center py-12 text-muted-foreground text-sm"
+            >
+              Loading your virtual classes...
+            </motion.div>
+          ) : filteredSessions.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -351,11 +557,12 @@ export default function LecturerClasses() {
                                 {session.title}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                {session.courseCode} - {session.courseName}
+                                {session.courseName || "Online class"}
                               </p>
                               <div className="flex gap-2 mt-2 flex-wrap">
                                 <Badge variant="outline" className="text-xs">
-                                  {session.scheduledTime}
+                                  <Calendar className="h-3 w-3 mr-1 inline" />
+                                  {new Date(session.scheduledAt).toLocaleString()}
                                 </Badge>
                                 <Badge variant="secondary" className="text-xs">
                                   <Users className="h-3 w-3 mr-1" />
@@ -383,7 +590,10 @@ export default function LecturerClasses() {
                             <Button
                               size="sm"
                               className="bg-gradient-to-r from-emerald-600 to-emerald-700"
-                              onClick={() => window.open(session.meetingLink)}
+                              onClick={() =>
+                                session.meetLink &&
+                                window.open(session.meetLink, "_blank")
+                              }
                             >
                               <PlayCircle className="h-4 w-4 mr-1" /> Join Now
                             </Button>
@@ -394,8 +604,8 @@ export default function LecturerClasses() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() =>
-                                  session.meetingLink &&
-                                  handleCopyLink(session.meetingLink)
+                                  session.meetLink &&
+                                  handleCopyLink(session.meetLink)
                                 }
                               >
                                 <Copy className="h-4 w-4" />
@@ -404,8 +614,8 @@ export default function LecturerClasses() {
                                 size="sm"
                                 className="bg-gradient-to-r from-primary to-secondary"
                                 onClick={() =>
-                                  session.meetingLink &&
-                                  handleStartSession(session.meetingLink)
+                                  session.meetLink &&
+                                  handleStartSession(session.meetLink)
                                 }
                               >
                                 <PlayCircle className="h-4 w-4 mr-1" /> Start
@@ -434,6 +644,145 @@ export default function LecturerClasses() {
           )}
         </div>
       </main>
+
+      {/* New Live Session Dialog */}
+      <Dialog open={showNewSessionDialog} onOpenChange={setShowNewSessionDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Schedule Google Meet Class</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Title</label>
+              <Input
+                placeholder="e.g., Algorithms – Sorting Live Class"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Course / Class Name (optional)
+              </label>
+              <Input
+                placeholder="e.g., CS101 – Algorithms"
+                value={newCourseName}
+                onChange={(e) => setNewCourseName(e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Date</label>
+                <Input
+                  type="date"
+                  value={newDate}
+                  onChange={(e) => setNewDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Start Time</label>
+                <Input
+                  type="time"
+                  value={newTime}
+                  onChange={(e) => setNewTime(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Duration (minutes, optional)
+              </label>
+              <Input
+                type="number"
+                min={10}
+                max={300}
+                value={newDuration}
+                onChange={(e) => setNewDuration(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                Google Meet Link
+                <span className="text-xs text-muted-foreground">
+                  (paste the Meet URL here)
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                  value={newMeetLink}
+                  onChange={(e) => setNewMeetLink(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0 gap-1"
+                  onClick={() =>
+                    window.open("https://meet.google.com/new", "_blank")
+                  }
+                >
+                  <LinkIcon className="h-4 w-4" />
+                  Meet
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Description / Notes (optional)
+              </label>
+              <Textarea
+                rows={3}
+                placeholder="Any instructions for students about this online class."
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Upload Resource (optional)
+              </label>
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,image/*"
+                onChange={(e) =>
+                  setResourceFile(e.target.files?.[0] ?? null)
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                Attach slides, notes, or any document for this online class.
+              </p>
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowNewSessionDialog(false)}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-gradient-to-r from-primary to-secondary"
+                onClick={handleCreateSession}
+                disabled={isSaving || isUploadingResource}
+              >
+                {isSaving || isUploadingResource
+                  ? "Saving..."
+                  : "Schedule Class"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <LecturerBottomNav />
     </div>
