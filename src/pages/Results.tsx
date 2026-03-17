@@ -326,14 +326,30 @@ export default function Results() {
     gpa: number,
   ): { label: string; color: string; bgColor: string } => {
     if (gpa >= 4.5)
-      return { label: "Excellent", color: "text-emerald-700", bgColor: "bg-emerald-50" };
+      return {
+        label: "Excellent",
+        color: "text-emerald-700",
+        bgColor: "bg-emerald-50",
+      };
     if (gpa >= 4.0)
-      return { label: "Very Good", color: "text-blue-700", bgColor: "bg-blue-50" };
+      return {
+        label: "Very Good",
+        color: "text-blue-700",
+        bgColor: "bg-blue-50",
+      };
     if (gpa >= 3.5)
       return { label: "Good", color: "text-cyan-700", bgColor: "bg-cyan-50" };
     if (gpa >= 3.0)
-      return { label: "Satisfactory", color: "text-amber-700", bgColor: "bg-amber-50" };
-    return { label: "Needs Improvement", color: "text-orange-700", bgColor: "bg-orange-50" };
+      return {
+        label: "Satisfactory",
+        color: "text-amber-700",
+        bgColor: "bg-amber-50",
+      };
+    return {
+      label: "Needs Improvement",
+      color: "text-orange-700",
+      bgColor: "bg-orange-50",
+    };
   };
 
   // ─── PDF Download ────────────────────────────────────────────────────────────
@@ -341,7 +357,11 @@ export default function Results() {
     try {
       setIsDownloading(true);
 
-      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 15;
@@ -354,12 +374,19 @@ export default function Results() {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16);
       doc.setFont("helvetica", "bold");
-      doc.text("OFFICIAL ACADEMIC TRANSCRIPT", pageWidth / 2, 12, { align: "center" });
+      doc.text("OFFICIAL ACADEMIC TRANSCRIPT", pageWidth / 2, 12, {
+        align: "center",
+      });
 
       doc.setFontSize(9);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(148, 163, 184); // slate-400
-      doc.text(`Generated on ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}`, pageWidth / 2, 20, { align: "center" });
+      doc.text(
+        `Generated on ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}`,
+        pageWidth / 2,
+        20,
+        { align: "center" },
+      );
 
       yPos = 36;
 
@@ -413,7 +440,9 @@ export default function Results() {
         autoTable(doc, {
           startY: yPos,
           margin: { left: margin, right: margin },
-          head: [["Code", "Course Title", "Mark", "CUs", "Grade", "GD Pt", "Remark"]],
+          head: [
+            ["Code", "Course Title", "Mark", "CUs", "Grade", "GD Pt", "Remark"],
+          ],
           body: term.entries.map((c) => [
             c.courseCode || "—",
             c.courseTitle,
@@ -424,7 +453,7 @@ export default function Results() {
             c.semester_remark || "—",
           ]),
           headStyles: {
-            fillColor: [51, 65, 85],   // slate-700
+            fillColor: [51, 65, 85], // slate-700
             textColor: [255, 255, 255],
             fontStyle: "bold",
             fontSize: 7.5,
@@ -449,7 +478,9 @@ export default function Results() {
           },
           tableLineColor: [226, 232, 240],
           tableLineWidth: 0.3,
-          didDrawPage: () => { /* page break handled by autoTable */ },
+          didDrawPage: () => {
+            /* page break handled by autoTable */
+          },
         });
 
         yPos = (doc as any).lastAutoTable.finalY + 3;
@@ -490,12 +521,19 @@ export default function Results() {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
-      doc.text(`Cumulative GPA (CGPA): ${cgpa.toFixed(2)}`, pageWidth / 2, yPos + 7, { align: "center" });
+      doc.text(
+        `Cumulative GPA (CGPA): ${cgpa.toFixed(2)}`,
+        pageWidth / 2,
+        yPos + 7,
+        { align: "center" },
+      );
       const perf = getPerformanceLevel(cgpa);
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(148, 163, 184);
-      doc.text(`Overall Performance: ${perf.label}`, pageWidth / 2, yPos + 14, { align: "center" });
+      doc.text(`Overall Performance: ${perf.label}`, pageWidth / 2, yPos + 14, {
+        align: "center",
+      });
 
       // ── Footer on every page ──
       const totalPages = (doc.internal as any).getNumberOfPages();
@@ -506,11 +544,22 @@ export default function Results() {
         doc.setFontSize(7);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(148, 163, 184);
-        doc.text("This transcript is computer-generated and is valid without a signature.", margin, pageHeight - 7);
-        doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+        doc.text(
+          "This transcript is computer-generated and is valid without a signature.",
+          margin,
+          pageHeight - 7,
+        );
+        doc.text(
+          `Page ${i} of ${totalPages}`,
+          pageWidth - margin,
+          pageHeight - 7,
+          { align: "right" },
+        );
       }
 
-      doc.save(`academic-transcript-${profile?.student_number || user?.uid || "student"}.pdf`);
+      doc.save(
+        `academic-transcript-${profile?.student_number || user?.uid || "student"}.pdf`,
+      );
     } catch (err) {
       console.error("PDF generation failed:", err);
       alert("Failed to generate PDF. Please try again.");
@@ -558,9 +607,7 @@ export default function Results() {
                 disabled={isDownloading || termResults.length === 0}
               >
                 <Download
-                  className={`h-4 w-4 ${
-                    isDownloading ? "animate-bounce" : ""
-                  }`}
+                  className={`h-4 w-4 ${isDownloading ? "animate-bounce" : ""}`}
                 />
                 <span className="hidden sm:inline">
                   {isDownloading ? "Generating..." : "Download"}
@@ -949,7 +996,9 @@ export default function Results() {
                   onClick={() => {
                     const svgEl = qrRef.current?.querySelector("svg");
                     if (!svgEl) return;
-                    const svgData = new XMLSerializer().serializeToString(svgEl);
+                    const svgData = new XMLSerializer().serializeToString(
+                      svgEl,
+                    );
                     const canvas = document.createElement("canvas");
                     canvas.width = 256;
                     canvas.height = 256;

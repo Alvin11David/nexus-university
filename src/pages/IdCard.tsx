@@ -33,9 +33,11 @@ export default function IdCard() {
 
   const student = useMemo(
     () => ({
-      name:
-        profile?.full_name || user?.displayName || "Student Name",
-      program: profile?.programme || profile?.department || "Bachelor of Science in Computer Science",
+      name: profile?.full_name || user?.displayName || "Student Name",
+      program:
+        profile?.programme ||
+        profile?.department ||
+        "Bachelor of Science in Computer Science",
       studentNumber: profile?.student_number || "NU-2026-00123",
       registrationNumber: profile?.registration_number || "2026/HD07/12345/PS",
       year: "Year 2",
@@ -44,7 +46,7 @@ export default function IdCard() {
       validThru: "Aug 2026",
       blood: "O+",
     }),
-    [profile, user]
+    [profile, user],
   );
 
   const handlePrint = () => window.print();

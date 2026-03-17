@@ -50,3 +50,19 @@ export const getEnrollmentShareUrl = (studentId: string): string => {
 export const getPRNShareUrl = (prnCode: string): string => {
   return `${HOSTING_URL}/prn-check?code=${prnCode}`;
 };
+
+/**
+ * Generate a QR code as a data URL using an external QR code API
+ * This generates a PNG image of the QR code that can be embedded in HTML
+ * @param text - The text/URL to encode in the QR code
+ * @param size - The size of the QR code in pixels (default: 200)
+ * @returns A data URL containing the QR code image
+ */
+export const generateQRCodeDataUrl = (
+  text: string,
+  size: number = 200,
+): string => {
+  // Using qr-server.com API to generate QR codes
+  // This returns a PNG image that can be embedded in HTML
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
+};
