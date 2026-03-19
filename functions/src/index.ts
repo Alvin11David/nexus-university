@@ -25,6 +25,17 @@ const AIRTEL_API_KEY = airtelConfig.api_key;
 const AIRTEL_BUSINESS_ID = airtelConfig.business_id;
 const AIRTEL_CURRENCY = "UGX"; // Uganda Shilling
 
+const resendConfig = functions.config().resend || {};
+const RESEND_API_KEY: string | undefined = resendConfig.api_key;
+const RESEND_FROM_EMAIL: string | undefined = resendConfig.from_email;
+
+const otpConfig = functions.config().otp || {};
+const OTP_SECRET: string | undefined = otpConfig.secret;
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const OTP_MAX_PER_HOUR = 5;
+const OTP_MAX_ATTEMPTS = 5;
+
 // Validate required config early to avoid opaque INTERNAL errors
 function ensureMTNConfig() {
   if (!MTN_API_KEY || !MTN_SUBSCRIPTION_KEY || !MTN_COLLECTION_ACCOUNT) {
@@ -52,6 +63,261 @@ interface SendMoMoPaymentRequest {
   transactionId: string;
   email?: string;
 }
+
+interface SignupOtpRequest {
+  email: string;
+  studentRecordId?: string | null;
+}
+
+interface SignupOtpVerifyRequest {
+  email: string;
+  otp: string;
+}
+
+function isRunningInEmulator(): boolean {
+  return process.env.FUNCTIONS_EMULATOR === "true";
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function validateEmail(email: string): void {
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailPattern.test(email)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "A valid email address is required.",
+    );
+  }
+}
+
+function generateOtpCode(): string {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+}
+
+function generateNonce(): string {
+  return crypto.randomBytes(16).toString("hex");
+}
+
+function buildOtpHash(email: string, otp: string, nonce: string): string {
+  const secret = OTP_SECRET || "";
+  return crypto
+    .createHash("sha256")
+    .update(`${email}|${otp}|${nonce}|${secret}`)
+    .digest("hex");
+}
+
+async function sendOtpEmail(email: string, otp: string): Promise<void> {
+  if (!RESEND_API_KEY || !RESEND_FROM_EMAIL) {
+    if (isRunningInEmulator()) {
+      console.log(`[OTP][EMULATOR] ${email} => ${otp}`);
+      return;
+    }
+
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "OTP delivery is not configured. Set resend.api_key and resend.from_email.",
+    );
+  }
+
+  const payload = {
+    from: RESEND_FROM_EMAIL,
+    to: [email],
+    subject: "Your Nexus University verification code",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #1f2937;">
+        <h2 style="margin: 0 0 12px 0;">Verification Code</h2>
+        <p>Use the code below to continue your Nexus University signup:</p>
+        <p style="font-size: 28px; letter-spacing: 6px; font-weight: 700; margin: 16px 0;">${otp}</p>
+        <p>This code expires in 10 minutes.</p>
+        <p>If you did not request this code, you can safely ignore this email.</p>
+      </div>
+    `,
+  };
+
+  await axios.post("https://api.resend.com/emails", payload, {
+    headers: {
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+  });
+}
+
+// Public callable used during signup before user authentication.
+export const sendSignupOtp = functions.https.onCall(
+  async (
+    data: SignupOtpRequest,
+    _context: functions.https.CallableContext,
+  ) => {
+    const email = normalizeEmail(data?.email || "");
+    validateEmail(email);
+
+    if (!OTP_SECRET && !isRunningInEmulator()) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "OTP secret is not configured. Set otp.secret in functions config.",
+      );
+    }
+
+    const db = admin.firestore();
+    const now = Date.now();
+    const oneHourAgo = admin.firestore.Timestamp.fromMillis(now - 60 * 60 * 1000);
+    const cooldownAgo = admin.firestore.Timestamp.fromMillis(
+      now - OTP_RESEND_COOLDOWN_MS,
+    );
+
+    const recentQuery = await db
+      .collection("otp_verifications")
+      .where("email", "==", email)
+      .where("purpose", "==", "signup")
+      .where("createdAt", ">=", oneHourAgo)
+      .get();
+
+    if (recentQuery.size >= OTP_MAX_PER_HOUR) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Too many OTP requests. Please try again later.",
+      );
+    }
+
+    const cooldownQuery = await db
+      .collection("otp_verifications")
+      .where("email", "==", email)
+      .where("purpose", "==", "signup")
+      .where("verified", "==", false)
+      .where("createdAt", ">=", cooldownAgo)
+      .limit(1)
+      .get();
+
+    if (!cooldownQuery.empty) {
+      throw new functions.https.HttpsError(
+        "resource-exhausted",
+        "Please wait at least 60 seconds before requesting another OTP.",
+      );
+    }
+
+    const otp = generateOtpCode();
+    const nonce = generateNonce();
+    const otpHash = buildOtpHash(email, otp, nonce);
+    const expiresAt = admin.firestore.Timestamp.fromMillis(now + OTP_TTL_MS);
+
+    await db.collection("otp_verifications").add({
+      email,
+      student_record_id: data?.studentRecordId ?? null,
+      purpose: "signup",
+      otp_hash: otpHash,
+      nonce,
+      verified: false,
+      attempts: 0,
+      max_attempts: OTP_MAX_ATTEMPTS,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      expiresAt,
+    });
+
+    await sendOtpEmail(email, otp);
+
+    return {
+      success: true,
+      deliveryChannel: "email",
+      otp: isRunningInEmulator() ? otp : "",
+    };
+  },
+);
+
+// Public callable used during signup before user authentication.
+export const verifySignupOtp = functions.https.onCall(
+  async (
+    data: SignupOtpVerifyRequest,
+    _context: functions.https.CallableContext,
+  ) => {
+    const email = normalizeEmail(data?.email || "");
+    const otp = (data?.otp || "").trim();
+
+    validateEmail(email);
+
+    if (!/^\d{4}$/.test(otp)) {
+      return {
+        valid: false,
+        reason: "invalid-format",
+      };
+    }
+
+    const db = admin.firestore();
+    const latestSnapshot = await db
+      .collection("otp_verifications")
+      .where("email", "==", email)
+      .where("purpose", "==", "signup")
+      .where("verified", "==", false)
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    if (latestSnapshot.empty) {
+      return {
+        valid: false,
+        reason: "not-found",
+      };
+    }
+
+    const otpDoc = latestSnapshot.docs[0];
+    const record = otpDoc.data() as {
+      nonce?: string;
+      otp_hash?: string;
+      attempts?: number;
+      max_attempts?: number;
+      expiresAt?: admin.firestore.Timestamp;
+    };
+
+    const attempts = record.attempts ?? 0;
+    const maxAttempts = record.max_attempts ?? OTP_MAX_ATTEMPTS;
+
+    if (attempts >= maxAttempts) {
+      return {
+        valid: false,
+        reason: "max-attempts",
+      };
+    }
+
+    const expiresAtMillis = record.expiresAt?.toMillis?.() || 0;
+    if (Date.now() > expiresAtMillis) {
+      return {
+        valid: false,
+        reason: "expired",
+      };
+    }
+
+    if (!record.nonce || !record.otp_hash) {
+      return {
+        valid: false,
+        reason: "invalid-record",
+      };
+    }
+
+    const candidateHash = buildOtpHash(email, otp, record.nonce);
+    const isMatch = candidateHash === record.otp_hash;
+
+    if (!isMatch) {
+      await otpDoc.ref.update({
+        attempts: attempts + 1,
+      });
+
+      return {
+        valid: false,
+        reason: "invalid-code",
+      };
+    }
+
+    await otpDoc.ref.update({
+      verified: true,
+      verifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      valid: true,
+    };
+  },
+);
 
 /**
  * Generate MTN API request header signature
