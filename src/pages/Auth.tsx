@@ -339,7 +339,10 @@ export default function Auth() {
           ? formData.actualEmail
           : formData.email;
 
-      const { otp, error } = await generateOTP(emailToUse, studentRecord?.id ?? null);
+      const { otp, error } = await generateOTP(
+        emailToUse,
+        studentRecord?.id ?? null,
+      );
       if (error) throw error;
 
       if (import.meta.env.DEV && otp) {

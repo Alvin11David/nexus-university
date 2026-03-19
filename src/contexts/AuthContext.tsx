@@ -24,8 +24,6 @@ import {
   where,
   getDocs,
   limit,
-  serverTimestamp,
-  addDoc,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/integrations/firebase/client";
@@ -118,6 +116,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     { success: boolean; deliveryChannel: string; otp?: string }
   >(functions, "sendSignupOtp");
 
+  const validateStudentRecordCallable = httpsCallable<
+    { registrationNumber: string; studentNumber: string; email: string },
+    StudentRecord
+  >(functions, "validateStudentRecord");
+
   const verifySignupOtpCallable = httpsCallable<
     { email: string; otp: string },
     { valid: boolean; reason?: string }
@@ -203,61 +206,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
   ): Promise<{ data: StudentRecord | null; error: Error | null }> => {
     try {
-      // First, try to find existing record
-      const recordsRef = collection(db, "student_records");
-      const q = query(
-        recordsRef,
-        where("registration_number", "==", registrationNumber),
-        where("student_number", "==", studentNumber),
-        limit(1),
-      );
-      const querySnapshot = await getDocs(q);
+      const response = await validateStudentRecordCallable({
+        registrationNumber,
+        studentNumber,
+        email,
+      });
 
-      // If record exists, check if already registered
-      if (!querySnapshot.empty) {
-        const studentDoc = querySnapshot.docs[0];
-        const existingData = studentDoc.data() as StudentRecord;
-        if (existingData.is_registered) {
-          return {
-            data: null,
-            error: new Error(
-              "This student account is already registered. Please sign in instead.",
-            ),
-          };
-        }
-        return { data: { ...existingData, id: studentDoc.id }, error: null };
-      }
-
-      // Record doesn't exist, create a new one
-      const emailName = email.split("@")[0];
-      const fullName =
-        emailName
-          .split(/[._-]/)
-          .map(
-            (part) =>
-              part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
-          )
-          .join(" ") || "New Student";
-
-      const newData = {
-        registration_number: registrationNumber,
-        student_number: studentNumber,
-        email: email,
-        full_name: fullName,
-        is_registered: false,
-        created_at: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(collection(db, "student_records"), newData);
-
-      return {
-        data: {
-          ...newData,
-          id: docRef.id,
-          created_at: new Date().toISOString(),
-        } as unknown as StudentRecord,
-        error: null,
-      };
+      return { data: response.data, error: null };
     } catch (error: any) {
       return { data: null, error: new Error(error.message) };
     }
