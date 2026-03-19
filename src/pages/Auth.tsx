@@ -46,7 +46,6 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [otpValues, setOtpValues] = useState(["", "", "", ""]);
-  const [generatedOtp, setGeneratedOtp] = useState("");
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
   const [isRegistrarSignup, setIsRegistrarSignup] = useState(false); // Auto-detect based on email
@@ -156,7 +155,6 @@ export default function Auth() {
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
       setStudentRecord({
         id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
@@ -164,11 +162,19 @@ export default function Auth() {
         department: formData.department,
       });
 
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been sent to your email address.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {
@@ -194,7 +200,6 @@ export default function Auth() {
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
       setStudentRecord({
         id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
@@ -202,11 +207,19 @@ export default function Auth() {
         department: formData.department,
       });
 
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been sent to your email address.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {
@@ -291,8 +304,6 @@ export default function Auth() {
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
-
       if (import.meta.env.DEV) {
         toast({
           title: "OTP Sent (Development)",
@@ -311,6 +322,41 @@ export default function Auth() {
     } catch (error: any) {
       toast({
         title: "Validation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+
+    try {
+      const emailToUse =
+        isLecturerSignup || isRegistrarSignup
+          ? formData.actualEmail
+          : formData.email;
+
+      const { otp, error } = await generateOTP(emailToUse, studentRecord?.id ?? null);
+      if (error) throw error;
+
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Resent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Resent",
+          description: "A fresh verification code has been sent.",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could Not Resend OTP",
         description: error.message,
         variant: "destructive",
       });
@@ -467,7 +513,6 @@ export default function Auth() {
   const resetToSignIn = () => {
     setStep("signin");
     setOtpValues(["", "", "", ""]);
-    setGeneratedOtp("");
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
@@ -489,7 +534,6 @@ export default function Auth() {
   const resetToSignUp = () => {
     setStep("signup-details");
     setOtpValues(["", "", "", ""]);
-    setGeneratedOtp("");
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
@@ -1154,13 +1198,7 @@ export default function Auth() {
               Didn't receive the code?{" "}
               <button
                 type="button"
-                onClick={() => {
-                  toast({
-                    title: "OTP Resent",
-                    description: `Your verification code is: ${generatedOtp}`,
-                    duration: 10000,
-                  });
-                }}
+                onClick={handleResendOtp}
                 className="text-secondary font-medium hover:text-secondary/80"
               >
                 Resend

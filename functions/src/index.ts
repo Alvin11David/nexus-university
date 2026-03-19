@@ -74,6 +74,12 @@ interface SignupOtpVerifyRequest {
   otp: string;
 }
 
+interface ValidateStudentRecordRequest {
+  registrationNumber: string;
+  studentNumber: string;
+  email: string;
+}
+
 function isRunningInEmulator(): boolean {
   return process.env.FUNCTIONS_EMULATOR === "true";
 }
@@ -146,10 +152,7 @@ async function sendOtpEmail(email: string, otp: string): Promise<void> {
 
 // Public callable used during signup before user authentication.
 export const sendSignupOtp = functions.https.onCall(
-  async (
-    data: SignupOtpRequest,
-    _context: functions.https.CallableContext,
-  ) => {
+  async (data: SignupOtpRequest, _context: functions.https.CallableContext) => {
     const email = normalizeEmail(data?.email || "");
     validateEmail(email);
 
@@ -162,7 +165,9 @@ export const sendSignupOtp = functions.https.onCall(
 
     const db = admin.firestore();
     const now = Date.now();
-    const oneHourAgo = admin.firestore.Timestamp.fromMillis(now - 60 * 60 * 1000);
+    const oneHourAgo = admin.firestore.Timestamp.fromMillis(
+      now - 60 * 60 * 1000,
+    );
     const cooldownAgo = admin.firestore.Timestamp.fromMillis(
       now - OTP_RESEND_COOLDOWN_MS,
     );
@@ -315,6 +320,86 @@ export const verifySignupOtp = functions.https.onCall(
 
     return {
       valid: true,
+    };
+  },
+);
+
+// Public callable used before authentication to validate or bootstrap student records.
+export const validateStudentRecord = functions.https.onCall(
+  async (
+    data: ValidateStudentRecordRequest,
+    _context: functions.https.CallableContext,
+  ) => {
+    const registrationNumber = (data?.registrationNumber || "").trim();
+    const studentNumber = (data?.studentNumber || "").trim();
+    const email = normalizeEmail(data?.email || "");
+
+    if (!registrationNumber || !studentNumber || !email) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Registration number, student number, and email are required.",
+      );
+    }
+
+    validateEmail(email);
+
+    const db = admin.firestore();
+    const existingSnapshot = await db
+      .collection("student_records")
+      .where("registration_number", "==", registrationNumber)
+      .where("student_number", "==", studentNumber)
+      .limit(1)
+      .get();
+
+    if (!existingSnapshot.empty) {
+      const studentDoc = existingSnapshot.docs[0];
+      const existing = studentDoc.data() as {
+        full_name?: string;
+        registration_number?: string;
+        student_number?: string;
+        email?: string | null;
+        is_registered?: boolean;
+      };
+
+      if (existing.is_registered) {
+        throw new functions.https.HttpsError(
+          "already-exists",
+          "This student account is already registered. Please sign in instead.",
+        );
+      }
+
+      return {
+        id: studentDoc.id,
+        full_name: existing.full_name || "New Student",
+        registration_number: existing.registration_number || registrationNumber,
+        student_number: existing.student_number || studentNumber,
+        email: existing.email || email,
+        is_registered: existing.is_registered || false,
+      };
+    }
+
+    const emailName = email.split("@")[0] || "student";
+    const fullName = emailName
+      .split(/[._-]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ");
+
+    const created = await db.collection("student_records").add({
+      registration_number: registrationNumber,
+      student_number: studentNumber,
+      email,
+      full_name: fullName || "New Student",
+      is_registered: false,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    return {
+      id: created.id,
+      full_name: fullName || "New Student",
+      registration_number: registrationNumber,
+      student_number: studentNumber,
+      email,
+      is_registered: false,
     };
   },
 );
