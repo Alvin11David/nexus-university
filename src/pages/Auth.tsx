@@ -284,7 +284,7 @@ export default function Auth() {
 
       setStudentRecord(data);
 
-      // Generate OTP (mock - shown in toast for testing)
+      // Generate OTP. In production we do not expose OTP values in the UI.
       const { otp, error: otpError } = await generateOTP(
         formData.email,
         data!.id,
@@ -293,12 +293,19 @@ export default function Auth() {
 
       setGeneratedOtp(otp);
 
-      // Show OTP in toast for testing
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been generated. Please check your registered delivery channel.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {

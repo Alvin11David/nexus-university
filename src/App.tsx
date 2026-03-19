@@ -50,6 +50,7 @@ import RegistrarTranscriptDetail from "./pages/RegistrarTranscriptDetail";
 import RegistrarEnrollments from "./pages/RegistrarEnrollments";
 import RegistrarPrograms from "./pages/RegistrarPrograms";
 import RegistrarCalendar from "./pages/RegistrarCalendar";
+import RegistrarReports from "./pages/RegistrarReports";
 
 const queryClient = new QueryClient();
 
@@ -192,7 +193,7 @@ function AppRoutes() {
         path="/courses"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Registration />
           </StudentRoute>
         }
       />
@@ -200,7 +201,7 @@ function AppRoutes() {
         path="/live"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Timetable />
           </StudentRoute>
         }
       />
@@ -208,7 +209,7 @@ function AppRoutes() {
         path="/profile"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Settings />
           </StudentRoute>
         }
       />
@@ -521,6 +522,22 @@ function AppRoutes() {
         element={
           <RegistrarRoute>
             <RegistrarTranscriptDetail />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/reports"
+        element={
+          <RegistrarRoute>
+            <RegistrarReports />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/settings"
+        element={
+          <RegistrarRoute>
+            <Settings />
           </RegistrarRoute>
         }
       />

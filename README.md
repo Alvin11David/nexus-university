@@ -1,73 +1,73 @@
-# Welcome to your Lovable project
+# Nexus University
 
-## Project info
+Multi-role university portal for students, lecturers, and registrar workflows.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Stack
 
-## How can I edit this code?
+- React + TypeScript + Vite
+- Firebase Auth, Firestore, Storage, Functions
+- Tailwind + shadcn UI
 
-There are several ways of editing your application.
+## Prerequisites
 
-**Use Lovable**
+- Node.js 20+
+- npm 10+
+- Firebase project with Auth/Firestore/Storage enabled
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Local Setup
 
-Changes made via Lovable will be committed automatically to this repo.
+1. Install dependencies.
 
-**Use your preferred IDE**
+```bash
+npm ci
+```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+2. Create a local env file.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+```bash
+cp .env.example .env
+```
 
-Follow these steps:
+3. Fill in Firebase variables in `.env`.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+```env
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_USE_FIREBASE_EMULATOR=false
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+4. Start the app.
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Scripts
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- `npm run dev`: start development server
+- `npm run lint`: run ESLint
+- `npm run build`: production build
+- `npm run preview`: preview production build locally
 
-**Use GitHub Codespaces**
+## Firebase Notes
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- Frontend Firebase client is configured in `src/integrations/firebase/client.ts`.
+- Cloud Functions source is in `functions/src/index.ts`.
+- Firestore and Storage rules are in `firestore.rules` and `storage.rules`.
 
-## What technologies are used for this project?
+## CI
 
-This project is built with:
+GitHub Actions workflow runs lint + build on push and pull requests:
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- `.github/workflows/ci.yml`
 
-## How can I deploy this project?
+## Production Checklist
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- Replace development OTP/testing flows with real delivery channels.
+- Tighten Firestore/Storage rules per collection and role.
+- Configure function secrets and callback URLs in Firebase runtime config.
+- Verify domain, HTTPS, and CORS policies.
