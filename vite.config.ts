@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => ({
       manifest: {
         name: "Nexus University",
         short_name: "NexusU",
-        description: "University portal for students, lecturers, and registrar.",
+        description:
+          "University portal for students, lecturers, and registrar.",
         theme_color: "#0f172a",
         background_color: "#ffffff",
         display: "standalone",

@@ -1,7 +1,13 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { BarChart3, ArrowLeft, Users, GraduationCap, FileText } from "lucide-react";
+import {
+  BarChart3,
+  ArrowLeft,
+  Users,
+  GraduationCap,
+  FileText,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const reportCards = [
@@ -47,7 +53,8 @@ export default function RegistrarReports() {
 
         <div className="rounded-xl border border-border bg-card p-4 md:p-6">
           <p className="text-sm text-muted-foreground">
-            This route is now wired and ready for analytics integrations. Generated placeholder snapshot at {generatedAt}.
+            This route is now wired and ready for analytics integrations.
+            Generated placeholder snapshot at {generatedAt}.
           </p>
         </div>
 
@@ -62,7 +69,9 @@ export default function RegistrarReports() {
             >
               <card.icon className="h-5 w-5 text-secondary mb-3" />
               <h2 className="font-semibold mb-1">{card.title}</h2>
-              <p className="text-sm text-muted-foreground">{card.description}</p>
+              <p className="text-sm text-muted-foreground">
+                {card.description}
+              </p>
             </motion.div>
           ))}
         </div>
