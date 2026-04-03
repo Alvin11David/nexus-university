@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { doc, getDoc, addDoc, collection, getDocs } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/client";
 
@@ -76,6 +77,7 @@ export default function Auth() {
     generateOTP,
     verifyOTP,
   } = useAuth();
+  const { settings } = useSiteSettings();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -492,7 +494,7 @@ export default function Auth() {
 
       toast({
         title: "Account Created!",
-        description: "Welcome to UniPortal.",
+        description: `Welcome to ${settings.shortName}.`,
       });
       // Redirect to appropriate dashboard based on role
       if (isLecturerSignup) {
@@ -1320,10 +1322,18 @@ export default function Auth() {
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-20 w-full">
           <Link to="/" className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
-              <GraduationCap className="h-7 w-7 text-white" />
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-7 w-7 object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-7 w-7 text-white" />
+              )}
             </div>
             <span className="font-display text-2xl font-bold text-white">
-              UniPortal
+              {settings.shortName}
             </span>
           </Link>
 
@@ -1418,9 +1428,19 @@ export default function Auth() {
           {/* Mobile Logo */}
           <Link to="/" className="flex items-center gap-3 mb-10 lg:hidden">
             <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-primary-foreground" />
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-6 w-6 object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-6 w-6 text-primary-foreground" />
+              )}
             </div>
-            <span className="font-display text-xl font-bold">UniPortal</span>
+            <span className="font-display text-xl font-bold">
+              {settings.shortName}
+            </span>
           </Link>
 
           {/* Back button for multi-step */}

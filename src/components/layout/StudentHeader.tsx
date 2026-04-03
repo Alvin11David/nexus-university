@@ -27,13 +27,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, doc, getDoc, limit, orderBy, onSnapshot, getCountFromServer } from "firebase/firestore";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+  limit,
+  orderBy,
+  onSnapshot,
+  getCountFromServer,
+} from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 
 export function StudentHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { user, profile, signOut } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
 
   const getInitials = (name: string) => {
@@ -53,7 +66,7 @@ export function StudentHeader() {
     const q = query(
       collection(db, "notifications"),
       where("user_id", "==", user.uid),
-      where("is_read", "==", false)
+      where("is_read", "==", false),
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -74,7 +87,7 @@ export function StudentHeader() {
     const q = query(
       collection(db, "notifications"),
       where("user_id", "==", user.uid),
-      where("is_read", "==", false)
+      where("is_read", "==", false),
     );
     const snapshot = await getCountFromServer(q);
     setUnreadCount(snapshot.data().count);
@@ -105,10 +118,18 @@ export function StudentHeader() {
           {/* Logo */}
           <Link to="/dashboard" className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-              <GraduationCap />
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-6 w-6 object-contain"
+                />
+              ) : (
+                <GraduationCap />
+              )}
             </div>
             <span className="hidden sm:block font-bold text-lg">
-              Uni<span className="text-orange-600">Portal</span>
+              {settings.shortName}
             </span>
           </Link>
 

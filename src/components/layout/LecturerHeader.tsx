@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { db } from "@/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 
@@ -36,6 +37,7 @@ export function LecturerHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { user, profile, signOut } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
 
   const getInitials = (name: string) => {
@@ -97,11 +99,19 @@ export function LecturerHeader() {
         {/* Logo */}
         <Link to="/lecturer" className="flex items-center gap-2 group">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground transition-transform group-hover:scale-105 shadow-lg">
-            <GraduationCap className="h-6 w-6" />
+            {settings.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt={`${settings.siteName} logo`}
+                className="h-6 w-6 object-contain"
+              />
+            ) : (
+              <GraduationCap className="h-6 w-6" />
+            )}
           </div>
           <div className="hidden sm:block">
             <span className="font-display text-xl font-bold text-foreground">
-              Uni<span className="text-secondary">Portal</span>
+              {settings.shortName}
             </span>
             <span className="block text-xs text-muted-foreground">
               Lecturer

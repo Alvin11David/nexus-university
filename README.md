@@ -59,6 +59,23 @@ npm run dev
 - Cloud Functions source is in `functions/src/index.ts`.
 - Firestore and Storage rules are in `firestore.rules` and `storage.rules`.
 
+## Open Source Branding Customization
+
+Global site branding now comes from Firestore document `site_settings/branding`.
+
+You can update these fields from the in-app settings UI (admin/registrar role):
+
+- `siteName`: full product name used for browser title and Open Graph title
+- `shortName`: compact app name shown in headers/auth screens
+- `tagline`: meta description and Open Graph description
+- `logoUrl`: remote image URL used in headers/auth screens and favicon
+- `supportEmail`: support contact value for integrations/extensions
+- `primaryColor`: hex brand color (`#RRGGBB` or `#RGB`)
+- `secondaryColor`: hex accent color (`#RRGGBB` or `#RGB`)
+
+If the document does not exist yet, the app falls back to defaults and creates/updates
+the document when branding is saved from settings.
+
 ## CI
 
 GitHub Actions workflow runs lint + build on push and pull requests:
