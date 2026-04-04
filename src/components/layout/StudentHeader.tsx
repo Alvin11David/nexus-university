@@ -230,7 +230,10 @@ export function StudentHeader() {
       </div>
 
       {/* Sidebar */}
-      <StudentSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <StudentSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
     </motion.header>
   );
 }

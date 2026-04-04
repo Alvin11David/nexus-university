@@ -93,6 +93,7 @@ export function LecturerHeader() {
     { label: "Roster", href: "/lecturer/roster", icon: Users },
     { label: "Analytics", href: "/lecturer/analytics", icon: Target },
     { label: "ID Card", href: "/lecturer/id-card", icon: User },
+    { label: "Settings", href: "/lecturer/settings", icon: Settings },
   ];
 
   return (
@@ -254,7 +255,10 @@ export function LecturerHeader() {
       </div>
 
       {/* Sidebar */}
-      <LecturerSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <LecturerSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
     </header>
   );
 }
