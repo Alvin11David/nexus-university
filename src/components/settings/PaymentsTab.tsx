@@ -1056,7 +1056,8 @@ export function PaymentsTab() {
                       const fee =
                         feeAssignments.find((fa) => fa.id === payment.fee_id) ||
                         fees.find((f) => f.id === payment.fee_id);
-                      const currency = (fee as FeeAssignment)?.currency || "UGX";
+                      const currency =
+                        (fee as FeeAssignment)?.currency || "UGX";
 
                       return (
                         <motion.div
@@ -1169,7 +1170,8 @@ export function PaymentsTab() {
                             (fa) => fa.id === selectedPayment.fee_id,
                           ) ||
                           fees.find((f) => f.id === selectedPayment.fee_id);
-                        const currency = (fee as FeeAssignment)?.currency || "UGX";
+                        const currency =
+                          (fee as FeeAssignment)?.currency || "UGX";
                         return `${currency} ${selectedPayment.amount.toLocaleString()}`;
                       })()}
                     </p>
