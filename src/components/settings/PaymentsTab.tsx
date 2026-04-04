@@ -932,23 +932,29 @@ export function PaymentsTab() {
                                         Total Course Cost
                                       </p>
                                       <p className="font-bold text-lg">
-                                        {breakdown.semesterFees[0]?.currency ||
-                                          "UGX"}{" "}
+                                        {(
+                                          breakdown
+                                            .semesterFees[0] as FeeAssignment
+                                        )?.currency || "UGX"}{" "}
                                         {breakdown.totalCost.toLocaleString()}
                                       </p>
                                     </div>
                                     <div className="text-right">
                                       <p className="text-sm text-emerald-600 font-semibold">
                                         Paid:{" "}
-                                        {breakdown.semesterFees[0]?.currency ||
-                                          "UGX"}{" "}
+                                        {(
+                                          breakdown
+                                            .semesterFees[0] as FeeAssignment
+                                        )?.currency || "UGX"}{" "}
                                         {breakdown.totalPaid.toLocaleString()}
                                       </p>
                                       {courseRemaining > 0 && (
                                         <p className="text-sm text-destructive font-semibold">
                                           Remaining:{" "}
-                                          {breakdown.semesterFees[0]
-                                            ?.currency || "UGX"}{" "}
+                                          {(
+                                            breakdown
+                                              .semesterFees[0] as FeeAssignment
+                                          )?.currency || "UGX"}{" "}
                                           {courseRemaining.toLocaleString()}
                                         </p>
                                       )}
