@@ -91,12 +91,16 @@ interface Course {
   year: number;
 }
 
-interface Enrollment {
+interface FeeAssignment {
   id: string;
   course_id: string;
-  status: string;
-  enrolled_at: string;
-  course?: Course;
+  semester: number;
+  academic_year: string;
+  amount: number;
+  currency: string;
+  college: string;
+  course_code: string;
+  course_name: string;
 }
 
 interface CourseFeesBreakdown {
@@ -111,6 +115,7 @@ export function PaymentsTab() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [fees, setFees] = useState<Fee[]>([]);
+  const [feeAssignments, setFeeAssignments] = useState<FeeAssignment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [courseFeesBreakdown, setCourseFeesBreakdown] = useState<
@@ -190,8 +195,45 @@ export function PaymentsTab() {
           course: courseMap[e.course_id],
         }));
         setEnrollments(transformedEnrollments as Enrollment[]);
+
+        // Fetch fee assignments for enrolled courses
+        if (courseIds.length > 0) {
+          const feeAssignmentsData: FeeAssignment[] = [];
+
+          // Get current academic year and semester (you might want to make this configurable)
+          const currentDate = new Date();
+          const currentYear = currentDate.getFullYear();
+          const currentMonth = currentDate.getMonth() + 1; // 1-12
+
+          // Determine semester based on month (Jan-Jun = Semester 1, Jul-Dec = Semester 2)
+          const currentSemester = currentMonth <= 6 ? 1 : 2;
+          const academicYear =
+            currentMonth <= 6
+              ? `${currentYear - 1}/${currentYear}`
+              : `${currentYear}/${currentYear + 1}`;
+
+          for (let i = 0; i < courseIds.length; i += 10) {
+            const chunk = courseIds.slice(i, i + 10);
+            const feeAssignmentsQ = query(
+              collection(db, "fee_assignments"),
+              where("course_id", "in", chunk),
+              where("semester", "==", currentSemester),
+              where("academic_year", "==", academicYear),
+            );
+            const feeAssignmentsSnap = await getDocs(feeAssignmentsQ);
+            feeAssignmentsSnap.docs.forEach((d) => {
+              feeAssignmentsData.push({
+                id: d.id,
+                ...d.data(),
+              } as FeeAssignment);
+            });
+          }
+
+          setFeeAssignments(feeAssignmentsData);
+        }
       } else {
         setEnrollments([]);
+        setFeeAssignments([]);
       }
     } catch (error) {
       console.error("Error fetching payment data:", error);
@@ -210,7 +252,10 @@ export function PaymentsTab() {
     return map;
   }, [payments]);
 
-  const totalFees = fees.reduce((acc, f) => acc + Number(f.amount || 0), 0);
+  const totalFees = feeAssignments.reduce(
+    (acc, fa) => acc + Number(fa.amount || 0),
+    0,
+  );
   const totalPaid = Array.from(paymentTotalsByFee.values()).reduce(
     (acc, v) => acc + v,
     0,
@@ -276,12 +321,13 @@ export function PaymentsTab() {
     },
   ];
 
-  const paymentTotalsForFee = (feeId: string) =>
-    paymentTotalsByFee.get(feeId) || 0;
+  const primaryCurrency =
+    feeAssignments.length > 0 ? feeAssignments[0].currency : "UGX";
 
   const findNextOutstandingFee = () =>
-    fees.find(
-      (f) => Math.max(Number(f.amount || 0) - paymentTotalsForFee(f.id), 0) > 0,
+    feeAssignments.find(
+      (fa) =>
+        Math.max(Number(fa.amount || 0) - paymentTotalsForFee(fa.id), 0) > 0,
     );
 
   const handlePay = async (methodKey: string) => {
@@ -346,32 +392,30 @@ export function PaymentsTab() {
     }
   };
 
-  // Recompute course fee breakdown whenever fees/enrollments/payments change
+  // Recompute course fee breakdown whenever feeAssignments/enrollments/payments change
   useEffect(() => {
     const paymentTotals = paymentTotalsByFee;
     const breakdown = enrollments.map((enrollment) => {
-      const semesterFees = fees.filter(
-        (fee) => fee.semester === enrollment.course?.semester,
+      // Find fee assignment for this course
+      const feeAssignment = feeAssignments.find(
+        (fa) => fa.course_id === enrollment.course_id,
       );
-      const totalCost = semesterFees.reduce(
-        (sum, fee) => sum + Number(fee.amount || 0),
-        0,
-      );
-      const totalPaidForSemester = semesterFees.reduce(
-        (sum, fee) => sum + (paymentTotals.get(fee.id) || 0),
-        0,
-      );
+
+      const totalCost = feeAssignment ? Number(feeAssignment.amount) : 0;
+      const totalPaidForCourse = feeAssignment
+        ? paymentTotals.get(feeAssignment.id) || 0
+        : 0;
 
       return {
         course: enrollment.course,
         enrollment,
-        semesterFees,
+        semesterFees: feeAssignment ? [feeAssignment] : [],
         totalCost,
-        totalPaid: totalPaidForSemester,
+        totalPaid: totalPaidForCourse,
       };
     });
     setCourseFeesBreakdown(breakdown);
-  }, [fees, enrollments, paymentTotalsByFee]);
+  }, [feeAssignments, enrollments, paymentTotalsByFee]);
 
   return (
     <div className="relative">
@@ -403,7 +447,7 @@ export function PaymentsTab() {
               icon: Wallet,
               gradient: "from-primary to-primary/70",
               trend: null,
-              prefix: "UGX ",
+              prefix: `${primaryCurrency} `,
             },
             {
               label: "Amount Paid",
@@ -411,7 +455,7 @@ export function PaymentsTab() {
               icon: CheckCircle2,
               gradient: "from-emerald-500 to-teal-500",
               trend: { value: "+15%", up: true },
-              prefix: "UGX ",
+              prefix: `${primaryCurrency} `,
             },
             {
               label: "Outstanding",
@@ -546,7 +590,7 @@ export function PaymentsTab() {
                     Amount Paid
                   </p>
                   <p className="text-xl font-bold text-emerald-600">
-                    UGX {totalPaid.toLocaleString()}
+                    {primaryCurrency} {totalPaid.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
@@ -554,7 +598,7 @@ export function PaymentsTab() {
                     Remaining
                   </p>
                   <p className="text-xl font-bold text-amber-600">
-                    UGX {outstanding.toLocaleString()}
+                    {primaryCurrency} {outstanding.toLocaleString()}
                   </p>
                 </div>
                 <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20">
@@ -562,7 +606,7 @@ export function PaymentsTab() {
                     Total Fees
                   </p>
                   <p className="text-xl font-bold text-primary">
-                    UGX {totalFees.toLocaleString()}
+                    {primaryCurrency} {totalFees.toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -743,76 +787,85 @@ export function PaymentsTab() {
                               </Badge>
                             </div>
 
-                            {/* Semester Fees */}
+                            {/* Course Fee */}
                             {breakdown.semesterFees.length > 0 ? (
                               <>
                                 <div className="space-y-3 mb-5">
-                                  {breakdown.semesterFees.map((fee, feeIdx) => {
-                                    const paid = paymentTotalsForFee(fee.id);
-                                    const isPaid = paid >= fee.amount;
-                                    const isPartial =
-                                      paid > 0 && paid < fee.amount;
-                                    const progress =
-                                      fee.amount > 0
-                                        ? Math.min(
-                                            (paid / fee.amount) * 100,
-                                            100,
-                                          )
-                                        : 0;
+                                  {breakdown.semesterFees.map(
+                                    (feeAssignment, feeIdx) => {
+                                      const paid = paymentTotalsForFee(
+                                        feeAssignment.id,
+                                      );
+                                      const isPaid =
+                                        paid >= feeAssignment.amount;
+                                      const isPartial =
+                                        paid > 0 && paid < feeAssignment.amount;
+                                      const progress =
+                                        feeAssignment.amount > 0
+                                          ? Math.min(
+                                              (paid / feeAssignment.amount) *
+                                                100,
+                                              100,
+                                            )
+                                          : 0;
 
-                                    return (
-                                      <motion.div
-                                        key={fee.id}
-                                        initial={{ opacity: 0, x: -10 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        transition={{ delay: feeIdx * 0.05 }}
-                                        className="p-4 rounded-xl bg-background/50 border border-border/50"
-                                      >
-                                        <div className="flex items-center justify-between mb-3">
-                                          <div>
-                                            <p className="font-semibold text-sm">
-                                              {fee.description}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                              Due:{" "}
-                                              {new Date(
-                                                fee.due_date,
-                                              ).toLocaleDateString("en-US", {
-                                                month: "short",
-                                                day: "numeric",
-                                              })}
-                                            </p>
-                                          </div>
-                                          <div className="text-right">
-                                            <p className="font-bold text-sm">
-                                              UGX {fee.amount.toLocaleString()}
-                                            </p>
-                                            {isPartial && (
-                                              <p className="text-xs text-emerald-600">
-                                                Paid: UGX{" "}
-                                                {paid.toLocaleString()}
+                                      return (
+                                        <motion.div
+                                          key={feeAssignment.id}
+                                          initial={{ opacity: 0, x: -10 }}
+                                          animate={{ opacity: 1, x: 0 }}
+                                          transition={{ delay: feeIdx * 0.05 }}
+                                          className="p-4 rounded-xl bg-background/50 border border-border/50"
+                                        >
+                                          <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                              <p className="font-semibold text-sm">
+                                                {feeAssignment.course_name} -{" "}
+                                                {feeAssignment.course_code}
                                               </p>
-                                            )}
+                                              <p className="text-xs text-muted-foreground">
+                                                Semester{" "}
+                                                {feeAssignment.semester} •{" "}
+                                                {feeAssignment.academic_year}
+                                              </p>
+                                              <p className="text-xs text-muted-foreground">
+                                                {feeAssignment.college}
+                                              </p>
+                                            </div>
+                                            <div className="text-right">
+                                              <p className="font-bold text-sm">
+                                                {feeAssignment.currency}{" "}
+                                                {feeAssignment.amount.toLocaleString()}
+                                              </p>
+                                              {isPartial && (
+                                                <p className="text-xs text-emerald-600">
+                                                  Paid: {feeAssignment.currency}{" "}
+                                                  {paid.toLocaleString()}
+                                                </p>
+                                              )}
+                                            </div>
                                           </div>
-                                        </div>
-                                        {/* Mini Progress Bar */}
-                                        <div className="h-2 rounded-full bg-muted overflow-hidden">
-                                          <motion.div
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${progress}%` }}
-                                            transition={{ duration: 0.8 }}
-                                            className={`h-full ${
-                                              isPaid
-                                                ? "bg-gradient-to-r from-emerald-500 to-teal-500"
-                                                : isPartial
-                                                  ? "bg-gradient-to-r from-amber-500 to-orange-500"
-                                                  : "bg-gradient-to-r from-primary to-secondary"
-                                            }`}
-                                          />
-                                        </div>
-                                      </motion.div>
-                                    );
-                                  })}
+                                          {/* Mini Progress Bar */}
+                                          <div className="h-2 rounded-full bg-muted overflow-hidden">
+                                            <motion.div
+                                              initial={{ width: 0 }}
+                                              animate={{
+                                                width: `${progress}%`,
+                                              }}
+                                              transition={{ duration: 0.8 }}
+                                              className={`h-full ${
+                                                isPaid
+                                                  ? "bg-gradient-to-r from-emerald-500 to-teal-500"
+                                                  : isPartial
+                                                    ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                                                    : "bg-gradient-to-r from-primary to-secondary"
+                                              }`}
+                                            />
+                                          </div>
+                                        </motion.div>
+                                      );
+                                    },
+                                  )}
                                 </div>
 
                                 {/* Course Total */}
@@ -823,18 +876,23 @@ export function PaymentsTab() {
                                         Total Course Cost
                                       </p>
                                       <p className="font-bold text-lg">
-                                        UGX{" "}
+                                        {breakdown.semesterFees[0]?.currency ||
+                                          "UGX"}{" "}
                                         {breakdown.totalCost.toLocaleString()}
                                       </p>
                                     </div>
                                     <div className="text-right">
                                       <p className="text-sm text-emerald-600 font-semibold">
-                                        Paid: UGX{" "}
+                                        Paid:{" "}
+                                        {breakdown.semesterFees[0]?.currency ||
+                                          "UGX"}{" "}
                                         {breakdown.totalPaid.toLocaleString()}
                                       </p>
                                       {courseRemaining > 0 && (
                                         <p className="text-sm text-destructive font-semibold">
-                                          Remaining: UGX{" "}
+                                          Remaining:{" "}
+                                          {breakdown.semesterFees[0]
+                                            ?.currency || "UGX"}{" "}
                                           {courseRemaining.toLocaleString()}
                                         </p>
                                       )}
