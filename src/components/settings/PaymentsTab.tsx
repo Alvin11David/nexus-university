@@ -209,13 +209,14 @@ export function PaymentsTab() {
         if (courseIds.length > 0) {
           const feeAssignmentsData: FeeAssignment[] = [];
 
-          // Get current academic year and semester (you might want to make this configurable)
+          // Get college from the first enrollment (assuming all courses are from the same college)
+          const college = transformedEnrollments[0]?.course?.college;
           const currentDate = new Date();
           const currentYear = currentDate.getFullYear();
           const currentMonth = currentDate.getMonth() + 1; // 1-12
 
-          // Determine semester based on month (Jan-Jun = Semester 1, Jul-Dec = Semester 2)
-          const currentSemester = currentMonth <= 6 ? 1 : 2;
+          // Determine semester based on month (Jan-Jun = Semester 2, Jul-Dec = Semester 1)
+          const currentSemester = currentMonth <= 6 ? 2 : 1;
           const academicYear =
             currentMonth <= 6
               ? `${currentYear - 1}/${currentYear}`
@@ -225,9 +226,9 @@ export function PaymentsTab() {
             const chunk = courseIds.slice(i, i + 10);
             const feeAssignmentsQ = query(
               collection(db, "fee_assignments"),
-              where("course_id", "in", chunk),
               where("semester", "==", currentSemester),
               where("academic_year", "==", academicYear),
+              ...(college ? [where("college", "==", college)] : []),
             );
             const feeAssignmentsSnap = await getDocs(feeAssignmentsQ);
             feeAssignmentsSnap.docs.forEach((d) => {
@@ -420,20 +421,20 @@ export function PaymentsTab() {
     const paymentTotals = paymentTotalsByFee;
     const breakdown = enrollments.map((enrollment) => {
       if (feeAssignments.length > 0) {
-        // Use fee assignments
-        const feeAssignment = feeAssignments.find(
-          (fa) => fa.course_id === enrollment.course_id,
+        // Use fee assignments - apply to all enrolled courses
+        const totalCost = feeAssignments.reduce(
+          (acc, fa) => acc + Number(fa.amount || 0),
+          0,
         );
-
-        const totalCost = feeAssignment ? Number(feeAssignment.amount) : 0;
-        const totalPaidForCourse = feeAssignment
-          ? paymentTotals.get(feeAssignment.id) || 0
-          : 0;
+        const totalPaidForCourse = feeAssignments.reduce(
+          (acc, fa) => acc + (paymentTotals.get(fa.id) || 0),
+          0,
+        );
 
         return {
           course: enrollment.course,
           enrollment,
-          semesterFees: feeAssignment ? [feeAssignment] : [],
+          semesterFees: feeAssignments,
           totalCost,
           totalPaid: totalPaidForCourse,
         };
