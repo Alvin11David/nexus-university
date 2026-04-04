@@ -261,6 +261,9 @@ export function PaymentsTab() {
     return map;
   }, [payments]);
 
+  const paymentTotalsForFee = (feeId: string) =>
+    paymentTotalsByFee.get(feeId) || 0;
+
   const totalFees =
     feeAssignments.length > 0
       ? feeAssignments.reduce((acc, fa) => acc + Number(fa.amount || 0), 0)
@@ -337,12 +340,17 @@ export function PaymentsTab() {
     feeAssignments.length > 0
       ? feeAssignments.find(
           (fa) =>
-            Math.max(Number(fa.amount || 0) - paymentTotalsByFee(fa.id), 0) >
-            0,
+            Math.max(
+              Number(fa.amount || 0) - (paymentTotalsByFee.get(fa.id) || 0),
+              0,
+            ) > 0,
         )
       : fees.find(
           (f) =>
-            Math.max(Number(f.amount || 0) - paymentTotalsByFee(f.id), 0) > 0,
+            Math.max(
+              Number(f.amount || 0) - (paymentTotalsByFee.get(f.id) || 0),
+              0,
+            ) > 0,
         );
 
   const handlePay = async (methodKey: string) => {
@@ -359,7 +367,7 @@ export function PaymentsTab() {
       return;
     }
 
-    const alreadyPaid = paymentTotalsByFee(targetFee.id);
+    const alreadyPaid = paymentTotalsByFee.get(targetFee.id) || 0;
     const amount = Math.max(Number(targetFee.amount || 0) - alreadyPaid, 0);
 
     if (amount <= 0) {
