@@ -524,7 +524,7 @@ export function PaymentsTab() {
             },
           ].map((stat, i) => (
             <motion.div
-              key={stat.label}
+              key={`stat-${i}`}
               initial={{ opacity: 0, y: 20, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ delay: i * 0.1, type: "spring" }}
@@ -859,7 +859,7 @@ export function PaymentsTab() {
 
                                       return (
                                         <motion.div
-                                          key={feeItem.id}
+                                          key={`${feeItem.id}-${feeIdx}`}
                                           initial={{ opacity: 0, x: -10 }}
                                           animate={{ opacity: 1, x: 0 }}
                                           transition={{ delay: feeIdx * 0.05 }}
@@ -1197,7 +1197,7 @@ export function PaymentsTab() {
                       },
                     ].map((item) => (
                       <div
-                        key={item.label}
+                        key={`item-${item.label}`}
                         className="flex items-center justify-between py-3 border-b border-border/50 last:border-0"
                       >
                         <span className="text-muted-foreground">
@@ -1255,7 +1255,7 @@ export function PaymentsTab() {
             },
           ].map((action, i) => (
             <motion.div
-              key={action.title}
+              key={`action-${i}`}
               whileHover={{ y: -5, scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
             >
