@@ -28,6 +28,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
+import { StudentSidebar } from "./StudentSidebar";
 import {
   collection,
   query,
@@ -44,6 +45,7 @@ import { db } from "@/integrations/firebase/client";
 
 export function StudentHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { user, profile, signOut } = useAuth();
   const { settings } = useSiteSettings();
@@ -115,23 +117,33 @@ export function StudentHeader() {
     >
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
-          <Link to="/dashboard" className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white">
-              {settings.logoUrl ? (
-                <img
-                  src={settings.logoUrl}
-                  alt={`${settings.siteName} logo`}
-                  className="h-6 w-6 object-contain"
-                />
-              ) : (
-                <GraduationCap />
-              )}
-            </div>
-            <span className="hidden sm:block font-bold text-lg">
-              {settings.shortName}
-            </span>
-          </Link>
+          {/* Logo and Menu Toggle */}
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="h-10 w-10"
+            >
+              {sidebarOpen ? <X /> : <Menu />}
+            </Button>
+            <Link to="/dashboard" className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 text-white">
+                {settings.logoUrl ? (
+                  <img
+                    src={settings.logoUrl}
+                    alt={`${settings.siteName} logo`}
+                    className="h-6 w-6 object-contain"
+                  />
+                ) : (
+                  <GraduationCap />
+                )}
+              </div>
+              <span className="hidden sm:block font-bold text-lg">
+                {settings.shortName}
+              </span>
+            </Link>
+          </div>
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex gap-2">
@@ -209,38 +221,16 @@ export function StudentHeader() {
               variant="ghost"
               size="icon"
               className="md:hidden"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              {mobileMenuOpen ? <X /> : <Menu />}
+              {sidebarOpen ? <X /> : <Menu />}
             </Button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ height: 0 }}
-            animate={{ height: "auto" }}
-            exit={{ height: 0 }}
-            className="md:hidden bg-white dark:bg-gray-900 border-t"
-          >
-            <nav className="p-4 space-y-2">
-              {studentNavItems.map((item) => (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="block py-2"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Sidebar */}
+      <StudentSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
     </motion.header>
   );
 }
