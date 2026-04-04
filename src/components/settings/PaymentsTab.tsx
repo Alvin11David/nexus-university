@@ -125,6 +125,9 @@ export function PaymentsTab() {
   const { toast } = useToast();
   const [fees, setFees] = useState<Fee[]>([]);
   const [feeAssignments, setFeeAssignments] = useState<FeeAssignment[]>([]);
+  const [allFeeAssignments, setAllFeeAssignments] = useState<FeeAssignment[]>(
+    [],
+  );
   const [payments, setPayments] = useState<Payment[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [courseFeesBreakdown, setCourseFeesBreakdown] = useState<
@@ -207,7 +210,8 @@ export function PaymentsTab() {
 
         // Fetch fee assignments for enrolled courses
         if (courseIds.length > 0) {
-          const feeAssignmentsData: FeeAssignment[] = [];
+          const currentFeeAssignmentsData: FeeAssignment[] = [];
+          const allFeeAssignmentsData: FeeAssignment[] = [];
 
           // Get college from the first enrollment (assuming all courses are from the same college)
           const college = transformedEnrollments[0]?.course?.college;
@@ -222,28 +226,73 @@ export function PaymentsTab() {
               ? `${currentYear - 1}/${currentYear}`
               : `${currentYear}/${currentYear + 1}`;
 
-          for (let i = 0; i < courseIds.length; i += 10) {
-            const chunk = courseIds.slice(i, i + 10);
+          if (college) {
             const feeAssignmentsQ = query(
               collection(db, "fee_assignments"),
               where("semester", "==", currentSemester),
               where("academic_year", "==", academicYear),
-              ...(college ? [where("college", "==", college)] : []),
+              where("college", "==", college),
             );
             const feeAssignmentsSnap = await getDocs(feeAssignmentsQ);
             feeAssignmentsSnap.docs.forEach((d) => {
-              feeAssignmentsData.push({
+              currentFeeAssignmentsData.push({
+                id: d.id,
+                ...d.data(),
+              } as FeeAssignment);
+            });
+
+            const allFeeAssignmentsQ = query(
+              collection(db, "fee_assignments"),
+              where("college", "==", college),
+            );
+            const allFeeAssignmentsSnap = await getDocs(allFeeAssignmentsQ);
+            allFeeAssignmentsSnap.docs.forEach((d) => {
+              allFeeAssignmentsData.push({
                 id: d.id,
                 ...d.data(),
               } as FeeAssignment);
             });
           }
 
-          setFeeAssignments(feeAssignmentsData);
+          // Fallback: if college is missing or college filter returned no rows,
+          // fetch by academic period so current fees still show.
+          if (currentFeeAssignmentsData.length === 0) {
+            const fallbackCurrentQ = query(
+              collection(db, "fee_assignments"),
+              where("semester", "==", currentSemester),
+              where("academic_year", "==", academicYear),
+            );
+            const fallbackCurrentSnap = await getDocs(fallbackCurrentQ);
+            fallbackCurrentSnap.docs.forEach((d) => {
+              currentFeeAssignmentsData.push({
+                id: d.id,
+                ...d.data(),
+              } as FeeAssignment);
+            });
+          }
+
+          if (allFeeAssignmentsData.length === 0) {
+            const fallbackAllSnap = await getDocs(
+              collection(db, "fee_assignments"),
+            );
+            fallbackAllSnap.docs.forEach((d) => {
+              allFeeAssignmentsData.push({
+                id: d.id,
+                ...d.data(),
+              } as FeeAssignment);
+            });
+          }
+
+          setFeeAssignments(currentFeeAssignmentsData);
+          setAllFeeAssignments(allFeeAssignmentsData);
+        } else {
+          setFeeAssignments([]);
+          setAllFeeAssignments([]);
         }
       } else {
         setEnrollments([]);
         setFeeAssignments([]);
+        setAllFeeAssignments([]);
       }
     } catch (error) {
       console.error("Error fetching payment data:", error);
@@ -463,6 +512,31 @@ export function PaymentsTab() {
     });
     setCourseFeesBreakdown(breakdown);
   }, [feeAssignments, fees, enrollments, paymentTotalsByFee]);
+
+  const groupedFeeHistory = useMemo(() => {
+    const groups: Record<string, FeeAssignment[]> = {};
+    allFeeAssignments.forEach((fee) => {
+      const key = `${fee.academic_year}::${fee.semester}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(fee);
+    });
+
+    return Object.entries(groups)
+      .map(([key, items]) => {
+        const [academicYear, semesterStr] = key.split("::");
+        return {
+          academicYear,
+          semester: Number(semesterStr),
+          items,
+          total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+        };
+      })
+      .sort((a, b) => {
+        const ayCompare = b.academicYear.localeCompare(a.academicYear);
+        if (ayCompare !== 0) return ayCompare;
+        return b.semester - a.semester;
+      });
+  }, [allFeeAssignments]);
 
   return (
     <div className="relative">
@@ -984,6 +1058,97 @@ export function PaymentsTab() {
                         </motion.div>
                       );
                     })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.35 }}
+            className="lg:col-span-2"
+          >
+            <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+                    <Calendar className="h-5 w-5 text-secondary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">
+                      Fee History (All Years & Semesters)
+                    </CardTitle>
+                    <CardDescription>
+                      Historical fee assignments for your course progression
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="inline-block animate-spin rounded-full h-7 w-7 border-b-2 border-secondary mb-3"></div>
+                    <p className="text-muted-foreground">
+                      Loading fee history...
+                    </p>
+                  </div>
+                ) : groupedFeeHistory.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground text-sm">
+                      No fee history available yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {groupedFeeHistory.map((group, groupIdx) => (
+                      <motion.div
+                        key={`${group.academicYear}-${group.semester}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: groupIdx * 0.05 }}
+                        className="rounded-xl border border-border/50 p-4 bg-muted/20"
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <p className="font-semibold text-sm">
+                              {group.academicYear} • Semester {group.semester}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {group.items.length} fee item
+                              {group.items.length > 1 ? "s" : ""}
+                            </p>
+                          </div>
+                          <p className="font-bold text-sm">
+                            {group.items[0]?.currency || "UGX"}{" "}
+                            {group.total.toLocaleString()}
+                          </p>
+                        </div>
+
+                        <div className="space-y-2">
+                          {group.items.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between rounded-lg bg-background/70 px-3 py-2 border border-border/40"
+                            >
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {item.course_name} ({item.course_code})
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {item.college}
+                                </p>
+                              </div>
+                              <p className="text-sm font-semibold">
+                                {item.currency}{" "}
+                                {Number(item.amount || 0).toLocaleString()}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    ))}
                   </div>
                 )}
               </CardContent>
