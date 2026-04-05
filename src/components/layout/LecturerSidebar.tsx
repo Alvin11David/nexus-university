@@ -22,6 +22,7 @@ const lecturerNavItems = [
   { label: "My Courses", href: "/lecturer/courses", icon: BookOpen },
   { label: "Grades", href: "/lecturer/gradebook", icon: BarChart3 },
   { label: "Assignments", href: "/lecturer/assignments", icon: FileText },
+  { label: "Notes", href: "/lecturer/notes", icon: FileText },
   { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
   { label: "Enrollments", href: "/lecturer/enrollments", icon: Users },
   {

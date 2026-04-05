@@ -369,28 +369,6 @@ export default function Announcements() {
           </div>
         </motion.div>
 
-        {/* Export Announcements Button */}
-        <div className="flex justify-end mb-4">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={async () => {
-              try {
-                for (const ann of announcements) {
-                  await addDoc(collection(db, "AnnouncementsExport"), {
-                    ...ann,
-                    exportedAt: new Date().toISOString(),
-                  });
-                }
-                alert("Announcements exported to Firestore.");
-              } catch (e) {
-                alert("Failed to export announcements.");
-              }
-            }}
-          >
-            Export Announcements to Firestore
-          </Button>
-        </div>
         {announcements.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}

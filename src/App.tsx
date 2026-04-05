@@ -27,6 +27,7 @@ import LecturerClasses from "./pages/LecturerClasses";
 import LecturerMessages from "./pages/LecturerMessages";
 import LecturerGradeBook from "./pages/LecturerGradeBook";
 import LecturerAssignments from "./pages/LecturerAssignments";
+import LecturerNotes from "./pages/LecturerNotes";
 import LecturerAnnouncements from "./pages/LecturerAnnouncements";
 import LecturerRoster from "./pages/LecturerRoster";
 import LecturerAnalytics from "./pages/LecturerAnalytics";
@@ -370,6 +371,14 @@ function AppRoutes() {
         element={
           <LecturerRoute>
             <LecturerAssignments />
+          </LecturerRoute>
+        }
+      />
+      <Route
+        path="/lecturer/notes"
+        element={
+          <LecturerRoute>
+            <LecturerNotes />
           </LecturerRoute>
         }
       />
