@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { doc, getDoc, addDoc, collection, getDocs } from "firebase/firestore";
 import { auth, db } from "@/integrations/firebase/client";
 
@@ -46,7 +47,6 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [otpValues, setOtpValues] = useState(["", "", "", ""]);
-  const [generatedOtp, setGeneratedOtp] = useState("");
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
   const [isRegistrarSignup, setIsRegistrarSignup] = useState(false); // Auto-detect based on email
@@ -77,6 +77,7 @@ export default function Auth() {
     generateOTP,
     verifyOTP,
   } = useAuth();
+  const { settings } = useSiteSettings();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -156,7 +157,6 @@ export default function Auth() {
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
       setStudentRecord({
         id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
@@ -164,11 +164,19 @@ export default function Auth() {
         department: formData.department,
       });
 
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been sent to your email address.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {
@@ -194,7 +202,6 @@ export default function Auth() {
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
       setStudentRecord({
         id: null,
         full_name: `${formData.firstName} ${formData.lastName}`,
@@ -202,11 +209,19 @@ export default function Auth() {
         department: formData.department,
       });
 
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been sent to your email address.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {
@@ -284,26 +299,69 @@ export default function Auth() {
 
       setStudentRecord(data);
 
-      // Generate OTP (mock - shown in toast for testing)
+      // Generate OTP. In production we do not expose OTP values in the UI.
       const { otp, error: otpError } = await generateOTP(
         formData.email,
         data!.id,
       );
       if (otpError) throw otpError;
 
-      setGeneratedOtp(otp);
-
-      // Show OTP in toast for testing
-      toast({
-        title: "OTP Sent",
-        description: `Your verification code is: ${otp}`,
-        duration: 10000,
-      });
+      if (import.meta.env.DEV) {
+        toast({
+          title: "OTP Sent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Sent",
+          description:
+            "A verification code has been generated. Please check your registered delivery channel.",
+        });
+      }
 
       setStep("signup-otp");
     } catch (error: any) {
       toast({
         title: "Validation Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    setLoading(true);
+
+    try {
+      const emailToUse =
+        isLecturerSignup || isRegistrarSignup
+          ? formData.actualEmail
+          : formData.email;
+
+      const { otp, error } = await generateOTP(
+        emailToUse,
+        studentRecord?.id ?? null,
+      );
+      if (error) throw error;
+
+      if (import.meta.env.DEV && otp) {
+        toast({
+          title: "OTP Resent (Development)",
+          description: `Your verification code is: ${otp}`,
+          duration: 10000,
+        });
+      } else {
+        toast({
+          title: "OTP Resent",
+          description: "A fresh verification code has been sent.",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Could Not Resend OTP",
         description: error.message,
         variant: "destructive",
       });
@@ -436,7 +494,7 @@ export default function Auth() {
 
       toast({
         title: "Account Created!",
-        description: "Welcome to UniPortal.",
+        description: `Welcome to ${settings.shortName}.`,
       });
       // Redirect to appropriate dashboard based on role
       if (isLecturerSignup) {
@@ -460,7 +518,6 @@ export default function Auth() {
   const resetToSignIn = () => {
     setStep("signin");
     setOtpValues(["", "", "", ""]);
-    setGeneratedOtp("");
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
@@ -482,7 +539,6 @@ export default function Auth() {
   const resetToSignUp = () => {
     setStep("signup-details");
     setOtpValues(["", "", "", ""]);
-    setGeneratedOtp("");
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
@@ -1147,13 +1203,7 @@ export default function Auth() {
               Didn't receive the code?{" "}
               <button
                 type="button"
-                onClick={() => {
-                  toast({
-                    title: "OTP Resent",
-                    description: `Your verification code is: ${generatedOtp}`,
-                    duration: 10000,
-                  });
-                }}
+                onClick={handleResendOtp}
                 className="text-secondary font-medium hover:text-secondary/80"
               >
                 Resend
@@ -1272,10 +1322,18 @@ export default function Auth() {
         <div className="relative z-10 flex flex-col justify-between p-12 xl:p-20 w-full">
           <Link to="/" className="flex items-center gap-3">
             <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur-sm flex items-center justify-center">
-              <GraduationCap className="h-7 w-7 text-white" />
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-7 w-7 object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-7 w-7 text-white" />
+              )}
             </div>
             <span className="font-display text-2xl font-bold text-white">
-              UniPortal
+              {settings.shortName}
             </span>
           </Link>
 
@@ -1370,9 +1428,19 @@ export default function Auth() {
           {/* Mobile Logo */}
           <Link to="/" className="flex items-center gap-3 mb-10 lg:hidden">
             <div className="h-11 w-11 rounded-xl bg-primary flex items-center justify-center">
-              <GraduationCap className="h-6 w-6 text-primary-foreground" />
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-6 w-6 object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-6 w-6 text-primary-foreground" />
+              )}
             </div>
-            <span className="font-display text-xl font-bold">UniPortal</span>
+            <span className="font-display text-xl font-bold">
+              {settings.shortName}
+            </span>
           </Link>
 
           {/* Back button for multi-step */}

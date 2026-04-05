@@ -19,9 +19,87 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
+import jsPDF from "jspdf";
+
+// Simple helper function to create a table in PDF
+function createPDFTable(
+  doc: jsPDF,
+  startY: number,
+  headers: string[],
+  rows: (string | number)[][],
+  options: {
+    colWidths?: number[];
+    margin?: number;
+    headerBg?: number[];
+    bottomMargin?: number;
+  } = {},
+) {
+  const margin = options.margin || 10;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const bottomMargin = options.bottomMargin || 20;
+  const colCount = headers.length;
+  const colWidths =
+    options.colWidths ||
+    Array(colCount).fill((pageWidth - margin * 2) / colCount);
+
+  let yPos = startY;
+  const rowHeight = 6;
+
+  const drawHeader = () => {
+    doc.setFillColor(51, 65, 85);
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+
+    let headerX = margin;
+    headers.forEach((header, i) => {
+      doc.rect(headerX, yPos, colWidths[i], rowHeight, "F");
+      doc.text(header, headerX + 2, yPos + 4.5, { maxWidth: colWidths[i] - 4 });
+      headerX += colWidths[i];
+    });
+
+    yPos += rowHeight;
+  };
+
+  drawHeader();
+
+  // Draw rows
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.setTextColor(30, 41, 59);
+
+  rows.forEach((row, rowIndex) => {
+    if (yPos + rowHeight > pageHeight - bottomMargin) {
+      doc.addPage();
+      yPos = margin;
+      drawHeader();
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+    }
+
+    if (rowIndex % 2 === 1) {
+      doc.setFillColor(248, 250, 252);
+      doc.rect(margin, yPos, pageWidth - margin * 2, rowHeight, "F");
+    }
+
+    let xPos = margin;
+    row.forEach((cell, colIndex) => {
+      doc.text(String(cell), xPos + 2, yPos + 4.5, {
+        maxWidth: colWidths[colIndex] - 4,
+      });
+      doc.setDrawColor(226, 232, 240);
+      doc.rect(xPos, yPos, colWidths[colIndex], rowHeight);
+      xPos += colWidths[colIndex];
+    });
+
+    yPos += rowHeight;
+  });
+
+  return yPos;
+}
 interface ResultCourse {
   title: string;
   code: string;
@@ -437,13 +515,11 @@ export default function Results() {
         yPos += 9;
 
         // Table
-        autoTable(doc, {
-          startY: yPos,
-          margin: { left: margin, right: margin },
-          head: [
-            ["Code", "Course Title", "Mark", "CUs", "Grade", "GD Pt", "Remark"],
-          ],
-          body: term.entries.map((c) => [
+        yPos = createPDFTable(
+          doc,
+          yPos,
+          ["Code", "Course Title", "Mark", "CUs", "Grade", "GD Pt", "Remark"],
+          term.entries.map((c) => [
             c.courseCode || "—",
             c.courseTitle,
             c.marks?.toFixed(1) ?? "0.0",
@@ -452,38 +528,18 @@ export default function Results() {
             c.grade_point?.toFixed(1) ?? "0.0",
             c.semester_remark || "—",
           ]),
-          headStyles: {
-            fillColor: [51, 65, 85], // slate-700
-            textColor: [255, 255, 255],
-            fontStyle: "bold",
-            fontSize: 7.5,
-            cellPadding: 3,
+          {
+            margin,
+            colWidths: [22, 45, 16, 12, 16, 16, 24],
+            bottomMargin: 20,
           },
-          bodyStyles: {
-            fontSize: 8,
-            textColor: [30, 41, 59],
-            cellPadding: 3,
-          },
-          alternateRowStyles: {
-            fillColor: [248, 250, 252],
-          },
-          columnStyles: {
-            0: { cellWidth: 22, fontStyle: "bold", textColor: [37, 99, 235] },
-            1: { cellWidth: "auto" },
-            2: { cellWidth: 16, halign: "center" },
-            3: { cellWidth: 12, halign: "center" },
-            4: { cellWidth: 16, halign: "center", fontStyle: "bold" },
-            5: { cellWidth: 16, halign: "center" },
-            6: { cellWidth: 24, halign: "center", textColor: [5, 150, 105] },
-          },
-          tableLineColor: [226, 232, 240],
-          tableLineWidth: 0.3,
-          didDrawPage: () => {
-            /* page break handled by autoTable */
-          },
-        });
+        );
+        yPos += 3;
 
-        yPos = (doc as any).lastAutoTable.finalY + 3;
+        if (yPos + 12 > pageHeight - 20) {
+          doc.addPage();
+          yPos = margin;
+        }
 
         // GPA / CGPA summary strip
         doc.setFillColor(241, 245, 249); // slate-100

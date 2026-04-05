@@ -24,7 +24,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -308,7 +308,7 @@ export default function LecturerCourseSelection() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
-      <LecturerHeader />
+
 
       <main className="px-4 pb-20 sm:px-6 lg:px-8 pt-6">
         <div className="max-w-6xl mx-auto space-y-6">

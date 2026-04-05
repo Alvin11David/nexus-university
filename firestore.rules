@@ -2,8 +2,16 @@ rules_version='2'
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /site_settings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role in ["admin", "registrar"];
+    }
+
     match /{document=**} {
-      allow read, write: if true;
+      // Minimum safe baseline: require authentication for all document access.
+      // Tighten further with collection-level role/ownership checks per feature.
+      allow read, write: if request.auth != null;
     }
   }
 }

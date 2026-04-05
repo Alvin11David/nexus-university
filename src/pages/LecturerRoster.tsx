@@ -11,7 +11,7 @@ import {
   Filter,
   MessageCircle,
 } from "lucide-react";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -198,7 +198,7 @@ export default function LecturerRoster() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
-      <LecturerHeader />
+
 
       <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
         {/* Header */}

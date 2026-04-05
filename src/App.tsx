@@ -4,7 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { EvaluationGuard } from "@/components/layout/EvaluationGuard";
+import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
+import { LecturerLayout } from "@/components/layout/LecturerLayout";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -51,6 +53,7 @@ import RegistrarTranscriptDetail from "./pages/RegistrarTranscriptDetail";
 import RegistrarEnrollments from "./pages/RegistrarEnrollments";
 import RegistrarPrograms from "./pages/RegistrarPrograms";
 import RegistrarCalendar from "./pages/RegistrarCalendar";
+import RegistrarReports from "./pages/RegistrarReports";
 
 const queryClient = new QueryClient();
 
@@ -69,7 +72,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function StudentRoute({ children }: { children: React.ReactNode }) {
@@ -92,11 +95,12 @@ function StudentRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/lecturer" replace />;
   }
 
-  return (
-    <EvaluationGuard>
-      {children}
-    </EvaluationGuard>
-  );
+  // Redirect registrars to registrar dashboard
+  if (profile?.role === "registrar") {
+    return <Navigate to="/registrar" replace />;
+  }
+
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function LecturerRoute({ children }: { children: React.ReactNode }) {
@@ -124,7 +128,7 @@ function LecturerRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function RegistrarRoute({ children }: { children: React.ReactNode }) {
@@ -152,7 +156,7 @@ function RegistrarRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function AppRoutes() {
@@ -197,7 +201,7 @@ function AppRoutes() {
         path="/courses"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Registration />
           </StudentRoute>
         }
       />
@@ -205,7 +209,7 @@ function AppRoutes() {
         path="/live"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Timetable />
           </StudentRoute>
         }
       />
@@ -213,7 +217,7 @@ function AppRoutes() {
         path="/profile"
         element={
           <StudentRoute>
-            <Dashboard />
+            <Settings />
           </StudentRoute>
         }
       />
@@ -529,6 +533,22 @@ function AppRoutes() {
           </RegistrarRoute>
         }
       />
+      <Route
+        path="/registrar/reports"
+        element={
+          <RegistrarRoute>
+            <RegistrarReports />
+          </RegistrarRoute>
+        }
+      />
+      <Route
+        path="/registrar/settings"
+        element={
+          <RegistrarRoute>
+            <Settings />
+          </RegistrarRoute>
+        }
+      />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -546,7 +566,9 @@ const App = () => (
         }}
       >
         <AuthProvider>
-          <AppRoutes />
+          <SiteSettingsProvider>
+            <AppRoutes />
+          </SiteSettingsProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

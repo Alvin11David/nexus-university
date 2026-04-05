@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -36,6 +37,7 @@ export function Sidebar({
   collapsed: externalCollapsed,
   onCollapsedChange,
 }: SidebarProps) {
+  const { settings } = useSiteSettings();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
 
   const collapsed = externalCollapsed ?? internalCollapsed;
@@ -46,7 +48,7 @@ export function Sidebar({
     <aside
       className={cn(
         "fixed left-0 top-0 z-40 h-screen bg-card border-r border-border/50 transition-all duration-300 flex flex-col",
-        collapsed ? "w-20" : "w-64"
+        collapsed ? "w-20" : "w-64",
       )}
     >
       {/* Logo */}
@@ -60,7 +62,7 @@ export function Sidebar({
           </div>
           {!collapsed && (
             <span className="font-display font-bold text-xl text-foreground">
-              Registrar
+              {settings.shortName}
             </span>
           )}
         </Link>
@@ -96,13 +98,13 @@ export function Sidebar({
                   "group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all duration-200",
                   isActive
                     ? "bg-gradient-to-r from-primary to-orange-400 text-white shadow-primary"
-                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                 )}
               >
                 <item.icon
                   className={cn(
                     "h-5 w-5 flex-shrink-0 transition-transform duration-200",
-                    !isActive && "group-hover:scale-110"
+                    !isActive && "group-hover:scale-110",
                   )}
                 />
                 {!collapsed && <span>{item.name}</span>}
@@ -118,7 +120,7 @@ export function Sidebar({
           to="#"
           className={cn(
             "flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-all duration-200",
-            collapsed && "justify-center"
+            collapsed && "justify-center",
           )}
         >
           <HelpCircle className="h-5 w-5 flex-shrink-0" />
@@ -129,7 +131,7 @@ export function Sidebar({
           onClick={onLogout}
           className={cn(
             "w-full justify-start gap-3 rounded-xl px-3 py-3 h-auto text-muted-foreground hover:text-destructive hover:bg-destructive/10",
-            collapsed && "justify-center"
+            collapsed && "justify-center",
           )}
         >
           <LogOut className="h-5 w-5" />

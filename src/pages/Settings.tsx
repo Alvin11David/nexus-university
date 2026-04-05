@@ -34,8 +34,9 @@ import { ServicesTab } from "@/components/settings/ServicesTab";
 import { BioDataTab } from "@/components/settings/BioDataTab";
 import { AcademicCalendarTab } from "@/components/settings/AcademicCalendarTab";
 import { EvaluationSurveysTab } from "@/components/settings/EvaluationSurveysTab";
+import { SiteBrandingTab } from "@/components/settings/SiteBrandingTab";
 
-const settingsTabs = [
+const baseSettingsTabs = [
   { id: "prn", label: "Generate PRN", shortLabel: "PRN" },
   {
     id: "enrollment",
@@ -52,6 +53,14 @@ const settingsTabs = [
 
 export default function Settings() {
   const { profile } = useAuth();
+  const canManageBranding =
+    profile?.role === "admin" || profile?.role === "registrar";
+  const settingsTabs = canManageBranding
+    ? [
+        ...baseSettingsTabs,
+        { id: "branding", label: "Site Branding", shortLabel: "Branding" },
+      ]
+    : baseSettingsTabs;
   const [activeTab, setActiveTab] = useState("prn");
   const [sheetOpen, setSheetOpen] = useState(false);
   const isMobile = useIsMobile();
@@ -237,6 +246,12 @@ export default function Settings() {
             <TabsContent value="surveys" className="mt-6">
               <EvaluationSurveysTab />
             </TabsContent>
+
+            {canManageBranding && (
+              <TabsContent value="branding" className="mt-6">
+                <SiteBrandingTab canEdit={canManageBranding} />
+              </TabsContent>
+            )}
           </Tabs>
         </motion.div>
       </main>

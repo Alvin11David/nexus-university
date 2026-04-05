@@ -29,13 +29,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSiteSettings } from "@/contexts/SiteSettingsContext";
+import { LecturerSidebar } from "./LecturerSidebar";
 import { db } from "@/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 
 export function LecturerHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { user, profile, signOut } = useAuth();
+  const { settings } = useSiteSettings();
   const navigate = useNavigate();
 
   const getInitials = (name: string) => {
@@ -89,26 +93,44 @@ export function LecturerHeader() {
     { label: "Roster", href: "/lecturer/roster", icon: Users },
     { label: "Analytics", href: "/lecturer/analytics", icon: Target },
     { label: "ID Card", href: "/lecturer/id-card", icon: User },
+    { label: "Settings", href: "/lecturer/settings", icon: Settings },
   ];
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-gradient-to-r from-background to-background/95 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
-        {/* Logo */}
-        <Link to="/lecturer" className="flex items-center gap-2 group">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground transition-transform group-hover:scale-105 shadow-lg">
-            <GraduationCap className="h-6 w-6" />
-          </div>
-          <div className="hidden sm:block">
-            <span className="font-display text-xl font-bold text-foreground">
-              Uni<span className="text-secondary">Portal</span>
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              Lecturer
-            </span>
-          </div>
-        </Link>
-
+        {/* Logo and Menu */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="h-10 w-10"
+          >
+            {sidebarOpen ? <X /> : <Menu />}
+          </Button>
+          <Link to="/lecturer" className="flex items-center gap-2 group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground transition-transform group-hover:scale-105 shadow-lg">
+              {settings.logoUrl ? (
+                <img
+                  src={settings.logoUrl}
+                  alt={`${settings.siteName} logo`}
+                  className="h-6 w-6 object-contain"
+                />
+              ) : (
+                <GraduationCap className="h-6 w-6" />
+              )}
+            </div>
+            <div className="hidden sm:block">
+              <span className="font-display text-xl font-bold text-foreground">
+                {settings.shortName}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Lecturer
+              </span>
+            </div>
+          </Link>
+        </div>
         {/* Desktop Navigation */}
         <nav className="hidden lg:flex items-center gap-1">
           {user &&
@@ -221,9 +243,9 @@ export function LecturerHeader() {
             variant="ghost"
             size="icon"
             className="lg:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={() => setSidebarOpen(!sidebarOpen)}
           >
-            {mobileMenuOpen ? (
+            {sidebarOpen ? (
               <X className="h-5 w-5" />
             ) : (
               <Menu className="h-5 w-5" />
@@ -232,40 +254,11 @@ export function LecturerHeader() {
         </div>
       </div>
 
-      {/* Mobile Menu */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="lg:hidden border-t border-border bg-background"
-          >
-            <nav className="container py-4 space-y-1">
-              {user &&
-                lecturerNavItems.map((item) => (
-                  <Link
-                    key={item.label}
-                    to={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
-                  >
-                    <item.icon className="h-5 w-5" />
-                    {item.label}
-                  </Link>
-                ))}
-              <Link
-                to="/lecturer/settings"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-foreground hover:bg-primary/10 hover:text-primary rounded-lg transition-colors"
-              >
-                <Settings className="h-5 w-5" />
-                Settings
-              </Link>
-            </nav>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Sidebar */}
+      <LecturerSidebar
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
     </header>
   );
 }

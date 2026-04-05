@@ -26,7 +26,6 @@ import {
   Eye,
   Heart,
 } from "lucide-react";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -590,8 +589,6 @@ export default function LecturerDashboard() {
         <div className="absolute top-1/3 -right-40 w-96 h-96 bg-gradient-to-bl from-secondary/15 via-primary/10 to-transparent blur-3xl rounded-full opacity-40" />
         <div className="absolute bottom-0 left-1/4 w-72 h-72 bg-gradient-to-tr from-accent/10 to-transparent blur-3xl rounded-full opacity-50" />
       </div>
-
-      <LecturerHeader />
 
       <main className="px-4 pb-28 sm:px-6 lg:px-8 relative">
         <div className="max-w-7xl mx-auto pt-6 lg:pt-10">

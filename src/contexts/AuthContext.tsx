@@ -24,10 +24,9 @@ import {
   where,
   getDocs,
   limit,
-  serverTimestamp,
-  addDoc,
 } from "firebase/firestore";
-import { auth, db } from "@/integrations/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "@/integrations/firebase/client";
 
 // Map Firebase User to a compatible interface if needed, or just use FirebaseUser
 type User = FirebaseUser;
@@ -112,6 +111,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const sendSignupOtpCallable = httpsCallable<
+    { email: string; studentRecordId?: string | null },
+    { success: boolean; deliveryChannel: string; otp?: string }
+  >(functions, "sendSignupOtp");
+
+  const validateStudentRecordCallable = httpsCallable<
+    { registrationNumber: string; studentNumber: string; email: string },
+    StudentRecord
+  >(functions, "validateStudentRecord");
+
+  const verifySignupOtpCallable = httpsCallable<
+    { email: string; otp: string },
+    { valid: boolean; reason?: string }
+  >(functions, "verifySignupOtp");
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -192,61 +206,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
   ): Promise<{ data: StudentRecord | null; error: Error | null }> => {
     try {
-      // First, try to find existing record
-      const recordsRef = collection(db, "student_records");
-      const q = query(
-        recordsRef,
-        where("registration_number", "==", registrationNumber),
-        where("student_number", "==", studentNumber),
-        limit(1),
-      );
-      const querySnapshot = await getDocs(q);
+      const response = await validateStudentRecordCallable({
+        registrationNumber,
+        studentNumber,
+        email,
+      });
 
-      // If record exists, check if already registered
-      if (!querySnapshot.empty) {
-        const studentDoc = querySnapshot.docs[0];
-        const existingData = studentDoc.data() as StudentRecord;
-        if (existingData.is_registered) {
-          return {
-            data: null,
-            error: new Error(
-              "This student account is already registered. Please sign in instead.",
-            ),
-          };
-        }
-        return { data: { ...existingData, id: studentDoc.id }, error: null };
-      }
-
-      // Record doesn't exist, create a new one
-      const emailName = email.split("@")[0];
-      const fullName =
-        emailName
-          .split(/[._-]/)
-          .map(
-            (part) =>
-              part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
-          )
-          .join(" ") || "New Student";
-
-      const newData = {
-        registration_number: registrationNumber,
-        student_number: studentNumber,
-        email: email,
-        full_name: fullName,
-        is_registered: false,
-        created_at: serverTimestamp(),
-      };
-
-      const docRef = await addDoc(collection(db, "student_records"), newData);
-
-      return {
-        data: {
-          ...newData,
-          id: docRef.id,
-          created_at: new Date().toISOString(),
-        } as unknown as StudentRecord,
-        error: null,
-      };
+      return { data: response.data, error: null };
     } catch (error: any) {
       return { data: null, error: new Error(error.message) };
     }
@@ -258,19 +224,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     studentRecordId: string | null,
   ): Promise<{ otp: string; error: Error | null }> => {
     try {
-      const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-      await addDoc(collection(db, "otp_verifications"), {
+      const response = await sendSignupOtpCallable({
         email,
-        otp_code: otp,
-        student_record_id: studentRecordId,
-        expires_at: expiresAt.toISOString(),
-        verified: false,
-        created_at: serverTimestamp(),
+        studentRecordId,
       });
 
-      return { otp, error: null };
+      return {
+        otp: import.meta.env.DEV ? response.data.otp || "" : "",
+        error: null,
+      };
     } catch (error: any) {
       return { otp: "", error: new Error(error.message) };
     }
@@ -282,37 +244,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     otp: string,
   ): Promise<{ valid: boolean; error: Error | null }> => {
     try {
-      const otpRef = collection(db, "otp_verifications");
-      const q = query(
-        otpRef,
-        where("email", "==", email),
-        where("otp_code", "==", otp),
-        where("verified", "==", false),
-        limit(1),
-      );
-      const querySnapshot = await getDocs(q);
+      const response = await verifySignupOtpCallable({ email, otp });
 
-      if (querySnapshot.empty) {
+      if (!response.data.valid) {
         return {
           valid: false,
           error: new Error("Invalid or expired OTP. Please request a new one."),
         };
       }
-
-      const otpDoc = querySnapshot.docs[0];
-      const data = otpDoc.data();
-
-      if (new Date(data.expires_at) < new Date()) {
-        return {
-          valid: false,
-          error: new Error("OTP has expired. Please request a new one."),
-        };
-      }
-
-      // Mark OTP as verified
-      await updateDoc(doc(db, "otp_verifications", otpDoc.id), {
-        verified: true,
-      });
 
       return { valid: true, error: null };
     } catch (error: any) {
