@@ -111,6 +111,20 @@ interface DashboardQuiz {
   isScheduled: boolean;
 }
 
+interface MeetingLink {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  courseCode: string;
+  meetingType: "googlemeet" | "zoom" | "other";
+  meetingLink: string;
+  description?: string;
+  dueDate?: string;
+  dueTime?: string;
+  lecturerName?: string;
+  isExpired: boolean;
+}
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
@@ -139,6 +153,8 @@ export default function Dashboard() {
   const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
   const [upcomingQuizzes, setUpcomingQuizzes] = useState<DashboardQuiz[]>([]);
   const [quizzesLoading, setQuizzesLoading] = useState(true);
+  const [meetingLinks, setMeetingLinks] = useState<MeetingLink[]>([]);
+  const [meetingLinksLoading, setMeetingLinksLoading] = useState(true);
 
   // Debug logging for dialog state
   useEffect(() => {
@@ -380,6 +396,82 @@ export default function Dashboard() {
       }),
     [liveSessions],
   );
+
+  useEffect(() => {
+    const loadMeetingLinks = async () => {
+      if (!user) {
+        setMeetingLinks([]);
+        return;
+      }
+
+      try {
+        setMeetingLinksLoading(true);
+
+        const enrollmentsRef = collection(db, "enrollments");
+        const qEnroll = query(
+          enrollmentsRef,
+          where("student_id", "==", user.uid),
+          where("status", "in", ["approved", "pending"]),
+        );
+        const enrollSnapshot = await getDocs(qEnroll);
+        const enrolledCourseIds = enrollSnapshot.docs
+          .map((d) => (d.data() as any).course_id)
+          .filter(Boolean);
+
+        if (!enrolledCourseIds.length) {
+          setMeetingLinks([]);
+          return;
+        }
+
+        const links: MeetingLink[] = [];
+        const meetingsRef = collection(db, "lecturer_meetings");
+        const now = new Date();
+
+        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
+          const chunk = enrolledCourseIds.slice(i, i + 10);
+          const qMeetings = query(meetingsRef, where("course_id", "in", chunk));
+          const snapshot = await getDocs(qMeetings);
+
+          snapshot.docs.forEach((d) => {
+            const data = d.data() as any;
+            if (!data.meeting_link) return;
+
+            let isExpired = false;
+            if (data.due_date && data.due_time) {
+              const expiryTime = new Date(`${data.due_date}T${data.due_time}`);
+              if (!Number.isNaN(expiryTime.getTime())) {
+                isExpired = now > expiryTime;
+              }
+            }
+
+            if (!isExpired) {
+              links.push({
+                id: d.id,
+                courseId: data.course_id,
+                courseTitle: data.course_title || "Course",
+                courseCode: data.course_code || "",
+                meetingType: data.meeting_type || "other",
+                meetingLink: data.meeting_link,
+                description: data.description,
+                dueDate: data.due_date,
+                dueTime: data.due_time,
+                lecturerName: data.lecturer_name,
+                isExpired,
+              });
+            }
+          });
+        }
+
+        setMeetingLinks(links);
+      } catch (error) {
+        console.error("Error loading meeting links", error);
+      } finally {
+        setMeetingLinksLoading(false);
+      }
+    };
+
+    loadMeetingLinks();
+  }, [user]);
 
   useEffect(() => {
     const loadQuizzes = async () => {
@@ -1232,6 +1324,84 @@ export default function Dashboard() {
                   </div>
                 </motion.div>
               ))}
+            </div>
+
+            <div className="rounded-xl sm:rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-4 sm:p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Video className="h-5 w-5 text-primary" />
+                  <h3 className="font-display text-base sm:text-lg font-semibold">
+                    Meeting Links
+                  </h3>
+                </div>
+              </div>
+
+              {meetingLinksLoading && (
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Loading meeting links...
+                </p>
+              )}
+
+              {!meetingLinksLoading && meetingLinks.length === 0 && (
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  No active meeting links yet.
+                </p>
+              )}
+
+              {!meetingLinksLoading && meetingLinks.length > 0 && (
+                <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
+                  {meetingLinks.map((item, i) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="p-3 sm:p-4 rounded-lg sm:rounded-xl border border-border/60 bg-muted/30 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs sm:text-sm font-semibold">
+                          {item.courseTitle}
+                        </p>
+                        <span className="text-[10px] sm:text-[11px] text-muted-foreground uppercase">
+                          {item.courseCode}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] sm:text-xs text-muted-foreground capitalize">
+                        {item.meetingType === "googlemeet"
+                          ? "Google Meet"
+                          : item.meetingType === "zoom"
+                            ? "Zoom"
+                            : "Meeting"}
+                      </p>
+
+                      {item.description && (
+                        <p className="text-[11px] sm:text-xs text-muted-foreground">
+                          {item.description}
+                        </p>
+                      )}
+
+                      {item.dueDate && item.dueTime && (
+                        <p className="text-[11px] sm:text-xs text-muted-foreground">
+                          Expires{" "}
+                          {new Date(
+                            `${item.dueDate}T${item.dueTime}`,
+                          ).toLocaleDateString()}{" "}
+                          at {item.dueTime}
+                        </p>
+                      )}
+
+                      <button
+                        className="w-full px-3 py-2 rounded-lg text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center justify-center gap-1"
+                        onClick={() => window.open(item.meetingLink, "_blank")}
+                      >
+                        <Link className="h-3 w-3" />
+                        Open Link
+                      </button>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Assignments & Stream */}
