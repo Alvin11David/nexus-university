@@ -387,10 +387,16 @@ export default function Dashboard() {
     loadLiveSessions();
   }, [user]);
 
-  const activeMeetsCount = useMemo(
-    () => liveSessions.filter((s) => s.isLive).length,
-    [liveSessions],
-  );
+  const activeMeetsCount = useMemo(() => {
+    const liveSessionKeys = liveSessions
+      .filter((s) => s.isLive)
+      .map((s) => `live:${s.id}`);
+    const meetingLinkKeys = meetingLinks
+      .filter((m) => !m.isExpired)
+      .map((m) => `meeting:${m.id}`);
+
+    return new Set([...liveSessionKeys, ...meetingLinkKeys]).size;
+  }, [liveSessions, meetingLinks]);
 
   const formattedLiveSessions = useMemo(
     () =>
@@ -1061,14 +1067,14 @@ export default function Dashboard() {
           <StatCard
             title="Live Meets"
             value={
-              loadingStats && liveSessionsLoading
+              loadingStats && liveSessionsLoading && meetingLinksLoading
                 ? "…"
-                : stats.liveMeets.toString()
+                : activeMeetsCount.toString()
             }
             subtitle="Happening now"
             icon={Video}
             delay={0.4}
-            trend={{ value: stats.liveMeets, isPositive: true }}
+            trend={{ value: activeMeetsCount, isPositive: true }}
           />
         </div>
 
