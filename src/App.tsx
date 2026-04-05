@@ -40,6 +40,7 @@ import QuizView from "./pages/QuizView";
 import QuizResults from "./pages/QuizResults";
 import StudentAssignments from "./pages/StudentAssignments";
 import StudentQuiz from "./pages/StudentQuiz";
+import StudentNotes from "./pages/StudentNotes";
 import Announcements from "./pages/Announcements";
 import Programs from "./pages/Programs";
 import NotFound from "./pages/NotFound";
@@ -291,6 +292,14 @@ function AppRoutes() {
         element={
           <StudentRoute>
             <StudentQuiz />
+          </StudentRoute>
+        }
+      />
+      <Route
+        path="/notes"
+        element={
+          <StudentRoute>
+            <StudentNotes />
           </StudentRoute>
         }
       />

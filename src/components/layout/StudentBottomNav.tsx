@@ -4,6 +4,7 @@ import {
   Home,
   BookOpen,
   Calendar,
+  FileText,
   User,
   Clipboard,
   GraduationCap,
@@ -18,6 +19,7 @@ const studentNavItems = [
   { label: "Programs", href: "/programs", icon: GraduationCap },
   { label: "Calendar", href: "/academic-calendar", icon: Calendar },
   { label: "Assignments", href: "/assignments", icon: Clipboard },
+  { label: "Notes", href: "/notes", icon: FileText },
   { label: "Quiz", href: "/quiz", icon: BookOpen },
   { label: "Webmail", href: "/webmail", icon: Mail },
   { label: "Settings", href: "/settings", icon: Settings },
@@ -53,7 +55,7 @@ export function StudentBottomNav() {
                   "group relative flex flex-col items-center justify-center flex-1 h-full gap-1 transition-all duration-300 rounded-2xl mx-1",
                   isActive
                     ? "text-blue-600 dark:text-blue-400"
-                    : "text-gray-500 dark:text-gray-400"
+                    : "text-gray-500 dark:text-gray-400",
                 )}
               >
                 <motion.div
@@ -61,7 +63,7 @@ export function StudentBottomNav() {
                     "flex items-center justify-center w-12 h-12 rounded-2xl transition-all duration-300 relative overflow-hidden",
                     isActive
                       ? "bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/25"
-                      : "hover:bg-blue-50/50 dark:hover:bg-blue-900/20"
+                      : "hover:bg-blue-50/50 dark:hover:bg-blue-900/20",
                   )}
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
@@ -81,7 +83,7 @@ export function StudentBottomNav() {
                     <item.icon
                       className={cn(
                         "h-5 w-5 relative z-10",
-                        isActive ? "text-white" : "text-current"
+                        isActive ? "text-white" : "text-current",
                       )}
                     />
                   </motion.div>
@@ -91,7 +93,7 @@ export function StudentBottomNav() {
                     "text-[10px] font-semibold transition-all duration-300",
                     isActive
                       ? "text-blue-600 dark:text-blue-400"
-                      : "text-gray-500 dark:text-gray-400"
+                      : "text-gray-500 dark:text-gray-400",
                   )}
                   animate={{ y: isActive ? -1 : 0 }}
                 >
