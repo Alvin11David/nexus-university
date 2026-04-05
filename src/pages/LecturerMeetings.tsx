@@ -40,6 +40,8 @@ interface OnlineMeeting {
   meeting_type: "googlemeet" | "zoom" | "other";
   meeting_link: string;
   description: string;
+  due_date?: string;
+  due_time?: string;
   created_at?: any;
 }
 
@@ -84,6 +86,8 @@ export default function LecturerMeetings() {
   );
   const [meetingLink, setMeetingLink] = useState("");
   const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [dueTime, setDueTime] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -201,6 +205,8 @@ export default function LecturerMeetings() {
         meeting_type: meetingType,
         meeting_link: meetingLink.trim(),
         description: description.trim(),
+        due_date: dueDate || null,
+        due_time: dueTime || null,
         created_at: serverTimestamp(),
       });
 
@@ -212,6 +218,8 @@ export default function LecturerMeetings() {
       setMeetingLink("");
       setDescription("");
       setMeetingType("googlemeet");
+      setDueDate("");
+      setDueTime("");
       await loadMeetings();
     } catch (error) {
       console.error("Error adding meeting:", error);
@@ -258,11 +266,18 @@ export default function LecturerMeetings() {
     });
   };
 
-  const filteredMeetings = useMemo(() => {
-    const search = searchQuery.trim().toLowerCase();
-    if (!search) return meetings;
+  const isExpired = (meeting: OnlineMeeting): boolean => {
+    if (!meeting.due_date || !meeting.due_time) return false;
+    const dueDateTime = new Date(`${meeting.due_date}T${meeting.due_time}`);
+    return new Date() > dueDateTime;
+  };
 
-    return meetings.filter((meeting) => {
+  const filteredMeetings = useMemo(() => {
+    const active = meetings.filter((meeting) => !isExpired(meeting));
+    const search = searchQuery.trim().toLowerCase();
+    if (!search) return active;
+
+    return active.filter((meeting) => {
       return (
         meeting.course_title?.toLowerCase().includes(search) ||
         meeting.course_code?.toLowerCase().includes(search) ||
@@ -374,6 +389,33 @@ export default function LecturerMeetings() {
                     placeholder="Add notes like meeting time, topic, etc."
                     className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="dueDate" className="text-sm font-medium">
+                    Expiry Date (Optional)
+                  </label>
+                  <Input
+                    id="dueDate"
+                    type="date"
+                    value={dueDate}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Meeting will be removed after this date and time.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="dueTime" className="text-sm font-medium">
+                    Expiry Time (Optional)
+                  </label>
+                  <Input
+                    id="dueTime"
+                    type="time"
+                    value={dueTime}
+                    onChange={(event) => setDueTime(event.target.value)}
                   />
                 </div>
 
@@ -499,7 +541,19 @@ export default function LecturerMeetings() {
                             {meeting.description}
                           </p>
                         )}
-
+                        {meeting.due_date && meeting.due_time && (
+                          <div className="text-xs text-muted-foreground">
+                            <p>
+                              <span className="font-medium text-foreground">
+                                Expires:
+                              </span>{" "}
+                              {new Date(
+                                `${meeting.due_date}T${meeting.due_time}`,
+                              ).toLocaleDateString()}{" "}
+                              at {meeting.due_time}
+                            </p>
+                          </div>
+                        )}
                         <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
                           <p className="text-xs text-muted-foreground mb-2">
                             Meeting Link:
