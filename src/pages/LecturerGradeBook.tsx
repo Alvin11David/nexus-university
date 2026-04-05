@@ -11,6 +11,8 @@ import {
   Award,
   AlertCircle,
   Save,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
@@ -37,16 +39,18 @@ interface StudentGrade {
   student_id: string;
   name: string;
   email: string;
-  assignment1: number;
-  assignment2: number;
-  midterm: number;
-  participation: number;
-  finalExam: number;
+  componentScores: Record<string, number>;
   total: number;
   grade: string;
   gp: number;
   status: "excellent" | "good" | "average" | "warning" | "failing";
   grade_id?: string;
+}
+
+interface GradingCriterion {
+  id: string;
+  name: string;
+  weight: number;
 }
 
 const rise = {
@@ -93,11 +97,46 @@ const getStatusColor = (status: string) => {
   }
 };
 
+const defaultCriteria: GradingCriterion[] = [
+  { id: "assignment1", name: "Assignment 1", weight: 15 },
+  { id: "assignment2", name: "Assignment 2", weight: 15 },
+  { id: "midterm", name: "Midterm", weight: 25 },
+  { id: "participation", name: "Participation", weight: 10 },
+  { id: "finalExam", name: "Final Exam", weight: 35 },
+];
+
+const normalizeCriterionId = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "") || `criterion_${Date.now()}`;
+
+const getStatusFromTotal = (total: number): StudentGrade["status"] => {
+  if (total >= 90) return "excellent";
+  if (total >= 80) return "good";
+  if (total >= 60) return "average";
+  if (total >= 50) return "warning";
+  return "failing";
+};
+
+const calculateTotalFromCriteria = (
+  scores: Record<string, number>,
+  criteria: GradingCriterion[],
+) =>
+  criteria.reduce((sum, criterion) => {
+    const score = Number(scores[criterion.id] ?? 0);
+    return sum + score * (Number(criterion.weight || 0) / 100);
+  }, 0);
+
 export default function LecturerGradeBook() {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [gradingCriteria, setGradingCriteria] = useState<GradingCriterion[]>(
+    defaultCriteria,
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [sortBy, setSortBy] = useState<"name" | "total" | "grade">("name");
@@ -105,6 +144,7 @@ export default function LecturerGradeBook() {
   const [importing, setImporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingCriteria, setSavingCriteria] = useState(false);
   const [changedGrades, setChangedGrades] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -119,6 +159,121 @@ export default function LecturerGradeBook() {
       fetchStudentsAndGrades();
     }
   }, [selectedCourse]);
+
+  useEffect(() => {
+    setStudents((prev) =>
+      prev.map((student) => {
+        const total = calculateTotalFromCriteria(
+          student.componentScores,
+          gradingCriteria,
+        );
+        const { grade, gp } = calculateGrade(total);
+        return {
+          ...student,
+          total,
+          grade,
+          gp,
+          status: getStatusFromTotal(total),
+        };
+      }),
+    );
+  }, [gradingCriteria]);
+
+  const fetchCourseCriteria = async (courseId: string) => {
+    const docRef = doc(db, "course_grading_criteria", courseId);
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) {
+      setGradingCriteria(defaultCriteria);
+      return defaultCriteria;
+    }
+
+    const rawCriteria = (snap.data().criteria || []) as Array<
+      Partial<GradingCriterion>
+    >;
+    const normalized = rawCriteria
+      .map((criterion, idx) => ({
+        id:
+          (criterion.id && normalizeCriterionId(criterion.id)) ||
+          `criterion_${idx + 1}`,
+        name: (criterion.name || `Criterion ${idx + 1}`).toString(),
+        weight: Number(criterion.weight || 0),
+      }))
+      .filter((criterion) => criterion.name.trim().length > 0);
+
+    const resolved = normalized.length > 0 ? normalized : defaultCriteria;
+    setGradingCriteria(resolved);
+    return resolved;
+  };
+
+  const saveCourseCriteria = async () => {
+    if (!selectedCourse) return;
+
+    const trimmed = gradingCriteria
+      .map((criterion) => ({
+        id: normalizeCriterionId(criterion.id),
+        name: criterion.name.trim(),
+        weight: Number(criterion.weight || 0),
+      }))
+      .filter((criterion) => criterion.name.length > 0);
+
+    if (trimmed.length === 0) {
+      alert("Add at least one grading criterion.");
+      return;
+    }
+
+    const totalWeight = trimmed.reduce((sum, item) => sum + item.weight, 0);
+    if (Math.round(totalWeight * 100) / 100 !== 100) {
+      alert("Criteria weights must add up to exactly 100%.");
+      return;
+    }
+
+    try {
+      setSavingCriteria(true);
+      await setDoc(
+        doc(db, "course_grading_criteria", selectedCourse),
+        {
+          course_id: selectedCourse,
+          criteria: trimmed,
+          updated_at: serverTimestamp(),
+          updated_by: user?.uid || null,
+        },
+        { merge: true },
+      );
+
+      setGradingCriteria(trimmed);
+      setStudents((prev) => {
+        const next = prev.map((student) => {
+          const nextScores: Record<string, number> = {};
+          trimmed.forEach((criterion) => {
+            nextScores[criterion.id] = Number(
+              student.componentScores[criterion.id] ?? 0,
+            );
+          });
+
+          const total = calculateTotalFromCriteria(nextScores, trimmed);
+          const { grade, gp } = calculateGrade(total);
+          return {
+            ...student,
+            componentScores: nextScores,
+            total,
+            grade,
+            gp,
+            status: getStatusFromTotal(total),
+          };
+        });
+
+        setChangedGrades(new Set(next.map((student) => student.id)));
+        return next;
+      });
+
+      alert("Grading criteria saved. Remember to Save All grades to persist recalculated totals.");
+    } catch (error) {
+      console.error("Error saving grading criteria:", error);
+      alert("Failed to save grading criteria.");
+    } finally {
+      setSavingCriteria(false);
+    }
+  };
 
   const fetchLecturerCourses = async () => {
     try {
@@ -195,6 +350,7 @@ export default function LecturerGradeBook() {
 
     try {
       setLoading(true);
+      const criteria = await fetchCourseCriteria(selectedCourse);
 
       // Fetch enrolled students
       const enrollQuery = query(
@@ -241,36 +397,37 @@ export default function LecturerGradeBook() {
         const profile = profilesMap[sid];
         const existingGrade = gradesMap[sid];
 
-        const assignment1 = existingGrade?.assignment1 || 0;
-        const assignment2 = existingGrade?.assignment2 || 0;
-        const midterm = existingGrade?.midterm || 0;
-        const participation = existingGrade?.participation || 0;
-        const finalExam = existingGrade?.final_exam || 0;
-        const total = existingGrade?.total || 0;
+        const legacyScores: Record<string, number> = {
+          assignment1: Number(existingGrade?.assignment1 || 0),
+          assignment2: Number(existingGrade?.assignment2 || 0),
+          midterm: Number(existingGrade?.midterm || 0),
+          participation: Number(existingGrade?.participation || 0),
+          finalExam: Number(existingGrade?.final_exam || 0),
+        };
+
+        const existingScores =
+          (existingGrade?.component_scores as Record<string, number>) || {};
+        const componentScores: Record<string, number> = {};
+        criteria.forEach((criterion) => {
+          componentScores[criterion.id] = Number(
+            existingScores[criterion.id] ?? legacyScores[criterion.id] ?? 0,
+          );
+        });
+
+        const total = calculateTotalFromCriteria(componentScores, criteria);
 
         const { grade, gp } = calculateGrade(total);
-
-        let status: StudentGrade["status"] = "average";
-        if (total >= 90) status = "excellent";
-        else if (total >= 80) status = "good";
-        else if (total >= 60) status = "average";
-        else if (total >= 50) status = "warning";
-        else status = "failing";
 
         return {
           id: sid,
           student_id: sid,
           name: profile?.full_name || "Unknown",
           email: profile?.email || "",
-          assignment1,
-          assignment2,
-          midterm,
-          participation,
-          finalExam,
+          componentScores,
           total,
           grade: existingGrade?.grade || grade,
           gp: existingGrade?.gp || gp,
-          status,
+          status: getStatusFromTotal(total),
           grade_id: existingGrade?.id,
         };
       });
@@ -285,33 +442,30 @@ export default function LecturerGradeBook() {
 
   const updateStudentGrade = (
     studentId: string,
-    field: keyof StudentGrade,
+    criterionId: string,
     value: number,
   ) => {
     setStudents((prev) =>
       prev.map((student) => {
         if (student.id !== studentId) return student;
 
-        const updated = { ...student, [field]: value };
+        const updatedScores = {
+          ...student.componentScores,
+          [criterionId]: value,
+        };
 
-        // Recalculate total (weighted: A1=15%, A2=15%, Mid=25%, Part=10%, Final=35%)
-        const total =
-          updated.assignment1 * 0.15 +
-          updated.assignment2 * 0.15 +
-          updated.midterm * 0.25 +
-          updated.participation * 0.1 +
-          updated.finalExam * 0.35;
+        const total = calculateTotalFromCriteria(updatedScores, gradingCriteria);
 
         const { grade, gp } = calculateGrade(total);
 
-        let status: StudentGrade["status"] = "average";
-        if (total >= 90) status = "excellent";
-        else if (total >= 80) status = "good";
-        else if (total >= 60) status = "average";
-        else if (total >= 50) status = "warning";
-        else status = "failing";
-
-        return { ...updated, total, grade, gp, status };
+        return {
+          ...student,
+          componentScores: updatedScores,
+          total,
+          grade,
+          gp,
+          status: getStatusFromTotal(total),
+        };
       }),
     );
 
@@ -354,11 +508,13 @@ export default function LecturerGradeBook() {
         student_id: student.student_id,
         course_id: selectedCourse,
         lecturer_id: user.uid,
-        assignment1: student.assignment1,
-        assignment2: student.assignment2,
-        midterm: student.midterm,
-        participation: student.participation,
-        final_exam: student.finalExam,
+        assignment1: student.componentScores.assignment1 ?? 0,
+        assignment2: student.componentScores.assignment2 ?? 0,
+        midterm: student.componentScores.midterm ?? 0,
+        participation: student.componentScores.participation ?? 0,
+        final_exam: student.componentScores.finalExam ?? 0,
+        component_scores: student.componentScores,
+        criteria_snapshot: gradingCriteria,
         total: student.total,
         grade: student.grade,
         gp: student.gp,
@@ -445,11 +601,9 @@ export default function LecturerGradeBook() {
     const headers = [
       "Name",
       "Email",
-      "Assignment 1",
-      "Assignment 2",
-      "Midterm",
-      "Participation",
-      "Final Exam",
+      ...gradingCriteria.map((criterion) =>
+        `${criterion.name} (${criterion.weight}%)`,
+      ),
       "Total",
       "Grade",
       "GP",
@@ -458,11 +612,9 @@ export default function LecturerGradeBook() {
     const rows = students.map((student) => [
       student.name,
       student.email,
-      student.assignment1.toFixed(2),
-      student.assignment2.toFixed(2),
-      student.midterm.toFixed(2),
-      student.participation.toFixed(2),
-      student.finalExam.toFixed(2),
+      ...gradingCriteria.map((criterion) =>
+        Number(student.componentScores[criterion.id] ?? 0).toFixed(2),
+      ),
       student.total.toFixed(2),
       student.grade,
       student.gp.toFixed(2),
@@ -517,28 +669,34 @@ export default function LecturerGradeBook() {
             .match(/"[^"]*"|[^,]+/g)
             ?.map((v) => v.replace(/^"|"$/g, ""));
 
-          if (!values || values.length < 10) {
+          const minColumns = gradingCriteria.length + 5;
+          if (!values || values.length < minColumns) {
             console.warn(`Skipping invalid line ${index + 2}`);
             return;
           }
 
-          const [name, email, a1, a2, mid, part, final, total, grade, gp] =
-            values;
+          const name = values[0];
+          const email = values[1];
+          const scoreValues = values.slice(2, 2 + gradingCriteria.length);
+          const totalRaw = values[2 + gradingCriteria.length];
+          const gradeRaw = values[3 + gradingCriteria.length];
+          const gpRaw = values[4 + gradingCriteria.length];
 
-          const assignment1 = parseFloat(a1);
-          const assignment2 = parseFloat(a2);
-          const midterm = parseFloat(mid);
-          const participation = parseFloat(part);
-          const finalExam = parseFloat(final);
-          const totalScore = parseFloat(total);
-          const gradePoint = parseFloat(gp);
+          const componentScores: Record<string, number> = {};
+          let invalidScore = false;
+          gradingCriteria.forEach((criterion, criterionIdx) => {
+            const parsed = parseFloat(scoreValues[criterionIdx]);
+            if (Number.isNaN(parsed)) {
+              invalidScore = true;
+            }
+            componentScores[criterion.id] = Number.isNaN(parsed) ? 0 : parsed;
+          });
+
+          const totalScore = parseFloat(totalRaw);
+          const gradePoint = parseFloat(gpRaw);
 
           if (
-            isNaN(assignment1) ||
-            isNaN(assignment2) ||
-            isNaN(midterm) ||
-            isNaN(participation) ||
-            isNaN(finalExam) ||
+            invalidScore ||
             isNaN(totalScore) ||
             isNaN(gradePoint)
           ) {
@@ -546,27 +704,22 @@ export default function LecturerGradeBook() {
             return;
           }
 
-          let status: StudentGrade["status"] = "average";
-          if (totalScore >= 90) status = "excellent";
-          else if (totalScore >= 80) status = "good";
-          else if (totalScore >= 60) status = "average";
-          else if (totalScore >= 50) status = "warning";
-          else status = "failing";
+          const recomputedTotal = calculateTotalFromCriteria(
+            componentScores,
+            gradingCriteria,
+          );
+          const { grade, gp } = calculateGrade(recomputedTotal);
 
           importedStudents.push({
             id: `imported-${Date.now()}-${index}`,
             student_id: `imported-${Date.now()}-${index}`,
             name: name.trim(),
             email: email.trim(),
-            assignment1,
-            assignment2,
-            midterm,
-            participation,
-            finalExam,
-            total: totalScore,
-            grade: grade.trim(),
-            gp: gradePoint,
-            status,
+            componentScores,
+            total: recomputedTotal,
+            grade: gradeRaw?.trim() || grade,
+            gp: Number.isNaN(gradePoint) ? gp : gradePoint,
+            status: getStatusFromTotal(recomputedTotal),
           });
         });
 
@@ -585,11 +738,7 @@ export default function LecturerGradeBook() {
             if (existing) {
               return {
                 ...existing,
-                assignment1: imported.assignment1,
-                assignment2: imported.assignment2,
-                midterm: imported.midterm,
-                participation: imported.participation,
-                finalExam: imported.finalExam,
+                componentScores: imported.componentScores,
                 total: imported.total,
                 grade: imported.grade,
                 gp: imported.gp,
@@ -659,6 +808,11 @@ export default function LecturerGradeBook() {
     excellentCount: students.filter((s) => s.status === "excellent").length,
     failingCount: students.filter((s) => s.status === "failing").length,
   };
+
+  const criteriaWeightTotal = gradingCriteria.reduce(
+    (sum, criterion) => sum + Number(criterion.weight || 0),
+    0,
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
@@ -860,6 +1014,129 @@ export default function LecturerGradeBook() {
               <option value="grade">Sort by Grade</option>
             </select>
           </div>
+
+          {/* Grading Criteria */}
+          <Card className="border-border/60 bg-card/70 backdrop-blur-lg">
+            <CardHeader className="pb-3 sm:pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <CardTitle className="text-base sm:text-lg">
+                  Grading Criteria for This Course
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Badge
+                    className={
+                      Math.round(criteriaWeightTotal * 100) / 100 === 100
+                        ? "bg-emerald-500/20 text-emerald-700"
+                        : "bg-amber-500/20 text-amber-700"
+                    }
+                  >
+                    Total Weight: {criteriaWeightTotal.toFixed(1)}%
+                  </Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setGradingCriteria((prev) => [
+                        ...prev,
+                        {
+                          id: `criterion_${Date.now()}`,
+                          name: `Criterion ${prev.length + 1}`,
+                          weight: 0,
+                        },
+                      ])
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={saveCourseCriteria}
+                    disabled={savingCriteria || !selectedCourse}
+                  >
+                    <Save className="h-4 w-4 mr-1" />
+                    {savingCriteria ? "Saving..." : "Save Criteria"}
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {gradingCriteria.map((criterion, idx) => (
+                <div
+                  key={criterion.id}
+                  className="grid grid-cols-12 gap-2 items-center"
+                >
+                  <div className="col-span-7 sm:col-span-8">
+                    <Input
+                      value={criterion.name}
+                      onChange={(e) =>
+                        setGradingCriteria((prev) =>
+                          prev.map((item, itemIdx) =>
+                            itemIdx === idx
+                              ? {
+                                  ...item,
+                                  name: e.target.value,
+                                  id:
+                                    item.id.startsWith("criterion_") &&
+                                    e.target.value.trim().length > 0
+                                      ? normalizeCriterionId(e.target.value)
+                                      : item.id,
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="Criterion name (e.g. Test 1)"
+                    />
+                  </div>
+                  <div className="col-span-4 sm:col-span-3">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={criterion.weight}
+                      onChange={(e) =>
+                        setGradingCriteria((prev) =>
+                          prev.map((item, itemIdx) =>
+                            itemIdx === idx
+                              ? {
+                                  ...item,
+                                  weight: Math.max(
+                                    0,
+                                    Math.min(
+                                      100,
+                                      Number(e.target.value || 0),
+                                    ),
+                                  ),
+                                }
+                              : item,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="col-span-1 flex justify-end">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() =>
+                        setGradingCriteria((prev) =>
+                          prev.filter((_, itemIdx) => itemIdx !== idx),
+                        )
+                      }
+                      disabled={gradingCriteria.length <= 1}
+                    >
+                      <Trash2 className="h-4 w-4 text-red-500" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Define how each component contributes to the final 100%. Example:
+                Test 1 = 20%, Midterm = 30%, Final = 50%.
+              </p>
+            </CardContent>
+          </Card>
         </motion.div>
 
         {/* Grade Table */}
@@ -877,21 +1154,14 @@ export default function LecturerGradeBook() {
                     <th className="px-2 sm:px-4 py-2 sm:py-3 text-left font-semibold">
                       Student
                     </th>
-                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
-                      A1
-                    </th>
-                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
-                      A2
-                    </th>
-                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
-                      Mid
-                    </th>
-                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
-                      Part
-                    </th>
-                    <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
-                      Final
-                    </th>
+                    {gradingCriteria.map((criterion) => (
+                      <th
+                        key={criterion.id}
+                        className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap"
+                      >
+                        {criterion.name} ({criterion.weight}%)
+                      </th>
+                    ))}
                     <th className="px-1 sm:px-3 py-2 sm:py-3 text-center font-semibold whitespace-nowrap">
                       Total
                     </th>
@@ -910,7 +1180,7 @@ export default function LecturerGradeBook() {
                   {loading ? (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={gradingCriteria.length + 5}
                         className="px-4 py-6 sm:py-8 text-center text-muted-foreground"
                       >
                         Loading students and grades...
@@ -919,7 +1189,7 @@ export default function LecturerGradeBook() {
                   ) : filteredStudents.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={10}
+                        colSpan={gradingCriteria.length + 5}
                         className="px-4 py-6 sm:py-8 text-center text-muted-foreground"
                       >
                         {selectedCourse
@@ -945,86 +1215,27 @@ export default function LecturerGradeBook() {
                             </span>
                           </div>
                         </td>
-                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={student.assignment1}
-                            onChange={(e) =>
-                              updateStudentGrade(
-                                student.id,
-                                "assignment1",
-                                parseFloat(e.target.value) || 0,
-                              )
-                            }
-                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </td>
-                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={student.assignment2}
-                            onChange={(e) =>
-                              updateStudentGrade(
-                                student.id,
-                                "assignment2",
-                                parseFloat(e.target.value) || 0,
-                              )
-                            }
-                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </td>
-                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={student.midterm}
-                            onChange={(e) =>
-                              updateStudentGrade(
-                                student.id,
-                                "midterm",
-                                parseFloat(e.target.value) || 0,
-                              )
-                            }
-                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </td>
-                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={student.participation}
-                            onChange={(e) =>
-                              updateStudentGrade(
-                                student.id,
-                                "participation",
-                                parseFloat(e.target.value) || 0,
-                              )
-                            }
-                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </td>
-                        <td className="px-1 sm:px-3 py-2 sm:py-3 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={student.finalExam}
-                            onChange={(e) =>
-                              updateStudentGrade(
-                                student.id,
-                                "finalExam",
-                                parseFloat(e.target.value) || 0,
-                              )
-                            }
-                            className="w-12 sm:w-14 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          />
-                        </td>
+                        {gradingCriteria.map((criterion) => (
+                          <td
+                            key={`${student.id}-${criterion.id}`}
+                            className="px-1 sm:px-3 py-2 sm:py-3 text-center"
+                          >
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={student.componentScores[criterion.id] ?? 0}
+                              onChange={(e) =>
+                                updateStudentGrade(
+                                  student.id,
+                                  criterion.id,
+                                  parseFloat(e.target.value) || 0,
+                                )
+                              }
+                              className="w-16 sm:w-20 px-1 sm:px-2 py-1 text-center text-xs sm:text-sm bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50"
+                            />
+                          </td>
+                        ))}
                         <td className="px-1 sm:px-3 py-2 sm:py-3 text-center font-bold text-primary text-xs sm:text-sm">
                           {student.total.toFixed(1)}
                         </td>
