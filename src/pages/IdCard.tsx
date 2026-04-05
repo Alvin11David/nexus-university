@@ -38,6 +38,7 @@ export default function IdCard() {
         profile?.programme ||
         profile?.department ||
         "Bachelor of Science in Computer Science",
+      faculty: profile?.department || "General Studies",
       studentNumber: profile?.student_number || "NU-2026-00123",
       registrationNumber: profile?.registration_number || "2026/HD07/12345/PS",
       year: "Year 2",
@@ -53,8 +54,6 @@ export default function IdCard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-10">
-
-
       <main className="container py-8">
         <div className="max-w-5xl mx-auto space-y-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -185,6 +184,7 @@ export default function IdCard() {
                       value={student.registrationNumber}
                     />
                     <InfoRow label="Program" value={student.program} />
+                    <InfoRow label="Faculty" value={student.faculty} />
                     <InfoRow label="Year" value={student.year} />
                     <InfoRow label="Campus" value={student.campus} />
                     <InfoRow label="Phone" value={student.phone} />
