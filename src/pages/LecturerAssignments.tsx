@@ -317,7 +317,7 @@ export default function LecturerAssignments() {
     if (!Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now()) {
       return "closed";
     }
-    return assignment.status;
+    return "active";
   };
 
   const filteredAssignments =
@@ -395,6 +395,9 @@ export default function LecturerAssignments() {
       }
 
       const course = courses.find((c) => c.id === selectedCourse);
+      const dueDateIso = new Date(formData.dueDate).toISOString();
+      const computedStatus =
+        new Date(dueDateIso).getTime() < Date.now() ? "closed" : "active";
 
       // Create assignment in Firestore
       const assignmentDoc = await addDoc(collection(db, "Assignments"), {
@@ -403,9 +406,9 @@ export default function LecturerAssignments() {
         lecturer_id: user.uid,
         title: formData.title,
         description: formData.description,
-        due_date: new Date(formData.dueDate).toISOString(),
+        due_date: dueDateIso,
         total_points: formData.totalPoints,
-        status: "draft",
+        status: computedStatus,
         instruction_document_url: instructionDocUrl,
         created_at: serverTimestamp(),
       });
@@ -444,7 +447,7 @@ export default function LecturerAssignments() {
         totalPoints: formData.totalPoints,
         submissions: 0,
         totalStudents: enrolledStudents.length,
-        status: "draft",
+        status: computedStatus,
         courseTitle: course?.title,
         instructionDocumentUrl: instructionDocUrl || undefined,
         instructionDocumentName: instructionDocName || undefined,
@@ -623,6 +626,13 @@ export default function LecturerAssignments() {
         updated_at: serverTimestamp(),
       };
 
+      if (editing.status !== "graded") {
+        assignmentUpdate.status =
+          new Date(editFormData.dueDate).getTime() < Date.now()
+            ? "closed"
+            : "active";
+      }
+
       // Only include instruction document fields if they are defined
       if (instructionDocUrl !== undefined) {
         assignmentUpdate.instruction_document_url = instructionDocUrl;
@@ -642,7 +652,7 @@ export default function LecturerAssignments() {
         totalPoints: editFormData.totalPoints,
         submissions: editing.submissions,
         totalStudents: editing.totalStudents,
-        status: editing.status,
+        status: assignmentUpdate.status ?? editing.status,
         courseTitle: course?.title,
         instructionDocumentUrl: instructionDocUrl || undefined,
         instructionDocumentName: instructionDocName || undefined,
@@ -668,8 +678,6 @@ export default function LecturerAssignments() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-orange-50/30 to-white pb-28">
-
-
       <main className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
         {/* No Courses Message */}
         {courses.length === 0 && (
@@ -888,172 +896,172 @@ export default function LecturerAssignments() {
                 </p>
               </motion.div>
             ) : (
-              filteredAssignments.map((assignment, i) => (
+              filteredAssignments.map((assignment, i) =>
                 (() => {
                   const effectiveStatus = getEffectiveStatus(assignment);
                   return (
-                <motion.div
-                  key={assignment.id}
-                  variants={rise}
-                  initial="hidden"
-                  animate="visible"
-                  custom={i}
-                >
-                  <Card className="border-2 border-gray-200 bg-white shadow-sm hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden">
-                    <CardContent className="pt-0">
-                      <div className="space-y-5">
-                        {/* Top Section */}
-                        <div className="pt-6 px-6">
-                          <div className="flex items-start justify-between gap-4 mb-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-3 mb-3">
-                                <div className="p-2 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg">
-                                  <FileText className="h-5 w-5 text-amber-600" />
+                    <motion.div
+                      key={assignment.id}
+                      variants={rise}
+                      initial="hidden"
+                      animate="visible"
+                      custom={i}
+                    >
+                      <Card className="border-2 border-gray-200 bg-white shadow-sm hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden">
+                        <CardContent className="pt-0">
+                          <div className="space-y-5">
+                            {/* Top Section */}
+                            <div className="pt-6 px-6">
+                              <div className="flex items-start justify-between gap-4 mb-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-3">
+                                    <div className="p-2 bg-gradient-to-br from-orange-100 to-amber-100 rounded-lg">
+                                      <FileText className="h-5 w-5 text-amber-600" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-gray-900">
+                                      {assignment.title}
+                                    </h3>
+                                  </div>
+                                  <p className="text-gray-700 text-base mb-4 leading-relaxed">
+                                    {assignment.description}
+                                  </p>
                                 </div>
-                                <h3 className="text-xl font-bold text-gray-900">
-                                  {assignment.title}
-                                </h3>
+                                <div className="flex gap-2 flex-shrink-0">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                                    onClick={() => {
+                                      setViewing(assignment);
+                                      loadSubmissions(assignment.id);
+                                    }}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
+                                    onClick={() => handleOpenEdit(assignment)}
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
+                                    onClick={() =>
+                                      handleDeleteAssignment(assignment.id)
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
-                              <p className="text-gray-700 text-base mb-4 leading-relaxed">
-                                {assignment.description}
-                              </p>
-                            </div>
-                            <div className="flex gap-2 flex-shrink-0">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-                                onClick={() => {
-                                  setViewing(assignment);
-                                  loadSubmissions(assignment.id);
-                                }}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-                                onClick={() => handleOpenEdit(assignment)}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-2 border-red-200 text-red-600 hover:bg-red-50"
-                                onClick={() =>
-                                  handleDeleteAssignment(assignment.id)
-                                }
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
 
-                          {/* Badges */}
-                          <div className="flex gap-2 flex-wrap mb-5">
-                            <Badge
-                              variant="outline"
-                              className={`font-semibold border-2 ${getStatusColor(
-                                effectiveStatus,
-                              )}`}
-                            >
-                              {effectiveStatus.charAt(0).toUpperCase() +
-                                effectiveStatus.slice(1)}
-                            </Badge>
-                            {assignment.courseTitle && (
-                              <Badge
-                                variant="secondary"
-                                className="gap-1 bg-orange-100 text-orange-700 border-orange-300 border-2"
-                              >
-                                <FileText className="h-3 w-3" />
-                                {assignment.courseTitle}
-                              </Badge>
+                              {/* Badges */}
+                              <div className="flex gap-2 flex-wrap mb-5">
+                                <Badge
+                                  variant="outline"
+                                  className={`font-semibold border-2 ${getStatusColor(
+                                    effectiveStatus,
+                                  )}`}
+                                >
+                                  {effectiveStatus.charAt(0).toUpperCase() +
+                                    effectiveStatus.slice(1)}
+                                </Badge>
+                                {assignment.courseTitle && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="gap-1 bg-orange-100 text-orange-700 border-orange-300 border-2"
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    {assignment.courseTitle}
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className="gap-1 border-gray-300 text-gray-700 border-2"
+                                >
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(
+                                    assignment.dueDate,
+                                  ).toLocaleDateString()}
+                                </Badge>
+                                <Badge
+                                  variant="outline"
+                                  className="gap-1 border-gray-300 text-gray-700 border-2"
+                                >
+                                  <Users className="h-3 w-3" />
+                                  {assignment.submissions}/
+                                  {assignment.totalStudents} submitted
+                                </Badge>
+                                <Badge className="gap-1 bg-gradient-to-r from-orange-600 to-amber-600 text-white border-0">
+                                  {assignment.totalPoints} pts
+                                </Badge>
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-semibold text-gray-700">
+                                  Submission Progress
+                                </span>
+                                <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
+                                  {assignment.totalStudents > 0
+                                    ? (
+                                        (assignment.submissions /
+                                          assignment.totalStudents) *
+                                        100
+                                      ).toFixed(0)
+                                    : "0"}
+                                  %
+                                </span>
+                              </div>
+                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{
+                                    width: `${
+                                      assignment.totalStudents > 0
+                                        ? (assignment.submissions /
+                                            assignment.totalStudents) *
+                                          100
+                                        : 0
+                                    }%`,
+                                  }}
+                                  transition={{ delay: 0.5, duration: 1 }}
+                                  className="h-full bg-gradient-to-r from-orange-500 to-amber-600"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Average Score if graded */}
+                            {assignment.averageScore && (
+                              <div className="px-6 pb-6">
+                                <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border-2 border-emerald-200">
+                                  <div className="p-2 bg-emerald-100 rounded-full">
+                                    <CheckCircle className="h-5 w-5 text-emerald-600" />
+                                  </div>
+                                  <span className="text-base">
+                                    <span className="text-gray-600">
+                                      Average Score:{" "}
+                                    </span>
+                                    <span className="font-bold text-emerald-600">
+                                      {assignment.averageScore}%
+                                    </span>
+                                  </span>
+                                </div>
+                              </div>
                             )}
-                            <Badge
-                              variant="outline"
-                              className="gap-1 border-gray-300 text-gray-700 border-2"
-                            >
-                              <Calendar className="h-3 w-3" />
-                              {new Date(
-                                assignment.dueDate,
-                              ).toLocaleDateString()}
-                            </Badge>
-                            <Badge
-                              variant="outline"
-                              className="gap-1 border-gray-300 text-gray-700 border-2"
-                            >
-                              <Users className="h-3 w-3" />
-                              {assignment.submissions}/
-                              {assignment.totalStudents} submitted
-                            </Badge>
-                            <Badge className="gap-1 bg-gradient-to-r from-orange-600 to-amber-600 text-white border-0">
-                              {assignment.totalPoints} pts
-                            </Badge>
                           </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 space-y-3">
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-gray-700">
-                              Submission Progress
-                            </span>
-                            <span className="text-sm font-bold text-amber-600 bg-amber-100 px-3 py-1 rounded-full">
-                              {assignment.totalStudents > 0
-                                ? (
-                                    (assignment.submissions /
-                                      assignment.totalStudents) *
-                                    100
-                                  ).toFixed(0)
-                                : "0"}
-                              %
-                            </span>
-                          </div>
-                          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{
-                                width: `${
-                                  assignment.totalStudents > 0
-                                    ? (assignment.submissions /
-                                        assignment.totalStudents) *
-                                      100
-                                    : 0
-                                }%`,
-                              }}
-                              transition={{ delay: 0.5, duration: 1 }}
-                              className="h-full bg-gradient-to-r from-orange-500 to-amber-600"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Average Score if graded */}
-                        {assignment.averageScore && (
-                          <div className="px-6 pb-6">
-                            <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 border-2 border-emerald-200">
-                              <div className="p-2 bg-emerald-100 rounded-full">
-                                <CheckCircle className="h-5 w-5 text-emerald-600" />
-                              </div>
-                              <span className="text-base">
-                                <span className="text-gray-600">
-                                  Average Score:{" "}
-                                </span>
-                                <span className="font-bold text-emerald-600">
-                                  {assignment.averageScore}%
-                                </span>
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
                   );
-                })()
-              ))
+                })(),
+              )
             )}
           </TabsContent>
 
@@ -1089,60 +1097,40 @@ export default function LecturerAssignments() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {assignments.map((assignment) => (
+                  {assignments.map((assignment) =>
                     (() => {
                       const effectiveStatus = getEffectiveStatus(assignment);
                       return (
-                    <div
-                      key={assignment.id}
-                      className="border border-gray-200 rounded-xl p-6 bg-gray-50/50"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                            {assignment.title}
-                          </h3>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
-                              Due:{" "}
-                              {new Date(
-                                assignment.dueDate,
-                              ).toLocaleDateString()}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Users className="h-4 w-4" />
-                              {assignment.submissions}/
-                              {assignment.totalStudents} submitted
-                            </span>
-                            <Badge
-                              className={`text-xs ${getStatusColor(effectiveStatus)}`}
-                            >
-                              {effectiveStatus.charAt(0).toUpperCase() +
-                                effectiveStatus.slice(1)}
-                            </Badge>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setViewing(assignment);
-                            loadSubmissions(assignment.id);
-                          }}
-                          className="gap-2"
+                        <div
+                          key={assignment.id}
+                          className="border border-gray-200 rounded-xl p-6 bg-gray-50/50"
                         >
-                          <Eye className="h-4 w-4" />
-                          View Details
-                        </Button>
-                      </div>
-
-                      {assignment.submissions > 0 ? (
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-semibold text-gray-900">
-                              Recent Submissions
-                            </h4>
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                                {assignment.title}
+                              </h3>
+                              <div className="flex items-center gap-4 text-sm text-gray-600">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-4 w-4" />
+                                  Due:{" "}
+                                  {new Date(
+                                    assignment.dueDate,
+                                  ).toLocaleDateString()}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <Users className="h-4 w-4" />
+                                  {assignment.submissions}/
+                                  {assignment.totalStudents} submitted
+                                </span>
+                                <Badge
+                                  className={`text-xs ${getStatusColor(effectiveStatus)}`}
+                                >
+                                  {effectiveStatus.charAt(0).toUpperCase() +
+                                    effectiveStatus.slice(1)}
+                                </Badge>
+                              </div>
+                            </div>
                             <Button
                               variant="outline"
                               size="sm"
@@ -1150,26 +1138,46 @@ export default function LecturerAssignments() {
                                 setViewing(assignment);
                                 loadSubmissions(assignment.id);
                               }}
-                              className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                              className="gap-2"
                             >
-                              View All ({assignment.submissions})
+                              <Eye className="h-4 w-4" />
+                              View Details
                             </Button>
                           </div>
-                          <div className="text-sm text-gray-600">
-                            Click "View Details" to see all submissions and
-                            download files.
-                          </div>
+
+                          {assignment.submissions > 0 ? (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="font-semibold text-gray-900">
+                                  Recent Submissions
+                                </h4>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setViewing(assignment);
+                                    loadSubmissions(assignment.id);
+                                  }}
+                                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                                >
+                                  View All ({assignment.submissions})
+                                </Button>
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                Click "View Details" to see all submissions and
+                                download files.
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-6 text-gray-500">
+                              <UploadIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
+                              <p>No submissions yet</p>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="text-center py-6 text-gray-500">
-                          <UploadIcon className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                          <p>No submissions yet</p>
-                        </div>
-                      )}
-                    </div>
                       );
-                    })()
-                  ))}
+                    })(),
+                  )}
                 </div>
               )}
             </div>
