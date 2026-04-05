@@ -36,6 +36,12 @@ interface StudentNote {
   created_at?: any;
 }
 
+interface EnrolledCourse {
+  id: string;
+  title: string;
+  code: string;
+}
+
 const rise = {
   hidden: { opacity: 0, y: 20 },
   visible: (i: number) => ({
@@ -65,6 +71,8 @@ export default function StudentNotes() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [notes, setNotes] = useState<StudentNote[]>([]);
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -92,9 +100,36 @@ export default function StudentNotes() {
         );
 
         if (courseIds.length === 0) {
+          setEnrolledCourses([]);
           setNotes([]);
           return;
         }
+
+        const courseMap = new Map<string, EnrolledCourse>();
+        for (let i = 0; i < courseIds.length; i += 10) {
+          const chunk = courseIds.slice(i, i + 10);
+          const courseUnitsQuery = query(
+            collection(db, "course_units"),
+            where("__name__", "in", chunk),
+          );
+          const courseUnitsSnap = await getDocs(courseUnitsQuery);
+          courseUnitsSnap.docs.forEach((courseDoc) => {
+            const courseData = courseDoc.data();
+            courseMap.set(courseDoc.id, {
+              id: courseDoc.id,
+              title:
+                courseData.name ||
+                courseData.course_unit_name ||
+                "Unknown Course",
+              code: courseData.code || courseData.course_unit_code || "Unknown",
+            });
+          });
+        }
+
+        const courses = Array.from(courseMap.values()).sort((a, b) =>
+          `${a.code} ${a.title}`.localeCompare(`${b.code} ${b.title}`),
+        );
+        setEnrolledCourses(courses);
 
         const rawNotes: Array<Omit<StudentNote, "lecturer_name">> = [];
         for (let i = 0; i < courseIds.length; i += 10) {
@@ -163,11 +198,26 @@ export default function StudentNotes() {
     void loadNotes();
   }, [user, toast]);
 
-  const filteredNotes = useMemo(() => {
-    const value = search.trim().toLowerCase();
-    if (!value) return notes;
+  useEffect(() => {
+    if (selectedCourseId === "all") return;
+    const exists = enrolledCourses.some(
+      (course) => course.id === selectedCourseId,
+    );
+    if (!exists) {
+      setSelectedCourseId("all");
+    }
+  }, [enrolledCourses, selectedCourseId]);
 
-    return notes.filter((note) => {
+  const filteredNotes = useMemo(() => {
+    const byCourse =
+      selectedCourseId === "all"
+        ? notes
+        : notes.filter((note) => note.course_id === selectedCourseId);
+
+    const value = search.trim().toLowerCase();
+    if (!value) return byCourse;
+
+    return byCourse.filter((note) => {
       return (
         note.topic?.toLowerCase().includes(value) ||
         note.description?.toLowerCase().includes(value) ||
@@ -177,7 +227,7 @@ export default function StudentNotes() {
         note.lecturer_name?.toLowerCase().includes(value)
       );
     });
-  }, [notes, search]);
+  }, [notes, search, selectedCourseId]);
 
   const notesCourseCount = useMemo(
     () => new Set(notes.map((note) => note.course_id)).size,
@@ -232,7 +282,7 @@ export default function StudentNotes() {
           </div>
         </motion.div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card className="border-border/60 bg-card/80">
             <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">Total Notes</p>
@@ -245,6 +295,25 @@ export default function StudentNotes() {
                 Courses With Notes
               </p>
               <p className="text-2xl font-bold mt-1">{notesCourseCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/60 bg-card/80">
+            <CardContent className="p-5">
+              <p className="text-sm text-muted-foreground">Course</p>
+              <div className="mt-2">
+                <select
+                  value={selectedCourseId}
+                  onChange={(event) => setSelectedCourseId(event.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="all">All enrolled courses</option>
+                  {enrolledCourses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.code} - {course.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </CardContent>
           </Card>
           <Card className="border-border/60 bg-card/80">
