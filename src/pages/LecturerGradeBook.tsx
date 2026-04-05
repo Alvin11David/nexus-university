@@ -313,6 +313,12 @@ export default function LecturerGradeBook() {
                     courseData.course_unit_name ||
                     "Unknown Course",
                   credits: courseData.credits || 3,
+                  semester:
+                    courseData.semester ||
+                    courseData.term ||
+                    courseData.semester_name ||
+                    null,
+                  academic_year: courseData.academic_year || null,
                 });
               });
             }
@@ -328,6 +334,8 @@ export default function LecturerGradeBook() {
         code: raw.code || "Unknown",
         title: raw.title || "Unknown Course",
         credits: raw.credits || 3,
+        semester: raw.semester || null,
+        academic_year: raw.academic_year || null,
       }));
       setCourses(coursesData);
 
@@ -487,26 +495,20 @@ export default function LecturerGradeBook() {
     if (!student || !selectedCourse || !user) return;
 
     try {
-      // Determine current semester and academic year
+      // Prefer semester metadata from the selected course unit
+      const courseData = courses.find((course) => course.id === selectedCourse);
+
       const now = new Date();
       const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
       const currentYear = now.getFullYear();
 
-      let semester: string;
-      let academicYear: string;
-
-      if (currentMonth >= 9 || currentMonth <= 2) {
-        // Fall semester (Sep-Feb)
-        semester = currentMonth >= 9 ? "Fall" : "Fall";
-        academicYear =
-          currentMonth >= 9
-            ? `${currentYear}-${currentYear + 1}`
-            : `${currentYear - 1}-${currentYear}`;
-      } else {
-        // Spring semester (Mar-Aug)
-        semester = "Spring";
-        academicYear = `${currentYear - 1}-${currentYear}`;
-      }
+      const semester =
+        (courseData?.semester && String(courseData.semester)) || "Semester";
+      const academicYear =
+        (courseData?.academic_year && String(courseData.academic_year)) ||
+        (currentMonth >= 9
+          ? `${currentYear}-${currentYear + 1}`
+          : `${currentYear - 1}-${currentYear}`);
 
       const gradeData = {
         student_id: student.student_id,
