@@ -125,6 +125,15 @@ interface MeetingLink {
   isExpired: boolean;
 }
 
+interface MeetingLauncherState {
+  title: string;
+  platform: string;
+  course: string;
+  description?: string;
+  dueLabel?: string;
+  link: string;
+}
+
 export default function Dashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
@@ -155,6 +164,9 @@ export default function Dashboard() {
   const [quizzesLoading, setQuizzesLoading] = useState(true);
   const [meetingLinks, setMeetingLinks] = useState<MeetingLink[]>([]);
   const [meetingLinksLoading, setMeetingLinksLoading] = useState(true);
+  const [showMeetingLauncher, setShowMeetingLauncher] = useState(false);
+  const [selectedMeeting, setSelectedMeeting] =
+    useState<MeetingLauncherState | null>(null);
 
   // Debug logging for dialog state
   useEffect(() => {
@@ -163,6 +175,17 @@ export default function Dashboard() {
 
   const classroomCourses: any[] = [];
   const classroomStream: any[] = [];
+
+  const openMeetingLauncher = (meeting: MeetingLauncherState) => {
+    setSelectedMeeting(meeting);
+    setShowMeetingLauncher(true);
+  };
+
+  const handleJoinFromLauncher = () => {
+    if (!selectedMeeting?.link) return;
+    // Keep flow in-app until user confirms launch.
+    window.location.href = selectedMeeting.link;
+  };
 
   const formatDueDate = (date: string | null) => {
     if (!date) return "No due date";
@@ -1309,10 +1332,17 @@ export default function Dashboard() {
                       <div className="flex gap-2 w-full sm:w-auto">
                         <button
                           className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex-1 sm:flex-none disabled:opacity-60"
-                          onClick={() =>
-                            session.meetLink &&
-                            window.open(session.meetLink, "_blank")
-                          }
+                          onClick={() => {
+                            if (!session.meetLink) return;
+                            openMeetingLauncher({
+                              title: session.title,
+                              platform: "googlemeet",
+                              course: session.courseName || "Online Class",
+                              description: "Live class session",
+                              dueLabel: session.displayTime,
+                              link: session.meetLink,
+                            });
+                          }}
                           disabled={!session.isLive || !session.meetLink}
                         >
                           {session.isLive
@@ -1393,7 +1423,24 @@ export default function Dashboard() {
 
                       <button
                         className="w-full px-3 py-2 rounded-lg text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center justify-center gap-1"
-                        onClick={() => window.open(item.meetingLink, "_blank")}
+                        onClick={() =>
+                          openMeetingLauncher({
+                            title:
+                              item.meetingType === "googlemeet"
+                                ? "Google Meet"
+                                : item.meetingType === "zoom"
+                                  ? "Zoom Meeting"
+                                  : "Online Meeting",
+                            platform: item.meetingType,
+                            course: `${item.courseTitle}${item.courseCode ? ` (${item.courseCode})` : ""}`,
+                            description: item.description,
+                            dueLabel:
+                              item.dueDate && item.dueTime
+                                ? `${new Date(`${item.dueDate}T${item.dueTime}`).toLocaleDateString()} at ${item.dueTime}`
+                                : undefined,
+                            link: item.meetingLink,
+                          })
+                        }
                       >
                         <Link className="h-3 w-3" />
                         Open Link
@@ -1654,10 +1701,17 @@ export default function Dashboard() {
                       )}
                       <button
                         className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0 disabled:opacity-60"
-                        onClick={() =>
-                          session.meetLink &&
-                          window.open(session.meetLink, "_blank")
-                        }
+                        onClick={() => {
+                          if (!session.meetLink) return;
+                          openMeetingLauncher({
+                            title: session.title,
+                            platform: "googlemeet",
+                            course: session.courseName || "Online Class",
+                            description: "Live class session",
+                            dueLabel: session.displayTime,
+                            link: session.meetLink,
+                          });
+                        }}
                         disabled={!session.isLive || !session.meetLink}
                       >
                         <Play className="h-4 w-4" />{" "}
@@ -1694,6 +1748,69 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      <Dialog open={showMeetingLauncher} onOpenChange={setShowMeetingLauncher}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Meeting Launcher</DialogTitle>
+          </DialogHeader>
+          {selectedMeeting && (
+            <div className="space-y-4">
+              <div className="space-y-2 text-sm">
+                <p>
+                  <span className="font-semibold">Session:</span>{" "}
+                  {selectedMeeting.title}
+                </p>
+                <p>
+                  <span className="font-semibold">Course:</span>{" "}
+                  {selectedMeeting.course}
+                </p>
+                <p className="capitalize">
+                  <span className="font-semibold">Platform:</span>{" "}
+                  {selectedMeeting.platform === "googlemeet"
+                    ? "Google Meet"
+                    : selectedMeeting.platform === "zoom"
+                      ? "Zoom"
+                      : "Online Meeting"}
+                </p>
+                {selectedMeeting.description && (
+                  <p>
+                    <span className="font-semibold">Details:</span>{" "}
+                    {selectedMeeting.description}
+                  </p>
+                )}
+                {selectedMeeting.dueLabel && (
+                  <p>
+                    <span className="font-semibold">Time:</span>{" "}
+                    {selectedMeeting.dueLabel}
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-border/60 bg-muted/30 p-3 text-xs break-all text-muted-foreground">
+                {selectedMeeting.link}
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (!selectedMeeting?.link) return;
+                    navigator.clipboard.writeText(selectedMeeting.link);
+                    toast({
+                      title: "Copied",
+                      description: "Meeting link copied to clipboard",
+                    });
+                  }}
+                >
+                  Copy Link
+                </Button>
+                <Button onClick={handleJoinFromLauncher}>Join Now</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {showClassDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
