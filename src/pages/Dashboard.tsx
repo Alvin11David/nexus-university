@@ -1245,25 +1245,28 @@ export default function Dashboard() {
                     Announcements
                   </h3>
                 </div>
-                <Button
-                  size="sm"
-                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
-                  onClick={() =>
-                    navigate(
-                      profile?.role === "lecturer"
-                        ? "/lecturer/announcements"
-                        : "/announcements",
-                    )
-                  }
-                >
-                  <Plus className="h-4 w-4" />
-                  New
-                </Button>
+                {profile?.role !== "student" && (
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+                    onClick={() =>
+                      navigate(
+                        profile?.role === "lecturer"
+                          ? "/lecturer/announcements"
+                          : "/announcements",
+                      )
+                    }
+                  >
+                    <Plus className="h-4 w-4" />
+                    New
+                  </Button>
+                )}
               </div>
               <div className="space-y-3">
                 <p className="text-xs sm:text-sm text-muted-foreground">
-                  No announcements posted yet. Click "New" to create your first
-                  announcement and push it to cohorts instantly.
+                  {profile?.role === "student"
+                    ? "No announcements posted yet."
+                    : 'No announcements posted yet. Click "New" to create your first announcement and push it to cohorts instantly.'}
                 </p>
               </div>
             </div>
