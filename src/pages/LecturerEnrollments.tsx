@@ -240,7 +240,6 @@ export default function LecturerEnrollments() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-10">
-
       <main className="container py-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -423,6 +422,84 @@ export default function LecturerEnrollments() {
                           )}
                           Reject
                         </Button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <span>Approved Enrollments</span>
+                <Badge variant="outline">{approved.length} approved</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading approved enrollments...
+                </div>
+              ) : approved.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  <AlertCircle className="h-10 w-10 mx-auto mb-3" />
+                  No approved enrollments yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {approved.map((enrollment, idx) => (
+                    <motion.div
+                      key={enrollment.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.03 }}
+                      className="rounded-xl border p-4 flex flex-col gap-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-xs"
+                            >
+                              {enrollment.course?.code || "Course"}
+                            </Badge>
+                            <Badge className="bg-emerald-500/10 text-emerald-700">
+                              Approved
+                            </Badge>
+                          </div>
+                          <p className="text-lg font-semibold mt-1">
+                            {enrollment.course?.title || "Course Title"}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {enrollment.course?.semester || "Semester"} •{" "}
+                            {enrollment.course?.year || "Year"}
+                          </p>
+                        </div>
+                        <div className="text-right min-w-[180px]">
+                          <p className="text-sm text-muted-foreground">
+                            Student
+                          </p>
+                          <p className="font-medium">
+                            {enrollment.student?.full_name ||
+                              enrollment.student?.email ||
+                              "Student"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Reg:{" "}
+                            {enrollment.student?.registration_number || "—"} ·
+                            ID: {enrollment.student?.student_number || "—"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Enrolled{" "}
+                            {new Date(
+                              enrollment.enrolled_at,
+                            ).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                     </motion.div>
                   ))}
