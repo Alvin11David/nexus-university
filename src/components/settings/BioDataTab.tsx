@@ -140,7 +140,7 @@ export function BioDataTab() {
     { icon: Phone, label: "Phone Number", key: "phone", editable: true },
     {
       icon: Building,
-      label: "Department",
+      label: "Faculty",
       key: "department",
       editable: canEditInstitutionFields,
     },
@@ -192,7 +192,7 @@ export function BioDataTab() {
                   {formData.student_number || "No Student ID"}
                 </Badge>
                 <Badge variant="secondary">
-                  {formData.department || "No Department"}
+                  {formData.department || "No Faculty"}
                 </Badge>
                 <Badge className="bg-emerald-500/10 text-emerald-600 border-0">
                   Active Student

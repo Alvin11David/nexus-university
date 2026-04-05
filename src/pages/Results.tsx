@@ -481,7 +481,7 @@ export default function Results() {
       doc.text("FULL NAME", col1X, yPos + 8);
       doc.text("STUDENT NUMBER", col2X, yPos + 8);
       doc.text("PROGRAMME", col1X, yPos + 22);
-      doc.text("DEPARTMENT", col2X, yPos + 22);
+      doc.text("FACULTY", col2X, yPos + 22);
 
       doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
@@ -733,7 +733,7 @@ export default function Results() {
                   </div>
                   <div className="sm:col-span-2">
                     <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
-                      Department
+                      Faculty
                     </p>
                     <p className="font-semibold text-foreground mt-1">
                       {profile?.department || "Not Available"}

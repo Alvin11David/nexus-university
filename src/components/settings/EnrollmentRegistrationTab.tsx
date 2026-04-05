@@ -307,7 +307,7 @@ export function EnrollmentRegistrationTab() {
       yPos += 5;
       doc.text(`Programme: ${profile?.programme || "N/A"}`, margin, yPos);
       yPos += 5;
-      doc.text(`Department: ${profile?.department || "N/A"}`, margin, yPos);
+      doc.text(`Faculty: ${profile?.department || "N/A"}`, margin, yPos);
       yPos += 8;
 
       // Summary
@@ -614,7 +614,7 @@ export function EnrollmentRegistrationTab() {
                                 }</div>
                               </div>
                               <div class="info-box">
-                                <div class="label">Department</div>
+                                <div class="label">Faculty</div>
                                 <div class="value">${
                                   profile?.department || "N/A"
                                 }</div>
@@ -796,7 +796,7 @@ export function EnrollmentRegistrationTab() {
                                   }</div>
                                 </div>
                                 <div class="info-row">
-                                  <div class="label">Department:</div>
+                                  <div class="label">Faculty:</div>
                                   <div class="value">${
                                     profile?.department || "N/A"
                                   }</div>

@@ -341,7 +341,7 @@ export function MyProgrammeTab() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  {programmeInfo.department} • {programmeInfo.college}
+                  Faculty: {programmeInfo.department} • {programmeInfo.college}
                 </p>
               </div>
             </div>
