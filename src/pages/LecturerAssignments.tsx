@@ -311,15 +311,27 @@ export default function LecturerAssignments() {
     loadCourses();
   }, [user]);
 
+  const getEffectiveStatus = (assignment: Assignment) => {
+    if (assignment.status === "graded") return "graded";
+    const dueAt = new Date(assignment.dueDate);
+    if (!Number.isNaN(dueAt.getTime()) && dueAt.getTime() < Date.now()) {
+      return "closed";
+    }
+    return assignment.status;
+  };
+
   const filteredAssignments =
     selectedFilter === "all"
       ? assignments
-      : assignments.filter((a) => a.status === selectedFilter);
+      : assignments.filter((a) => getEffectiveStatus(a) === selectedFilter);
 
   const stats = {
-    activeCount: assignments.filter((a) => a.status === "active").length,
-    closedCount: assignments.filter((a) => a.status === "closed").length,
-    gradedCount: assignments.filter((a) => a.status === "graded").length,
+    activeCount: assignments.filter((a) => getEffectiveStatus(a) === "active")
+      .length,
+    closedCount: assignments.filter((a) => getEffectiveStatus(a) === "closed")
+      .length,
+    gradedCount: assignments.filter((a) => getEffectiveStatus(a) === "graded")
+      .length,
     averageSubmissionRate: assignments.length
       ? (
           assignments.reduce((acc, a) => {
@@ -877,6 +889,9 @@ export default function LecturerAssignments() {
               </motion.div>
             ) : (
               filteredAssignments.map((assignment, i) => (
+                (() => {
+                  const effectiveStatus = getEffectiveStatus(assignment);
+                  return (
                 <motion.div
                   key={assignment.id}
                   variants={rise}
@@ -941,11 +956,11 @@ export default function LecturerAssignments() {
                             <Badge
                               variant="outline"
                               className={`font-semibold border-2 ${getStatusColor(
-                                assignment.status,
+                                effectiveStatus,
                               )}`}
                             >
-                              {assignment.status.charAt(0).toUpperCase() +
-                                assignment.status.slice(1)}
+                              {effectiveStatus.charAt(0).toUpperCase() +
+                                effectiveStatus.slice(1)}
                             </Badge>
                             {assignment.courseTitle && (
                               <Badge
@@ -1036,6 +1051,8 @@ export default function LecturerAssignments() {
                     </CardContent>
                   </Card>
                 </motion.div>
+                  );
+                })()
               ))
             )}
           </TabsContent>
@@ -1073,6 +1090,9 @@ export default function LecturerAssignments() {
               ) : (
                 <div className="space-y-6">
                   {assignments.map((assignment) => (
+                    (() => {
+                      const effectiveStatus = getEffectiveStatus(assignment);
+                      return (
                     <div
                       key={assignment.id}
                       className="border border-gray-200 rounded-xl p-6 bg-gray-50/50"
@@ -1096,10 +1116,10 @@ export default function LecturerAssignments() {
                               {assignment.totalStudents} submitted
                             </span>
                             <Badge
-                              className={`text-xs ${getStatusColor(assignment.status)}`}
+                              className={`text-xs ${getStatusColor(effectiveStatus)}`}
                             >
-                              {assignment.status.charAt(0).toUpperCase() +
-                                assignment.status.slice(1)}
+                              {effectiveStatus.charAt(0).toUpperCase() +
+                                effectiveStatus.slice(1)}
                             </Badge>
                           </div>
                         </div>
@@ -1147,6 +1167,8 @@ export default function LecturerAssignments() {
                         </div>
                       )}
                     </div>
+                      );
+                    })()
                   ))}
                 </div>
               )}

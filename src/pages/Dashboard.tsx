@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BookOpen,
@@ -113,6 +113,7 @@ interface DashboardQuiz {
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const { toast } = useToast();
   const displayName = profile?.full_name || user?.displayName || "Student";
   const firstName = displayName.split(" ")[0];
@@ -1112,6 +1113,38 @@ export default function Dashboard() {
                 <Plus className="h-4 w-4" />
                 Join or create class
               </button>
+            </div>
+
+            {/* Announcements Section */}
+            <div className="rounded-xl sm:rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-4 sm:p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageCircle className="h-5 w-5 text-primary" />
+                  <h3 className="font-display text-base sm:text-lg font-semibold">
+                    Announcements
+                  </h3>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-primary to-secondary hover:opacity-90"
+                  onClick={() =>
+                    navigate(
+                      profile?.role === "lecturer"
+                        ? "/lecturer/announcements"
+                        : "/announcements",
+                    )
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                  New
+                </Button>
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  No announcements posted yet. Click "New" to create your first
+                  announcement and push it to cohorts instantly.
+                </p>
+              </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-3 sm:gap-4">
