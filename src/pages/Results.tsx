@@ -1,6 +1,13 @@
 import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Download, Printer, GraduationCap, QrCode, X } from "lucide-react";
+import {
+  Download,
+  Printer,
+  GraduationCap,
+  QrCode,
+  X,
+  RefreshCw,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -173,232 +180,223 @@ export default function Results() {
   const qrRef = useRef<HTMLDivElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const loadResults = async () => {
     if (!user) return;
 
-    const loadResults = async () => {
+    try {
+      setResultsLoading(true);
+
+      const studentId = user.uid;
+      console.log("Loading results for student:", studentId);
+
+      let data: any[] = [];
+
+      // Try to fetch from student_grades
+      const sgRef = collection(db, "student_grades");
       try {
-        setResultsLoading(true);
+        const qSg = query(
+          sgRef,
+          where("student_id", "==", studentId),
+          orderBy("academic_year", "desc"),
+          orderBy("semester", "desc"),
+        );
+        const sgSnap = await getDocs(qSg);
 
-        const studentId = user.uid;
-        console.log("Loading results for student:", studentId);
-
-        let data: any[] = [];
-
-        // Try to fetch from student_grades
-        const sgRef = collection(db, "student_grades");
-        try {
-          const qSg = query(
-            sgRef,
+        if (!sgSnap.empty) {
+          data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          console.log("Found student grades:", data.length);
+        } else {
+          console.log("No student grades found, trying exam_results");
+          // Fallback to exam_results
+          const erRef = collection(db, "exam_results");
+          const qEr = query(
+            erRef,
             where("student_id", "==", studentId),
             orderBy("academic_year", "desc"),
             orderBy("semester", "desc"),
           );
-          const sgSnap = await getDocs(qSg);
-
-          if (!sgSnap.empty) {
-            data = sgSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            console.log("Found student grades:", data.length);
-          } else {
-            console.log("No student grades found, trying exam_results");
-            // Fallback to exam_results
-            const erRef = collection(db, "exam_results");
-            const qEr = query(
-              erRef,
-              where("student_id", "==", studentId),
-              orderBy("academic_year", "desc"),
-              orderBy("semester", "desc"),
-            );
-            const erSnap = await getDocs(qEr);
-            data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-            console.log("Found exam results:", data.length);
-          }
-        } catch (error) {
-          console.error("Error querying student_grades with ordering:", error);
-          // Fallback to simple query without ordering
-          try {
-            const qSgSimple = query(
-              sgRef,
-              where("student_id", "==", studentId),
-            );
-            const sgSnapSimple = await getDocs(qSgSimple);
-            data = sgSnapSimple.docs.map((d) => ({ id: d.id, ...d.data() }));
-            console.log("Found student grades (simple query):", data.length);
-          } catch (simpleError) {
-            console.error("Error with simple query too:", simpleError);
-          }
+          const erSnap = await getDocs(qEr);
+          data = erSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          console.log("Found exam results:", data.length);
         }
-
-        // Fetch course details
-        const uniqueCourseIds = Array.from(
-          new Set(data.map((r) => r.course_id)),
-        );
-        const courseMap = new Map();
-        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-          const chunk = uniqueCourseIds.slice(i, i + 10);
-          const qCourse = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const courseSnap = await getDocs(qCourse);
-          courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
-        }
-
-        // Normalize data
-        const normalized = data.map((row) => {
-          console.log("Processing grade row:", row);
-          const course = courseMap.get(row.course_id);
-          return {
-            ...row,
-            courseTitle: course?.name || "Course", // Changed from title to name
-            courseCode: course?.code || "",
-            credits: course?.credits || 3,
-            marks: row.total || row.marks || 0,
-            grade_point: row.gp || row.grade_point || 0,
-            semester_remark:
-              row.semester_remark ||
-              calculateSemesterRemark(
-                row.gp || row.grade_point || 0,
-                row.grade,
-              ),
-            a1: row.assignment1 || 0,
-            a2: row.assignment2 || 0,
-            mid: row.midterm || 0,
-            part: row.participation || 0,
-            final: row.final_exam || 0,
-          };
-        });
-
-        console.log("Normalized data:", normalized);
-
-        if (normalized.length === 0) {
-          console.log("No grade data found for student");
-          setTermResults([]);
-          setCgpa(0);
-          return;
-        }
-
-        const termMap = new Map<string, TermResult>();
-        normalized.forEach((row) => {
-          const term = `${row.academic_year} · ${row.semester}`;
-          const existing = termMap.get(term) || {
-            term,
-            gpa: 0,
-            cgpa: 0,
-            totalCredits: 0,
-            entries: [],
-          };
-
-          const credits = row.credits || 3;
-          const gradePoint = row.grade_point ?? 0;
-          existing.entries.push(row);
-          existing.totalCredits += credits;
-          existing.gpa += gradePoint * credits;
-          termMap.set(term, existing);
-        });
-
-        const terms = Array.from(termMap.values()).map((t) => {
-          const gpa = t.totalCredits
-            ? Number((t.gpa / t.totalCredits).toFixed(2))
-            : 0;
-          return {
-            ...t,
-            gpa,
-            remark: calculateSemesterRemark(gpa, t.entries[0]?.grade || null),
-          };
-        });
-
-        const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
-        const totalPoints = terms.reduce(
-          (sum, t) => sum + t.gpa * t.totalCredits,
-          0,
-        );
-        const computedCgpa = totalCredits
-          ? Number((totalPoints / totalCredits).toFixed(2))
-          : 0;
-
-        setTermResults(terms);
-        setCgpa(computedCgpa);
-
-        // Load quiz results
+      } catch (error) {
+        console.error("Error querying student_grades with ordering:", error);
+        // Fallback to simple query without ordering
         try {
-          const quizAttemptsQuery = query(
-            collection(db, "quiz_attempts"),
-            where("student_id", "==", studentId),
-            orderBy("completed_at", "desc"),
-          );
-          const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
-
-          if (!quizAttemptsSnap.empty) {
-            const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
-              id: doc.id,
-              ...doc.data(),
-            })) as Array<{
-              id: string;
-              quiz_id: string;
-              score?: number;
-              total_points?: number;
-              completed_at?: any;
-              time_taken?: number;
-              status?: string;
-            }>;
-
-            // Get unique quiz IDs
-            const quizIds = Array.from(
-              new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
-            );
-
-            // Fetch quiz details
-            const quizMap = new Map();
-            for (let i = 0; i < quizIds.length; i += 10) {
-              const chunk = quizIds.slice(i, i + 10);
-              const quizzesQuery = query(
-                collection(db, "quizzes"),
-                where("__name__", "in", chunk),
-              );
-              const quizzesSnap = await getDocs(quizzesQuery);
-              quizzesSnap.docs.forEach((doc) =>
-                quizMap.set(doc.id, doc.data()),
-              );
-            }
-
-            // Format quiz results
-            const formattedQuizResults: QuizResult[] = quizAttempts.map(
-              (attempt) => {
-                const quiz = quizMap.get(attempt.quiz_id);
-                const score = attempt.score || 0;
-                const totalPoints =
-                  attempt.total_points || quiz?.total_points || 0;
-                const percentage =
-                  totalPoints > 0 ? (score / totalPoints) * 100 : 0;
-
-                return {
-                  id: attempt.id,
-                  quiz_id: attempt.quiz_id,
-                  quiz_title: quiz?.title || "Quiz",
-                  score: score,
-                  total_points: totalPoints,
-                  percentage: Math.round(percentage),
-                  completed_at:
-                    attempt.completed_at || new Date().toISOString(),
-                  time_taken: attempt.time_taken || 0,
-                  status: attempt.status || "completed",
-                };
-              },
-            );
-
-            setQuizResults(formattedQuizResults);
-          }
-        } catch (quizError) {
-          console.error("Error loading quiz results:", quizError);
+          const qSgSimple = query(sgRef, where("student_id", "==", studentId));
+          const sgSnapSimple = await getDocs(qSgSimple);
+          data = sgSnapSimple.docs.map((d) => ({ id: d.id, ...d.data() }));
+          console.log("Found student grades (simple query):", data.length);
+        } catch (simpleError) {
+          console.error("Error with simple query too:", simpleError);
         }
-      } finally {
-        setResultsLoading(false);
       }
-    };
 
+      // Fetch course details
+      const uniqueCourseIds = Array.from(new Set(data.map((r) => r.course_id)));
+      const courseMap = new Map();
+      for (let i = 0; i < uniqueCourseIds.length; i += 10) {
+        const chunk = uniqueCourseIds.slice(i, i + 10);
+        const qCourse = query(
+          collection(db, "course_units"),
+          where("__name__", "in", chunk),
+        );
+        const courseSnap = await getDocs(qCourse);
+        courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
+      }
+
+      // Normalize data
+      const normalized = data.map((row) => {
+        console.log("Processing grade row:", row);
+        const course = courseMap.get(row.course_id);
+        return {
+          ...row,
+          courseTitle: course?.name || "Course",
+          courseCode: course?.code || "",
+          credits: course?.credits || 3,
+          marks: row.total || row.marks || 0,
+          grade_point: row.gp || row.grade_point || 0,
+          semester_remark:
+            row.semester_remark ||
+            calculateSemesterRemark(row.gp || row.grade_point || 0, row.grade),
+          a1: row.assignment1 || 0,
+          a2: row.assignment2 || 0,
+          mid: row.midterm || 0,
+          part: row.participation || 0,
+          final: row.final_exam || 0,
+        };
+      });
+
+      console.log("Normalized data:", normalized);
+
+      if (normalized.length === 0) {
+        console.log("No grade data found for student");
+        setTermResults([]);
+        setCgpa(0);
+        setQuizResults([]);
+        return;
+      }
+
+      const termMap = new Map<string, TermResult>();
+      normalized.forEach((row) => {
+        const term = `${row.academic_year} · ${row.semester}`;
+        const existing = termMap.get(term) || {
+          term,
+          gpa: 0,
+          cgpa: 0,
+          totalCredits: 0,
+          entries: [],
+        };
+
+        const credits = row.credits || 3;
+        const gradePoint = row.grade_point ?? 0;
+        existing.entries.push(row);
+        existing.totalCredits += credits;
+        existing.gpa += gradePoint * credits;
+        termMap.set(term, existing);
+      });
+
+      const terms = Array.from(termMap.values()).map((t) => {
+        const gpa = t.totalCredits
+          ? Number((t.gpa / t.totalCredits).toFixed(2))
+          : 0;
+        return {
+          ...t,
+          gpa,
+          remark: calculateSemesterRemark(gpa, t.entries[0]?.grade || null),
+        };
+      });
+
+      const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
+      const totalPoints = terms.reduce(
+        (sum, t) => sum + t.gpa * t.totalCredits,
+        0,
+      );
+      const computedCgpa = totalCredits
+        ? Number((totalPoints / totalCredits).toFixed(2))
+        : 0;
+
+      setTermResults(terms);
+      setCgpa(computedCgpa);
+
+      // Load quiz results
+      try {
+        const quizAttemptsQuery = query(
+          collection(db, "quiz_attempts"),
+          where("student_id", "==", studentId),
+          orderBy("completed_at", "desc"),
+        );
+        const quizAttemptsSnap = await getDocs(quizAttemptsQuery);
+
+        if (!quizAttemptsSnap.empty) {
+          const quizAttempts = quizAttemptsSnap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as Array<{
+            id: string;
+            quiz_id: string;
+            score?: number;
+            total_points?: number;
+            completed_at?: any;
+            time_taken?: number;
+            status?: string;
+          }>;
+
+          const quizIds = Array.from(
+            new Set(quizAttempts.map((attempt) => attempt.quiz_id)),
+          );
+
+          const quizMap = new Map();
+          for (let i = 0; i < quizIds.length; i += 10) {
+            const chunk = quizIds.slice(i, i + 10);
+            const quizzesQuery = query(
+              collection(db, "quizzes"),
+              where("__name__", "in", chunk),
+            );
+            const quizzesSnap = await getDocs(quizzesQuery);
+            quizzesSnap.docs.forEach((doc) => quizMap.set(doc.id, doc.data()));
+          }
+
+          const formattedQuizResults: QuizResult[] = quizAttempts.map(
+            (attempt) => {
+              const quiz = quizMap.get(attempt.quiz_id);
+              const score = attempt.score || 0;
+              const totalPoints =
+                attempt.total_points || quiz?.total_points || 0;
+              const percentage =
+                totalPoints > 0 ? (score / totalPoints) * 100 : 0;
+
+              return {
+                id: attempt.id,
+                quiz_id: attempt.quiz_id,
+                quiz_title: quiz?.title || "Quiz",
+                score,
+                total_points: totalPoints,
+                percentage: Math.round(percentage),
+                completed_at: attempt.completed_at || new Date().toISOString(),
+                time_taken: attempt.time_taken || 0,
+                status: attempt.status || "completed",
+              };
+            },
+          );
+
+          setQuizResults(formattedQuizResults);
+        } else {
+          setQuizResults([]);
+        }
+      } catch (quizError) {
+        console.error("Error loading quiz results:", quizError);
+        setQuizResults([]);
+      }
+    } finally {
+      setResultsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!user) return;
     loadResults();
-  }, [user, profile]);
+  }, [user]);
 
   const getPerformanceLevel = (
     gpa: number,
@@ -627,8 +625,6 @@ export default function Results() {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
-
-
       <main className="container py-4 sm:py-6 md:py-8 max-w-6xl px-4 sm:px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -646,6 +642,18 @@ export default function Results() {
               </p>
             </div>
             <div className="flex flex-wrap gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 sm:flex-none gap-2"
+                onClick={loadResults}
+                disabled={resultsLoading}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${resultsLoading ? "animate-spin" : ""}`}
+                />
+                <span className="hidden xs:inline sm:inline">Refresh</span>
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
