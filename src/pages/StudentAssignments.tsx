@@ -14,7 +14,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -601,7 +601,7 @@ export default function StudentAssignments() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
-      <StudentHeader />
+
 
       <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
         {/* Header */}

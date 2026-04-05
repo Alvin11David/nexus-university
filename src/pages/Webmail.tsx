@@ -34,7 +34,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -746,7 +746,6 @@ export default function Webmail() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-0">
-      <StudentHeader />
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">

@@ -163,7 +163,16 @@ export function AppLayout({ children }: AppLayoutProps) {
           <div className="flex h-full flex-col">
             {/* Logo */}
             <div className="flex h-16 items-center justify-center border-b border-border px-4">
-              <Link to={profile?.role === "lecturer" ? "/lecturer" : profile?.role === "registrar" ? "/registrar" : "/dashboard"} className="flex items-center gap-2 group">
+              <Link
+                to={
+                  profile?.role === "lecturer"
+                    ? "/lecturer"
+                    : profile?.role === "registrar"
+                      ? "/registrar"
+                      : "/dashboard"
+                }
+                className="flex items-center gap-2 group"
+              >
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground transition-transform group-hover:scale-105 shadow-lg">
                   {settings.logoUrl ? (
                     <img
@@ -225,7 +234,16 @@ export function AppLayout({ children }: AppLayoutProps) {
             <div className="flex h-full flex-col">
               {/* Logo */}
               <div className="flex h-16 items-center justify-center border-b border-border px-4">
-                <Link to={profile?.role === "lecturer" ? "/lecturer" : profile?.role === "registrar" ? "/registrar" : "/dashboard"} className="flex items-center gap-2 group">
+                <Link
+                  to={
+                    profile?.role === "lecturer"
+                      ? "/lecturer"
+                      : profile?.role === "registrar"
+                        ? "/registrar"
+                        : "/dashboard"
+                  }
+                  className="flex items-center gap-2 group"
+                >
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary text-primary-foreground transition-transform group-hover:scale-105 shadow-lg">
                     {settings.logoUrl ? (
                       <img
@@ -305,7 +323,12 @@ export function AppLayout({ children }: AppLayoutProps) {
               {user ? (
                 <>
                   {/* Notifications */}
-                  <Button variant="ghost" size="icon" className="relative" asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                    asChild
+                  >
                     <Link to="/notifications">
                       <Bell className="h-5 w-5" />
                       {unreadCount > 0 && (
@@ -336,7 +359,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                         </Avatar>
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuContent
+                      className="w-56"
+                      align="end"
+                      forceMount
+                    >
                       <div className="flex items-center gap-2 p-2">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-primary text-primary-foreground text-xs">
@@ -357,7 +384,13 @@ export function AppLayout({ children }: AppLayoutProps) {
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
                         <Link
-                          to={profile?.role === "lecturer" ? "/lecturer/settings" : profile?.role === "registrar" ? "/registrar/settings" : "/settings"}
+                          to={
+                            profile?.role === "lecturer"
+                              ? "/lecturer/settings"
+                              : profile?.role === "registrar"
+                                ? "/registrar/settings"
+                                : "/settings"
+                          }
                           className="flex items-center gap-2 cursor-pointer"
                         >
                           <User className="h-4 w-4" />
@@ -387,9 +420,7 @@ export function AppLayout({ children }: AppLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1">
-          {children}
-        </main>
+        <main className="flex-1">{children}</main>
       </div>
 
       {/* Mobile overlay backdrop */}

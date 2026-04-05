@@ -23,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/integrations/firebase/client";
@@ -161,7 +161,7 @@ export default function Enrollment() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <StudentHeader />
+
 
       <main className="container py-8">
         <motion.div

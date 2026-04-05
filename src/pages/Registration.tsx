@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -368,7 +368,7 @@ export default function Registration() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <StudentHeader />
+
 
       {/* Hero Section */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">

@@ -44,7 +44,6 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
-import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CourseCard } from "@/components/dashboard/CourseCard";
@@ -832,8 +831,6 @@ export default function Dashboard() {
         <div className="absolute -top-32 -left-16 w-80 h-80 bg-gradient-to-br from-primary/20 to-secondary/10 blur-3xl" />
         <div className="absolute top-20 right-10 w-72 h-72 bg-gradient-to-bl from-secondary/15 via-accent/10 to-primary/10 blur-3xl" />
       </div>
-
-      <StudentHeader />
 
       <main className="container py-6 space-y-8 relative">
         {/* Welcome */}

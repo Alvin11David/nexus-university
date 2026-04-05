@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, Printer, GraduationCap, QrCode, X } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -627,7 +627,7 @@ export default function Results() {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
-      <StudentHeader />
+
 
       <main className="container py-4 sm:py-6 md:py-8 max-w-6xl px-4 sm:px-6">
         <motion.div

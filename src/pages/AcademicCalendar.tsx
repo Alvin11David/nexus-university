@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { addDoc, collection, getDocs } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -152,7 +152,7 @@ export default function AcademicCalendar() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
-        <StudentHeader />
+  
         <main className="container py-8">
           <div className="max-w-6xl mx-auto space-y-8">
             <div className="text-center">Loading academic calendar...</div>
@@ -166,7 +166,7 @@ export default function AcademicCalendar() {
   if (error || !calendarData) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
-        <StudentHeader />
+  
         <main className="container py-8">
           <div className="max-w-6xl mx-auto space-y-8">
             <div className="text-center text-red-500">
@@ -181,7 +181,7 @@ export default function AcademicCalendar() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-12">
-      <StudentHeader />
+
 
       <main className="container py-8">
         <div className="max-w-6xl mx-auto space-y-8">

@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -74,7 +74,7 @@ export default function Settings() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <StudentHeader />
+
 
       <main className="container py-8">
         <motion.div

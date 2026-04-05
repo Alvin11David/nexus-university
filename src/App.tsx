@@ -156,7 +156,7 @@ function RegistrarRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function AppRoutes() {

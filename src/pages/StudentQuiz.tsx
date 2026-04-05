@@ -21,7 +21,7 @@ import {
   Timer,
   BarChart3,
 } from "lucide-react";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -434,7 +434,7 @@ export default function StudentQuiz() {
         <div className="absolute top-1/3 -right-40 w-96 h-96 bg-gradient-to-bl from-secondary/15 via-primary/10 to-transparent blur-3xl rounded-full opacity-40" />
       </div>
 
-      <StudentHeader />
+
 
       <main className="px-4 pb-28 sm:px-6 lg:px-8 relative">
         <div className="max-w-6xl mx-auto pt-6 lg:pt-10">

@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/integrations/firebase/client";
@@ -241,7 +240,6 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <StudentHeader />
 
       {/* Hero Section with GSAP Animations */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">

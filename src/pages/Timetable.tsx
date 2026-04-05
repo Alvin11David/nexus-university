@@ -39,7 +39,7 @@ import { db } from "@/integrations/firebase/client";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -867,7 +867,7 @@ export default function Timetable() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-      <StudentHeader />
+
 
       <main className="container py-8">
         <motion.div

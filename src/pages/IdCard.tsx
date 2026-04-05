@@ -10,7 +10,7 @@ import {
   QrCode,
   Printer,
 } from "lucide-react";
-import { StudentHeader } from "@/components/layout/StudentHeader";
+
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -53,7 +53,7 @@ export default function IdCard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-10">
-      <StudentHeader />
+
 
       <main className="container py-8">
         <div className="max-w-5xl mx-auto space-y-8">
