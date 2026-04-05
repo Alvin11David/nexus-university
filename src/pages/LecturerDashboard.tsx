@@ -851,6 +851,7 @@ export default function LecturerDashboard() {
                     size="sm"
                     variant="secondary"
                     className="bg-gradient-to-r from-primary/20 to-secondary/20 text-primary border-primary/30 hover:bg-primary/30"
+                    onClick={() => navigate("/lecturer/announcements")}
                   >
                     <Mail className="mr-2 h-4 w-4" /> New
                   </Button>
