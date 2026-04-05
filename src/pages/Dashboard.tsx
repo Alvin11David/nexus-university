@@ -51,6 +51,7 @@ import { UpcomingCard } from "@/components/dashboard/UpcomingCard";
 import { AnnouncementCard } from "@/components/dashboard/AnnouncementCard";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 type ResultCourse = {
   title: string;
@@ -112,6 +113,7 @@ interface DashboardQuiz {
 
 export default function Dashboard() {
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const displayName = profile?.full_name || user?.displayName || "Student";
   const firstName = displayName.split(" ")[0];
   const [stats, setStats] = useState({
@@ -136,6 +138,11 @@ export default function Dashboard() {
   const [liveSessionsLoading, setLiveSessionsLoading] = useState(true);
   const [upcomingQuizzes, setUpcomingQuizzes] = useState<DashboardQuiz[]>([]);
   const [quizzesLoading, setQuizzesLoading] = useState(true);
+
+  // Debug logging for dialog state
+  useEffect(() => {
+    console.log("showClassDialog changed:", showClassDialog);
+  }, [showClassDialog]);
 
   const classroomCourses: any[] = [];
   const classroomStream: any[] = [];
@@ -702,12 +709,20 @@ export default function Dashboard() {
 
   const handleJoinClass = async () => {
     if (!joinCode.trim()) {
-      alert("Please enter a valid join code");
+      toast({
+        title: "Error",
+        description: "Please enter a valid join code",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!user) {
-      alert("You must be logged in to join a class");
+      toast({
+        title: "Error",
+        description: "You must be logged in to join a class",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -723,7 +738,11 @@ export default function Dashboard() {
       const qSnapshot = await getDocs(q);
 
       if (qSnapshot.empty) {
-        alert("Invalid class code. Please check and try again.");
+        toast({
+          title: "Invalid Code",
+          description: "Invalid class code. Please check and try again.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -741,7 +760,11 @@ export default function Dashboard() {
       const enrollSnapshot = await getDocs(qEnroll);
 
       if (!enrollSnapshot.empty) {
-        alert("You are already enrolled in this class");
+        toast({
+          title: "Already Enrolled",
+          description: "You are already enrolled in this class",
+          variant: "destructive",
+        });
         setShowClassDialog(false);
         setJoinCode("");
         return;
@@ -755,7 +778,10 @@ export default function Dashboard() {
         enrolled_at: new Date().toISOString(),
       });
 
-      alert(`Successfully joined "${classroom.name}"!`);
+      toast({
+        title: "Success",
+        description: `Successfully joined "${classroom.name}"!`,
+      });
       setShowClassDialog(false);
       setJoinCode("");
 
@@ -763,7 +789,11 @@ export default function Dashboard() {
       window.location.reload();
     } catch (error) {
       console.error("Error joining class:", error);
-      alert("Failed to join class. Please try again.");
+      toast({
+        title: "Error",
+        description: "Failed to join class. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -771,12 +801,20 @@ export default function Dashboard() {
 
   const handleCreateClass = async () => {
     if (!className.trim()) {
-      alert("Please enter a class name");
+      toast({
+        title: "Error",
+        description: "Please enter a class name",
+        variant: "destructive",
+      });
       return;
     }
 
     if (!user) {
-      alert("You must be logged in to create a class");
+      toast({
+        title: "Error",
+        description: "You must be logged in to create a class",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -809,9 +847,10 @@ export default function Dashboard() {
         enrolled_at: new Date().toISOString(),
       });
 
-      alert(
-        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`,
-      );
+      toast({
+        title: "Success",
+        description: `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`,
+      });
       setShowClassDialog(false);
       setClassName("");
 
@@ -819,7 +858,11 @@ export default function Dashboard() {
       window.location.reload();
     } catch (error) {
       console.error("Error creating class:", error);
-      alert("Failed to create class. Please try again.");
+      toast({
+        title: "Error",
+        description: "Failed to create class. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -1059,8 +1102,12 @@ export default function Dashboard() {
                 </h2>
               </div>
               <button
-                onClick={() => setShowClassDialog(true)}
-                className="flex items-center gap-2 text-xs sm:text-sm text-secondary hover:text-secondary/80 transition-colors cursor-pointer"
+                onClick={() => {
+                  console.log("Join or create class button clicked");
+                  alert("Button clicked! Dialog state: " + showClassDialog);
+                  setShowClassDialog(true);
+                }}
+                className="flex items-center gap-2 text-xs sm:text-sm text-primary hover:text-primary/80 transition-colors cursor-pointer bg-primary/10 hover:bg-primary/20 px-3 py-1 rounded-md"
               >
                 <Plus className="h-4 w-4" />
                 Join or create class
@@ -1445,101 +1492,20 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Join or Create Class Dialog */}
-      <Dialog open={showClassDialog} onOpenChange={setShowClassDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Join or Create a Class</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            {/* Toggle between Join and Create */}
-            <div className="flex gap-2 bg-muted p-1 rounded-lg">
-              <button
-                onClick={() => {
-                  setClassAction("join");
-                  setJoinCode("");
-                  setClassName("");
-                }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                  classAction === "join"
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground"
-                }`}
-              >
-                Join Class
-              </button>
-              <button
-                onClick={() => {
-                  setClassAction("create");
-                  setJoinCode("");
-                  setClassName("");
-                }}
-                className={`flex-1 py-2 rounded-md font-medium transition-colors ${
-                  classAction === "create"
-                    ? "bg-white text-foreground shadow-sm"
-                    : "text-muted-foreground"
-                }`}
-              >
-                Create Class
-              </button>
-            </div>
-
-            {/* Join Class Form */}
-            {classAction === "join" && (
-              <div className="grid gap-3">
-                <div>
-                  <label className="text-sm font-medium text-foreground">
-                    Class Code
-                  </label>
-                  <Input
-                    placeholder="Enter the class code (e.g., abc-1234-xyz)"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value)}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Ask your instructor for the class code to join
-                  </p>
-                </div>
-                <Button
-                  onClick={handleJoinClass}
-                  className="w-full mt-4"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Joining..." : "Join Class"}
-                </Button>
-              </div>
-            )}
-
-            {/* Create Class Form */}
-            {classAction === "create" && (
-              <div className="grid gap-3">
-                <div>
-                  <label className="text-sm font-medium text-foreground">
-                    Class Name
-                  </label>
-                  <Input
-                    placeholder="Enter class name (e.g., Advanced Data Structures)"
-                    value={className}
-                    onChange={(e) => setClassName(e.target.value)}
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Give your class a clear, descriptive name
-                  </p>
-                </div>
-                <Button
-                  onClick={handleCreateClass}
-                  className="w-full mt-4"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Creating..." : "Create Class"}
-                </Button>
-              </div>
-            )}
+      {showClassDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
+            <h2 className="text-lg font-semibold mb-4">Test Dialog</h2>
+            <p>This is a test dialog to see if the button works.</p>
+            <button
+              onClick={() => setShowClassDialog(false)}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded"
+            >
+              Close
+            </button>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
       <StudentBottomNav />
     </div>
