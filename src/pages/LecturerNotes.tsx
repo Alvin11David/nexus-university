@@ -36,7 +36,12 @@ import {
   where,
   orderBy,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import {
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
 
 interface CourseOption {
   id: string;
@@ -133,8 +138,7 @@ export default function LecturerNotes() {
                 courseData.name ||
                 courseData.course_unit_name ||
                 "Unknown Course",
-              code:
-                courseData.code || courseData.course_unit_code || "Unknown",
+              code: courseData.code || courseData.course_unit_code || "Unknown",
             });
           });
         }
@@ -384,10 +388,13 @@ export default function LecturerNotes() {
                     id="file"
                     type="file"
                     accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain"
-                    onChange={(event) => setNoteFile(event.target.files?.[0] || null)}
+                    onChange={(event) =>
+                      setNoteFile(event.target.files?.[0] || null)
+                    }
                   />
                   <p className="text-xs text-muted-foreground">
-                    Accepted files: PDF, Word, PowerPoint, TXT, or ZIP. Max 25MB.
+                    Accepted files: PDF, Word, PowerPoint, TXT, or ZIP. Max
+                    25MB.
                   </p>
                 </div>
 
@@ -556,12 +563,21 @@ export default function LecturerNotes() {
 
                         <div className="flex flex-wrap gap-2">
                           <Button asChild size="sm" className="gap-2 flex-1">
-                            <a href={note.file_url} target="_blank" rel="noreferrer">
+                            <a
+                              href={note.file_url}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
                               <ExternalLink className="h-4 w-4" />
                               Open
                             </a>
                           </Button>
-                          <Button asChild size="sm" variant="outline" className="gap-2 flex-1">
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="outline"
+                            className="gap-2 flex-1"
+                          >
                             <a href={note.file_url} download={note.file_name}>
                               <Download className="h-4 w-4" />
                               Download

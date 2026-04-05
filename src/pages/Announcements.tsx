@@ -347,8 +347,6 @@ export default function Announcements() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-secondary/5 pb-28">
-
-
       <main className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <motion.div

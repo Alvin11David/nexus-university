@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   Home,
   BookOpen,
+  FileText,
   Mail,
   CheckCircle2,
   User,
@@ -13,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 const lecturerNavItems = [
   { label: "Home", href: "/lecturer", icon: Home },
   { label: "Courses", href: "/lecturer/courses", icon: BookOpen },
+  { label: "Notes", href: "/lecturer/notes", icon: FileText },
   { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
   { label: "Messages", href: "/lecturer/messages", icon: Mail },
   { label: "Profile", href: "/profile", icon: User },
@@ -35,13 +37,13 @@ export function LecturerBottomNav() {
               to={item.href}
               className={cn(
                 "flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-all",
-                isActive ? "text-primary" : "text-muted-foreground"
+                isActive ? "text-primary" : "text-muted-foreground",
               )}
             >
               <div
                 className={cn(
                   "flex items-center justify-center w-10 h-10 rounded-xl transition-all",
-                  isActive && "bg-primary/10"
+                  isActive && "bg-primary/10",
                 )}
               >
                 <item.icon className={cn("h-5 w-5", isActive && "scale-110")} />
