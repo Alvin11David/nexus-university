@@ -26,7 +26,7 @@ import {
   Sparkles,
   Code2,
 } from "lucide-react";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -406,7 +406,7 @@ export default function LecturerSettings() {
         <div className="absolute top-1/2 -right-40 w-96 h-96 bg-gradient-to-bl from-secondary/10 via-primary/5 to-transparent blur-3xl rounded-full opacity-40" />
       </div>
 
-      <LecturerHeader />
+
 
       <main className="container py-8 relative">
         <motion.div

@@ -19,7 +19,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

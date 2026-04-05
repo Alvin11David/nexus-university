@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { db } from "@/firebase";
 import {
@@ -240,7 +240,7 @@ export default function LecturerEnrollments() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-10">
-      <LecturerHeader />
+
       <main className="container py-8">
         <motion.div
           initial={{ opacity: 0, y: 12 }}

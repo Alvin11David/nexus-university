@@ -12,7 +12,7 @@ import {
   Award,
   Briefcase,
 } from "lucide-react";
-import { LecturerHeader } from "@/components/layout/LecturerHeader";
+
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -50,7 +50,7 @@ export default function LecturerIdCard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-24 md:pb-10">
-      <LecturerHeader />
+
 
       <main className="container py-8">
         <div className="max-w-5xl mx-auto space-y-8">
