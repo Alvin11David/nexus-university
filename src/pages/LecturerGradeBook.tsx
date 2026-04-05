@@ -134,9 +134,8 @@ export default function LecturerGradeBook() {
   const [searchParams] = useSearchParams();
   const [students, setStudents] = useState<StudentGrade[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
-  const [gradingCriteria, setGradingCriteria] = useState<GradingCriterion[]>(
-    defaultCriteria,
-  );
+  const [gradingCriteria, setGradingCriteria] =
+    useState<GradingCriterion[]>(defaultCriteria);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [sortBy, setSortBy] = useState<"name" | "total" | "grade">("name");
@@ -266,7 +265,9 @@ export default function LecturerGradeBook() {
         return next;
       });
 
-      alert("Grading criteria saved. Remember to Save All grades to persist recalculated totals.");
+      alert(
+        "Grading criteria saved. Remember to Save All grades to persist recalculated totals.",
+      );
     } catch (error) {
       console.error("Error saving grading criteria:", error);
       alert("Failed to save grading criteria.");
@@ -454,7 +455,10 @@ export default function LecturerGradeBook() {
           [criterionId]: value,
         };
 
-        const total = calculateTotalFromCriteria(updatedScores, gradingCriteria);
+        const total = calculateTotalFromCriteria(
+          updatedScores,
+          gradingCriteria,
+        );
 
         const { grade, gp } = calculateGrade(total);
 
@@ -601,8 +605,8 @@ export default function LecturerGradeBook() {
     const headers = [
       "Name",
       "Email",
-      ...gradingCriteria.map((criterion) =>
-        `${criterion.name} (${criterion.weight}%)`,
+      ...gradingCriteria.map(
+        (criterion) => `${criterion.name} (${criterion.weight}%)`,
       ),
       "Total",
       "Grade",
@@ -695,11 +699,7 @@ export default function LecturerGradeBook() {
           const totalScore = parseFloat(totalRaw);
           const gradePoint = parseFloat(gpRaw);
 
-          if (
-            invalidScore ||
-            isNaN(totalScore) ||
-            isNaN(gradePoint)
-          ) {
+          if (invalidScore || isNaN(totalScore) || isNaN(gradePoint)) {
             console.warn(`Skipping line ${index + 2} due to invalid numbers`);
             return;
           }
@@ -816,8 +816,6 @@ export default function LecturerGradeBook() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5 pb-28">
-
-
       <main className="px-3 py-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-4 sm:space-y-6">
         {/* Header */}
         <motion.div
@@ -858,7 +856,7 @@ export default function LecturerGradeBook() {
                 <Button
                   onClick={saveAllGrades}
                   disabled={saving || students.length === 0}
-                  className="bg-gradient-to-r from-emerald-600 to-emerald-500 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2 flex-1 sm:flex-none"
+                  className="bg-gradient-to-r from-orange-600 to-amber-500 gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-4 py-2 flex-1 sm:flex-none"
                 >
                   <Save className="h-3 w-3 sm:h-4 sm:w-4" />
                   <span className="hidden sm:inline">
@@ -1103,10 +1101,7 @@ export default function LecturerGradeBook() {
                                   ...item,
                                   weight: Math.max(
                                     0,
-                                    Math.min(
-                                      100,
-                                      Number(e.target.value || 0),
-                                    ),
+                                    Math.min(100, Number(e.target.value || 0)),
                                   ),
                                 }
                               : item,
@@ -1132,8 +1127,8 @@ export default function LecturerGradeBook() {
                 </div>
               ))}
               <p className="text-xs text-muted-foreground">
-                Define how each component contributes to the final 100%. Example:
-                Test 1 = 20%, Midterm = 30%, Final = 50%.
+                Define how each component contributes to the final 100%.
+                Example: Test 1 = 20%, Midterm = 30%, Final = 50%.
               </p>
             </CardContent>
           </Card>
