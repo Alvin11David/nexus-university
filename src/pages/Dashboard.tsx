@@ -1457,8 +1457,8 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Assignments & Stream */}
-            <div className="grid lg:grid-cols-2 gap-3 sm:gap-4 lg:gap-6">
+            {/* Assignments */}
+            <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:gap-6">
               <div className="rounded-xl sm:rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-4 sm:p-5 shadow-lg space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1544,61 +1544,6 @@ export default function Dashboard() {
                     })}
                 </div>
               </div>
-
-              <div className="rounded-xl sm:rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-4 sm:p-5 shadow-lg space-y-4">
-                <div className="flex items-center gap-2">
-                  <MessageCircle className="h-5 w-5 text-primary" />
-                  <h3 className="font-display text-base sm:text-lg font-semibold">
-                    Classroom Stream
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {formattedLiveSessions.length === 0 &&
-                    !liveSessionsLoading && (
-                      <p className="text-xs sm:text-sm text-muted-foreground">
-                        When there are scheduled Google Meet classes, they will
-                        show up here with a clear status and join button.
-                      </p>
-                    )}
-                  {formattedLiveSessions.map((session, i) => (
-                    <motion.div
-                      key={session.id}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      className="p-3 sm:p-4 rounded-lg sm:rounded-xl border border-border/60 bg-muted/30"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2">
-                        <div className="space-y-1 flex-1">
-                          <p className="text-xs sm:text-sm font-semibold">
-                            {session.title}
-                          </p>
-                          <p className="text-[11px] sm:text-xs text-muted-foreground">
-                            {session.courseName || "Online Class"}
-                          </p>
-                        </div>
-                        <span className="text-[10px] sm:text-[11px] text-muted-foreground flex-shrink-0">
-                          {session.displayTime}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2 text-[10px] sm:text-[11px] text-muted-foreground">
-                        {session.isLive && (
-                          <>
-                            <span className="h-1.5 w-1.5 rounded-full bg-primary flex-shrink-0" />{" "}
-                            Live now
-                          </>
-                        )}
-                        {!session.isLive && (
-                          <>
-                            <Clock className="h-3 w-3" />
-                            Starts at {session.displayTime}
-                          </>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
 
@@ -1666,89 +1611,6 @@ export default function Dashboard() {
                     />
                   );
                 })}
-              </div>
-            </div>
-
-            <div className="rounded-xl sm:rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-4 sm:p-5 shadow-xl space-y-4">
-              <div className="flex items-center gap-2">
-                <Video className="h-5 w-5 text-primary" />
-                <h3 className="font-display text-base sm:text-lg font-semibold">
-                  Live Meets
-                </h3>
-              </div>
-              <div className="space-y-3">
-                {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    No classes are live right now. When a Google Meet class is
-                    in progress, you will see a Join button here.
-                  </p>
-                )}
-                {formattedLiveSessions.map((session, i) => (
-                  <motion.div
-                    key={session.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="p-3 sm:p-4 rounded-lg sm:rounded-xl border border-border/60 bg-muted/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3"
-                  >
-                    <div>
-                      <p className="text-xs sm:text-sm font-semibold">
-                        {session.title}
-                      </p>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground">
-                        {session.displayTime}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                      {session.isLive && session.meetLink && (
-                        <span className="px-2 py-1 rounded-full text-[10px] sm:text-[11px] bg-destructive/10 text-destructive font-semibold flex items-center gap-1">
-                          <Mic className="h-3 w-3" /> Live
-                        </span>
-                      )}
-                      <button
-                        className="px-2 sm:px-3 py-2 rounded-lg sm:rounded-xl text-xs bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1 flex-shrink-0 disabled:opacity-60"
-                        onClick={() => {
-                          if (!session.meetLink) return;
-                          openMeetingLauncher({
-                            title: session.title,
-                            platform: "googlemeet",
-                            course: session.courseName || "Online Class",
-                            description: "Live class session",
-                            dueLabel: session.displayTime,
-                            link: session.meetLink,
-                          });
-                        }}
-                        disabled={!session.isLive || !session.meetLink}
-                      >
-                        <Play className="h-4 w-4" />{" "}
-                        {session.isLive ? "Join" : "Join (when live)"}
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-border/60 bg-card/80 backdrop-blur-lg p-5 shadow-xl space-y-4">
-              <div className="flex items-center gap-2">
-                <Folder className="h-5 w-5 text-secondary" />
-                <h3 className="font-display text-lg font-semibold">
-                  Resources
-                </h3>
-              </div>
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <div className="p-3 rounded-xl border border-border/60 bg-muted/30 flex items-center justify-between">
-                  <span>Slides, code samples, labs</span>
-                  <span className="text-xs text-primary">Google Drive</span>
-                </div>
-                <div className="p-3 rounded-xl border border-border/60 bg-muted/30 flex items-center justify-between">
-                  <span>Recorded lectures & Meet links</span>
-                  <span className="text-xs text-primary">Drive / Meet</span>
-                </div>
-                <div className="p-3 rounded-xl border border-border/60 bg-muted/30 flex items-center justify-between">
-                  <span>Assignments & rubrics</span>
-                  <span className="text-xs text-primary">Classroom</span>
-                </div>
               </div>
             </div>
           </div>
