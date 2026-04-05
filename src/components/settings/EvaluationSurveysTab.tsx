@@ -25,16 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 
-interface Survey {
-  id: string;
-  title: string;
-  course: string;
-  courseCode: string;
-  instructor: string;
-  deadline: string;
-  status: "pending" | "completed" | "expired";
-  questions: number;
-}
+import { useEvaluations, Survey } from "@/hooks/useEvaluations";
 
 interface StarRatingProps {
   rating: number;
@@ -65,14 +56,14 @@ const StarRating = ({ rating, onRate, disabled }: StarRatingProps) => (
   </div>
 );
 
-const surveys: Survey[] = [];
-
 export function EvaluationSurveysTab() {
   const { toast } = useToast();
+  const { surveys, loading, submitEvaluation } = useEvaluations();
   const [selectedSurvey, setSelectedSurvey] = useState<Survey | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [feedback, setFeedback] = useState("");
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
 
   const pendingSurveys = surveys.filter((s) => s.status === "pending");
   const completedSurveys = surveys.filter((s) => s.status === "completed");
@@ -107,11 +98,26 @@ export function EvaluationSurveysTab() {
     { id: "overall", text: "Overall, how satisfied are you with this course?" },
   ];
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (!selectedSurvey) return;
+
     if (Object.keys(ratings).length < surveyQuestions.length) {
       toast({
         title: "Incomplete Survey",
         description: "Please rate all questions before submitting",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    const { error } = await submitEvaluation(selectedSurvey.id, ratings, feedback);
+    setSubmitting(false);
+
+    if (error) {
+      toast({
+        title: "Submission Failed",
+        description: "There was an error saving your response. Please try again.",
         variant: "destructive",
       });
       return;
@@ -139,6 +145,14 @@ export function EvaluationSurveysTab() {
         return "bg-muted text-muted-foreground";
     }
   };
+
+  if (loading) {
+    return (
+      <div className="py-12 flex justify-center text-muted-foreground animate-pulse">
+        Loading evaluations...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -264,6 +278,7 @@ export function EvaluationSurveysTab() {
                         onRate={(rating) =>
                           setRatings({ ...ratings, [question.id]: rating })
                         }
+                        disabled={submitting}
                       />
                     </motion.div>
                   ))}
@@ -277,6 +292,7 @@ export function EvaluationSurveysTab() {
                       onChange={(e) => setFeedback(e.target.value)}
                       placeholder="Share any additional feedback about this course..."
                       className="min-h-24"
+                      disabled={submitting}
                     />
                   </div>
 
@@ -285,11 +301,20 @@ export function EvaluationSurveysTab() {
                       variant="outline"
                       className="flex-1"
                       onClick={() => setSelectedSurvey(null)}
+                      disabled={submitting}
                     >
                       Save for Later
                     </Button>
-                    <Button className="flex-1 gap-2" onClick={handleSubmit}>
-                      <Send className="h-4 w-4" />
+                    <Button 
+                      className="flex-1 gap-2" 
+                      onClick={handleSubmit} 
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
                       Submit Survey
                     </Button>
                   </div>
