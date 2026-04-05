@@ -267,9 +267,7 @@ export default function LecturerMeetings() {
         meeting.course_title?.toLowerCase().includes(search) ||
         meeting.course_code?.toLowerCase().includes(search) ||
         meeting.description?.toLowerCase().includes(search) ||
-        getMeetingTypeLabel(meeting.meeting_type)
-          .toLowerCase()
-          .includes(search)
+        getMeetingTypeLabel(meeting.meeting_type).toLowerCase().includes(search)
       );
     });
   }, [meetings, searchQuery]);
