@@ -240,7 +240,6 @@ export default function Notifications() {
 
   return (
     <div className="min-h-screen bg-background pb-24 md:pb-8">
-
       {/* Hero Section with GSAP Animations */}
       <section className="relative overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-accent py-12">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_hsl(var(--secondary)/0.2)_0%,_transparent_50%)]" />

@@ -901,7 +901,11 @@ export default function Dashboard() {
           />
           <StatCard
             title="Live Meets"
-            value={loadingStats && liveSessionsLoading ? "…" : stats.liveMeets.toString()}
+            value={
+              loadingStats && liveSessionsLoading
+                ? "…"
+                : stats.liveMeets.toString()
+            }
             subtitle="Happening now"
             icon={Video}
             delay={0.4}
@@ -1139,7 +1143,9 @@ export default function Dashboard() {
                           }
                           disabled={!session.isLive || !session.meetLink}
                         >
-                          {session.isLive ? "Join Live Class" : "Join (when live)"}
+                          {session.isLive
+                            ? "Join Live Class"
+                            : "Join (when live)"}
                         </button>
                       </div>
                     </div>
@@ -1244,12 +1250,13 @@ export default function Dashboard() {
                   </h3>
                 </div>
                 <div className="space-y-3">
-                  {formattedLiveSessions.length === 0 && !liveSessionsLoading && (
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      When there are scheduled Google Meet classes, they will show
-                      up here with a clear status and join button.
-                    </p>
-                  )}
+                  {formattedLiveSessions.length === 0 &&
+                    !liveSessionsLoading && (
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        When there are scheduled Google Meet classes, they will
+                        show up here with a clear status and join button.
+                      </p>
+                    )}
                   {formattedLiveSessions.map((session, i) => (
                     <motion.div
                       key={session.id}
@@ -1306,12 +1313,12 @@ export default function Dashboard() {
                   upcomingQuizzes.length === 0 &&
                   !liveSessionsLoading &&
                   !quizzesLoading && (
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    No upcoming online classes or quizzes yet. When your
-                    lecturers schedule Google Meet sessions or quizzes, they
-                    will appear here.
-                  </p>
-                )}
+                    <p className="text-xs sm:text-sm text-muted-foreground">
+                      No upcoming online classes or quizzes yet. When your
+                      lecturers schedule Google Meet sessions or quizzes, they
+                      will appear here.
+                    </p>
+                  )}
                 {formattedLiveSessions.map((session, i) => (
                   <UpcomingCard
                     key={session.id}
@@ -1341,9 +1348,7 @@ export default function Dashboard() {
                       type={"quiz" as const}
                       title={quiz.title}
                       course={
-                        quiz.courseTitle ||
-                        quiz.courseCode ||
-                        "Course Quiz"
+                        quiz.courseTitle || quiz.courseCode || "Course Quiz"
                       }
                       time={startLabel}
                       date={
