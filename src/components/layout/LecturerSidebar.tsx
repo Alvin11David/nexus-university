@@ -63,9 +63,7 @@ export function LecturerSidebar() {
               <span className="font-display text-lg font-bold text-foreground">
                 {settings.shortName}
               </span>
-              <span className="text-xs text-muted-foreground">
-                Lecturer
-              </span>
+              <span className="text-xs text-muted-foreground">Lecturer</span>
             </div>
           </Link>
         </div>

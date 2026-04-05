@@ -1,13 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import {
-  Bell,
-  User,
-  LogOut,
-  Menu,
-  X,
-} from "lucide-react";
+import { Bell, User, LogOut, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -106,7 +100,12 @@ export function LecturerLayout({ children }: LecturerLayoutProps) {
               {user ? (
                 <>
                   {/* Notifications */}
-                  <Button variant="ghost" size="icon" className="relative" asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                    asChild
+                  >
                     <Link to="/notifications">
                       <Bell className="h-5 w-5" />
                       {unreadCount > 0 && (
@@ -137,7 +136,11 @@ export function LecturerLayout({ children }: LecturerLayoutProps) {
                         </Avatar>
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuContent
+                      className="w-56"
+                      align="end"
+                      forceMount
+                    >
                       <div className="flex items-center gap-2 p-2">
                         <Avatar className="h-8 w-8">
                           <AvatarFallback className="bg-primary text-primary-foreground text-xs">
@@ -188,9 +191,7 @@ export function LecturerLayout({ children }: LecturerLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="flex-1">
-          {children}
-        </main>
+        <main className="flex-1">{children}</main>
       </div>
 
       {/* Mobile overlay backdrop */}

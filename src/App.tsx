@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { SiteSettingsProvider } from "@/contexts/SiteSettingsContext";
 import { LecturerLayout } from "@/components/layout/LecturerLayout";
+import { AppLayout } from "@/components/layout/AppLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -71,7 +72,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  return <>{children}</>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function StudentRoute({ children }: { children: React.ReactNode }) {
@@ -94,7 +95,12 @@ function StudentRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/lecturer" replace />;
   }
 
-  return <>{children}</>;
+  // Redirect registrars to registrar dashboard
+  if (profile?.role === "registrar") {
+    return <Navigate to="/registrar" replace />;
+  }
+
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function LecturerRoute({ children }: { children: React.ReactNode }) {
@@ -122,7 +128,7 @@ function LecturerRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <LecturerLayout>{children}</LecturerLayout>;
+  return <AppLayout>{children}</AppLayout>;
 }
 
 function RegistrarRoute({ children }: { children: React.ReactNode }) {
