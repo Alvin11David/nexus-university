@@ -11,6 +11,7 @@ import {
   Target,
   User,
   Settings,
+  Video,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +24,7 @@ const lecturerNavItems = [
   { label: "Grades", href: "/lecturer/gradebook", icon: BarChart3 },
   { label: "Assignments", href: "/lecturer/assignments", icon: FileText },
   { label: "Notes", href: "/lecturer/notes", icon: FileText },
+  { label: "Meetings", href: "/lecturer/meetings", icon: Video },
   { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
   { label: "Enrollments", href: "/lecturer/enrollments", icon: Users },
   {

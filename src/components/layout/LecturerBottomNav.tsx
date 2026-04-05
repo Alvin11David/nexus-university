@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   User,
   HelpCircle,
+  Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +16,7 @@ const lecturerNavItems = [
   { label: "Home", href: "/lecturer", icon: Home },
   { label: "Courses", href: "/lecturer/courses", icon: BookOpen },
   { label: "Notes", href: "/lecturer/notes", icon: FileText },
+  { label: "Meetings", href: "/lecturer/meetings", icon: Video },
   { label: "Quizzes", href: "/lecturer/quiz", icon: HelpCircle },
   { label: "Messages", href: "/lecturer/messages", icon: Mail },
   { label: "Profile", href: "/profile", icon: User },
