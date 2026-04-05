@@ -8,7 +8,6 @@ import {
   MapPin,
   Calendar,
   GraduationCap,
-  Camera,
   Edit3,
   Save,
   X,
@@ -37,6 +36,10 @@ import { useToast } from "@/hooks/use-toast";
 export function BioDataTab() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const canEditInstitutionFields =
+    profile?.role === "admin" ||
+    profile?.role === "registrar" ||
+    profile?.role === "lecturer";
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -69,14 +72,19 @@ export function BioDataTab() {
     setIsSaving(true);
     try {
       const profileRef = doc(db, "profiles", user.uid);
-      await updateDoc(profileRef, {
+      const updatePayload: Record<string, any> = {
         full_name: formData.full_name,
         phone: formData.phone,
         bio: formData.bio,
-        department: formData.department,
-        college: formData.college,
         updated_at: serverTimestamp(),
-      });
+      };
+
+      if (canEditInstitutionFields) {
+        updatePayload.department = formData.department;
+        updatePayload.college = formData.college;
+      }
+
+      await updateDoc(profileRef, updatePayload);
 
       // Refetch profile to update global state
       const snap = await getDoc(profileRef);
@@ -130,8 +138,18 @@ export function BioDataTab() {
     },
     { icon: Mail, label: "Email Address", key: "email", editable: false },
     { icon: Phone, label: "Phone Number", key: "phone", editable: true },
-    { icon: Building, label: "Department", key: "department", editable: true },
-    { icon: GraduationCap, label: "College", key: "college", editable: true },
+    {
+      icon: Building,
+      label: "Department",
+      key: "department",
+      editable: canEditInstitutionFields,
+    },
+    {
+      icon: GraduationCap,
+      label: "College",
+      key: "college",
+      editable: canEditInstitutionFields,
+    },
   ];
 
   const getLastUpdatedLabel = () => {
@@ -165,13 +183,6 @@ export function BioDataTab() {
                   {getInitials(formData.full_name)}
                 </AvatarFallback>
               </Avatar>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="absolute -bottom-2 -right-2 h-10 w-10 rounded-full shadow-lg"
-              >
-                <Camera className="h-4 w-4" />
-              </Button>
             </div>
             <div className="text-center sm:text-left flex-1">
               <h2 className="text-2xl font-bold mb-1">{formData.full_name}</h2>
