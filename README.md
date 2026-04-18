@@ -11,7 +11,7 @@ Multi-role university portal for students, lecturers, and registrar workflows.
 ## Prerequisites
 
 - Node.js 20+
-- npm 10+
+- npm 11+
 - Firebase project with Auth/Firestore/Storage enabled
 
 ## Local Setup
