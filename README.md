@@ -1,36 +1,32 @@
-# Nexus University
+Nexus University Portal
 
-Multi-role university portal for students, lecturers, and registrar workflows.
+A modern, scalable multi-role university management platform designed to streamline workflows for students, lecturers, and registrars. The system provides a centralized interface for academic operations, communication, and administrative management.
 
-## Stack
+Technology Stack
+Frontend: React, TypeScript, Vite
+Backend & Services: Firebase (Authentication, Firestore, Storage, Cloud Functions)
+UI & Styling: Tailwind CSS, shadcn/ui
+Prerequisites
 
-- React + TypeScript + Vite
-- Firebase Auth, Firestore, Storage, Functions
-- Tailwind + shadcn UI
+Ensure the following are installed and configured:
 
-## Prerequisites
-
-- Node.js 20+
-- npm 12+
-- Firebase project with Auth/Firestore/Storage enabled
-
-## Local Setup
-
-1. Install dependencies.
-
-```bash
+Node.js (v20 or later)
+npm (v12 or later)
+A Firebase project with:
+Authentication enabled
+Firestore database enabled
+Cloud Storage enabled
+Local Development Setup
+1. Install Dependencies
 npm ci
-```
+2. Configure Environment Variables
 
-2. Create a local env file.
+Create a local environment file:
 
-```bash
 cp .env.example .env
-```
 
-3. Fill in Firebase variables in `.env`.
+Update the .env file with your Firebase configuration:
 
-```env
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=
 VITE_FIREBASE_PROJECT_ID=
@@ -38,53 +34,48 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 VITE_USE_FIREBASE_EMULATOR=false
-```
-
-4. Start the app.
-
-```bash
+3. Run Development Server
 npm run dev
-```
+Available Scripts
+Command	Description
+npm run dev	Start development server
+npm run lint	Run ESLint for code quality checks
+npm run build	Build application for production
+npm run preview	Preview production build locally
+Firebase Configuration Notes
+Firebase client setup:
+src/integrations/firebase/client.ts
+Cloud Functions source:
+functions/src/index.ts
+Security rules:
+Firestore → firestore.rules
+Storage → storage.rules
+Branding & Customization
 
-## Scripts
+Global branding is dynamically managed via Firestore:
 
-- `npm run dev`: start development server
-- `npm run lint`: run ESLint
-- `npm run build`: production build
-- `npm run preview`: preview production build locally
+Document Path:
 
-## Firebase Notes
+site_settings/branding
 
-- Frontend Firebase client is configured in `src/integrations/firebase/client.ts`.
-- Cloud Functions source is in `functions/src/index.ts`.
-- Firestore and Storage rules are in `firestore.rules` and `storage.rules`.
+Administrators or registrars can configure branding directly from the in-app settings interface.
 
-## Open Source Branding Customization
+Supported Fields
+siteName – Full application name (browser title, Open Graph)
+shortName – Compact name used in headers and authentication screens
+tagline – Application description (SEO and metadata)
+logoUrl – URL for logo and favicon
+supportEmail – Contact email for support
+primaryColor – Main brand color (Hex format)
+secondaryColor – Accent color (Hex format)
 
-Global site branding now comes from Firestore document `site_settings/branding`.
+If the branding document does not exist, the system automatically falls back to default values and creates the document upon saving settings.
 
-You can update these fields from the in-app settings UI (admin/registrar role):
+Continuous Integration
 
-- `siteName`: full product name used for browser title and Open Graph title
-- `shortName`: compact app name shown in headers/auth screens
-- `tagline`: meta description and Open Graph description
-- `logoUrl`: remote image URL used in headers/auth screens and favicon
-- `supportEmail`: support contact value for integrations/extensions
-- `primaryColor`: hex brand color (`#RRGGBB` or `#RGB`)
-- `secondaryColor`: hex accent color (`#RRGGBB` or `#RGB`)
+A GitHub Actions workflow is configured to maintain code quality and build integrity:
 
-If the document does not exist yet, the app falls back to defaults and creates/updates
-the document when branding is saved from settings.
-
-## CI
-
-GitHub Actions workflow runs lint + build on push and pull requests:
-
-- `.github/workflows/ci.yml`
-
-## Production Checklist
-
-- Replace development OTP/testing flows with real delivery channels.
-- Tighten Firestore/Storage rules per collection and role.
-- Configure function secrets and callback URLs in Firebase runtime config.
-- Verify domain, HTTPS, and CORS policies.
+Runs on push and pull requests
+Executes linting and production build
+Configuration file:
+.github/workflows/ci.yml
