@@ -45,6 +45,62 @@ type AuthStep =
   | "signup-otp"
   | "signup-password";
 
+const AUTH_FORM_STORAGE_KEY = "nexus-auth-form-data";
+const AUTH_PASSWORD_STORAGE_KEY = "nexus-auth-password-data";
+
+type AuthFormData = {
+  identifier: string;
+  email: string;
+  actualEmail: string;
+  password: string;
+  registrationNumber: string;
+  studentNumber: string;
+  firstName: string;
+  lastName: string;
+  department: string;
+  college: string;
+  program: string;
+};
+
+const DEFAULT_FORM_DATA: AuthFormData = {
+  identifier: "",
+  email: "",
+  actualEmail: "",
+  password: "",
+  registrationNumber: "",
+  studentNumber: "",
+  firstName: "",
+  lastName: "",
+  department: "",
+  college: "",
+  program: "",
+};
+
+function loadStoredFormData(): AuthFormData {
+  if (typeof window === "undefined") {
+    return DEFAULT_FORM_DATA;
+  }
+
+  try {
+    const stored = window.localStorage.getItem(AUTH_FORM_STORAGE_KEY);
+    const password = window.sessionStorage.getItem(AUTH_PASSWORD_STORAGE_KEY) || "";
+
+    if (!stored) {
+      return { ...DEFAULT_FORM_DATA, password };
+    }
+
+    const parsed = JSON.parse(stored) as Partial<AuthFormData>;
+
+    return {
+      ...DEFAULT_FORM_DATA,
+      ...parsed,
+      password,
+    };
+  } catch {
+    return DEFAULT_FORM_DATA;
+  }
+}
+
 export default function Auth() {
   const [searchParams] = useSearchParams();
   const initialMode = searchParams.get("mode") === "signup";
@@ -62,19 +118,7 @@ export default function Auth() {
   const [filteredPrograms, setFilteredPrograms] = useState<string[]>([]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const [formData, setFormData] = useState({
-    identifier: "", // student number or registration number for sign in
-    email: "",
-    actualEmail: "", // Real email for lecturers (email field is for identification)
-    password: "",
-    registrationNumber: "",
-    studentNumber: "",
-    firstName: "",
-    lastName: "",
-    department: "",
-    college: "",
-    program: "",
-  });
+  const [formData, setFormData] = useState<AuthFormData>(() => loadStoredFormData());
 
   const {
     signIn,
@@ -89,6 +133,27 @@ export default function Auth() {
   const navigate = useNavigate();
 
   const isSignUp = step !== "signin";
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const { password, ...rest } = formData;
+    window.localStorage.setItem(AUTH_FORM_STORAGE_KEY, JSON.stringify(rest));
+
+    if (password) {
+      window.sessionStorage.setItem(AUTH_PASSWORD_STORAGE_KEY, password);
+    } else {
+      window.sessionStorage.removeItem(AUTH_PASSWORD_STORAGE_KEY);
+    }
+  }, [formData]);
+
+  useEffect(() => {
+    if (initialMode) {
+      setStep("signup-details");
+    }
+  }, [initialMode]);
 
   // Fetch unique colleges and initial courses from collection
   useEffect(() => {
@@ -528,19 +593,6 @@ export default function Auth() {
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
-    setFormData({
-      identifier: "",
-      email: "",
-      actualEmail: "",
-      password: "",
-      registrationNumber: "",
-      studentNumber: "",
-      firstName: "",
-      lastName: "",
-      department: "",
-      college: "",
-      program: "",
-    });
   };
 
   const resetToSignUp = () => {
@@ -549,19 +601,6 @@ export default function Auth() {
     setStudentRecord(null);
     setIsLecturerSignup(false);
     setIsRegistrarSignup(false);
-    setFormData({
-      identifier: "",
-      email: "",
-      actualEmail: "",
-      password: "",
-      registrationNumber: "",
-      studentNumber: "",
-      firstName: "",
-      lastName: "",
-      department: "",
-      college: "",
-      program: "",
-    });
   };
 
   const benefits = [
