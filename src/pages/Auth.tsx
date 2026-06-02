@@ -803,7 +803,9 @@ export default function Auth() {
                       <SelectTrigger className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50">
                         <SelectValue
                           placeholder={
-                            formData.college ? "Select Program" : "Select College First"
+                            formData.college
+                              ? "Select Program"
+                              : "Select College First"
                           }
                         />
                       </SelectTrigger>
