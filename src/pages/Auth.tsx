@@ -83,7 +83,8 @@ function loadStoredFormData(): AuthFormData {
 
   try {
     const stored = window.localStorage.getItem(AUTH_FORM_STORAGE_KEY);
-    const password = window.sessionStorage.getItem(AUTH_PASSWORD_STORAGE_KEY) || "";
+    const password =
+      window.sessionStorage.getItem(AUTH_PASSWORD_STORAGE_KEY) || "";
 
     if (!stored) {
       return { ...DEFAULT_FORM_DATA, password };
@@ -118,7 +119,9 @@ export default function Auth() {
   const [filteredPrograms, setFilteredPrograms] = useState<string[]>([]);
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const [formData, setFormData] = useState<AuthFormData>(() => loadStoredFormData());
+  const [formData, setFormData] = useState<AuthFormData>(() =>
+    loadStoredFormData(),
+  );
 
   const {
     signIn,

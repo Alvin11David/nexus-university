@@ -29,5 +29,12 @@ python manage.py runserver
 - `ALLOWED_HOSTS`
 - `CORS_ALLOWED_ORIGINS`
 - `EMAIL_BACKEND`
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_USE_TLS`
+- `EMAIL_HOST_USER`
+- `EMAIL_HOST_PASSWORD`
 - `DEFAULT_FROM_EMAIL`
 - `OTP_SECRET`
+
+For Gmail delivery, set `EMAIL_HOST` to `smtp.gmail.com`, `EMAIL_PORT` to `587`, `EMAIL_USE_TLS` to `true`, and use a Gmail app password in `EMAIL_HOST_PASSWORD`.
