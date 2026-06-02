@@ -24,7 +24,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
@@ -787,27 +793,28 @@ export default function Auth() {
                   </Label>
                   <div className="relative">
                     <BookOpen className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                    <select
-                      id="program"
+                    <Select
                       value={formData.program}
-                      onChange={(e) =>
-                        setFormData({ ...formData, program: e.target.value })
+                      onValueChange={(value: string) =>
+                        setFormData({ ...formData, program: value })
                       }
-                      className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
-                      required
                       disabled={!formData.college}
                     >
-                      <option value="" disabled>
-                        {formData.college
-                          ? "Select Program"
-                          : "Select College First"}
-                      </option>
-                      {filteredPrograms.map((program) => (
-                        <option key={program} value={program}>
-                          {program}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50">
+                        <SelectValue
+                          placeholder={
+                            formData.college ? "Select Program" : "Select College First"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filteredPrograms.map((program) => (
+                          <SelectItem key={program} value={program}>
+                            {program}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               )}
