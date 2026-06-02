@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
@@ -758,28 +759,23 @@ export default function Auth() {
               </Label>
               <div className="relative">
                 <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <select
-                  id="college"
+                <Select
                   value={formData.college}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      college: e.target.value,
-                      program: "",
-                    })
+                  onValueChange={(value: string) =>
+                    setFormData({ ...formData, college: value, program: "" })
                   }
-                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
-                  required
                 >
-                  <option value="" disabled>
-                    Select College
-                  </option>
-                  {colleges.map((college) => (
-                    <option key={college} value={college}>
-                      {college}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50">
+                    <SelectValue placeholder="Select College" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {colleges.map((college) => (
+                      <SelectItem key={college} value={college}>
+                        {college}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -930,24 +926,23 @@ export default function Auth() {
               </Label>
               <div className="relative">
                 <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <select
-                  id="college"
+                <Select
                   value={formData.college}
-                  onChange={(e) =>
-                    setFormData({ ...formData, college: e.target.value })
+                  onValueChange={(value: string) =>
+                    setFormData({ ...formData, college: value })
                   }
-                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
-                  required
                 >
-                  <option value="" disabled>
-                    Select College
-                  </option>
-                  {colleges.map((college) => (
-                    <option key={college} value={college}>
-                      {college}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50">
+                    <SelectValue placeholder="Select College" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {colleges.map((college) => (
+                      <SelectItem key={college} value={college}>
+                        {college}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1064,28 +1059,23 @@ export default function Auth() {
               </Label>
               <div className="relative">
                 <GraduationCap className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <select
-                  id="college-registrar"
+                <Select
                   value={formData.college}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      college: e.target.value,
-                      program: "",
-                    })
+                  onValueChange={(value: string) =>
+                    setFormData({ ...formData, college: value, program: "" })
                   }
-                  className="w-full h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50"
-                  required
                 >
-                  <option value="" disabled>
-                    Select College
-                  </option>
-                  {colleges.map((college) => (
-                    <option key={college} value={college}>
-                      {college}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-14 pl-12 pr-4 text-base rounded-xl bg-muted/50 border-border focus:bg-background transition-colors appearance-none focus:outline-none focus:ring-2 focus:ring-secondary/50">
+                    <SelectValue placeholder="Select College" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {colleges.map((college) => (
+                      <SelectItem key={college} value={college}>
+                        {college}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
