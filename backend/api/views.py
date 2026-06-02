@@ -186,10 +186,22 @@ class SendSignupOtpView(APIView):
             expires_at=now + timedelta(minutes=OTP_TTL_MINUTES),
         )
 
+        from_email = settings.EMAIL_HOST_USER or settings.DEFAULT_FROM_EMAIL
+        if not from_email or from_email.endswith("nexus-university.local"):
+            return Response(
+                {
+                    "detail": (
+                        "Set EMAIL_HOST_USER (your Gmail address) or DEFAULT_FROM_EMAIL "
+                        "before sending OTP emails via Gmail SMTP."
+                    )
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
         send_mail(
             subject="Your Nexus University verification code",
             message=f"Use this code to continue your Nexus University signup: {otp}",
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=from_email,
             recipient_list=[email],
             fail_silently=not settings.DEBUG,
         )

@@ -38,3 +38,4 @@ python manage.py runserver
 - `OTP_SECRET`
 
 For Gmail delivery, set `EMAIL_HOST` to `smtp.gmail.com`, `EMAIL_PORT` to `587`, `EMAIL_USE_TLS` to `true`, and use a Gmail app password in `EMAIL_HOST_PASSWORD`.
+Also set `EMAIL_HOST_USER` to the Gmail address you authenticate with; Django will use that address as the OTP sender.
