@@ -1,0 +1,48 @@
+from django.db import models
+
+
+class StudentRecord(models.Model):
+    registration_number = models.CharField(max_length=64)
+    student_number = models.CharField(max_length=64)
+    email = models.EmailField()
+    full_name = models.CharField(max_length=255)
+    is_registered = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["registration_number", "student_number"],
+                name="unique_student_record_identity",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.full_name} ({self.student_number})"
+
+
+class OtpVerification(models.Model):
+    PURPOSE_SIGNUP = "signup"
+    PURPOSE_CHOICES = [(PURPOSE_SIGNUP, "Signup")]
+
+    student_record = models.ForeignKey(
+        StudentRecord,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="otp_verifications",
+    )
+    email = models.EmailField()
+    purpose = models.CharField(max_length=32, choices=PURPOSE_CHOICES)
+    otp_hash = models.CharField(max_length=64)
+    nonce = models.CharField(max_length=64)
+    verified = models.BooleanField(default=False)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    max_attempts = models.PositiveSmallIntegerField(default=5)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        return f"OTP<{self.email}:{self.purpose}>"

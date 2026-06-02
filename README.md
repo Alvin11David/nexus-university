@@ -4,7 +4,7 @@ A modern, scalable multi-role university management platform designed to streaml
 
 Technology Stack
 Frontend: React, TypeScript, Vite
-Backend & Services: Firebase (Authentication, Firestore, Storage, Cloud Functions)
+Backend & Services: Firebase (Authentication, Firestore, Storage) and Django REST API
 UI & Styling: Tailwind CSS, shadcn/ui
 Prerequisites
 
@@ -17,8 +17,9 @@ Authentication enabled
 Firestore database enabled
 Cloud Storage enabled
 Local Development Setup
+
 1. Install Dependencies
-npm ci
+   npm ci
 2. Configure Environment Variables
 
 Create a local environment file:
@@ -34,22 +35,27 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 VITE_USE_FIREBASE_EMULATOR=false
-3. Run Development Server
+VITE_API_BASE_URL=http://localhost:8000 3. Run Development Server
 npm run dev
 Available Scripts
-Command	Description
-npm run dev	Start development server
-npm run lint	Run ESLint for code quality checks
-npm run build	Build application for production
-npm run preview	Preview production build locally
+Command Description
+npm run dev Start development server
+npm run lint Run ESLint for code quality checks
+npm run build Build application for production
+npm run preview Preview production build locally
 Firebase Configuration Notes
 Firebase client setup:
 src/integrations/firebase/client.ts
-Cloud Functions source:
-functions/src/index.ts
+Django backend source:
+backend/
 Security rules:
 Firestore → firestore.rules
 Storage → storage.rules
+
+Backend Migration Notes
+
+The first Django slice now handles student record validation and OTP flows.
+Firebase Auth remains in place for sign-in and account creation while the backend migration continues.
 Branding & Customization
 
 Global branding is dynamically managed via Firestore:

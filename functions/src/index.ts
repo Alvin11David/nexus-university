@@ -404,6 +404,94 @@ export const validateStudentRecord = functions.https.onCall(
   },
 );
 
+// HTTP wrapper for validateStudentRecord to allow direct fetch requests from browsers.
+export const validateStudentRecordHttp = functions.https.onRequest(
+  async (req, res) => {
+    return corsHandler(req, res, async () => {
+      try {
+        if (req.method !== "POST") {
+          res.setHeader("Allow", "POST");
+          return res.status(405).send({ error: "Method Not Allowed" });
+        }
+
+        const data = req.body || {};
+        const registrationNumber = (data.registrationNumber || "").trim();
+        const studentNumber = (data.studentNumber || "").trim();
+        const email = normalizeEmail(data.email || "");
+
+        if (!registrationNumber || !studentNumber || !email) {
+          return res.status(400).send({ error: "Missing required fields" });
+        }
+
+        validateEmail(email);
+
+        const db = admin.firestore();
+        const existingSnapshot = await db
+          .collection("student_records")
+          .where("registration_number", "==", registrationNumber)
+          .where("student_number", "==", studentNumber)
+          .limit(1)
+          .get();
+
+        if (!existingSnapshot.empty) {
+          const studentDoc = existingSnapshot.docs[0];
+          const existing = studentDoc.data() as {
+            full_name?: string;
+            registration_number?: string;
+            student_number?: string;
+            email?: string | null;
+            is_registered?: boolean;
+          };
+
+          if (existing.is_registered) {
+            return res.status(409).send({ error: "already-registered" });
+          }
+
+          return res.status(200).send({
+            id: studentDoc.id,
+            full_name: existing.full_name || "New Student",
+            registration_number:
+              existing.registration_number || registrationNumber,
+            student_number: existing.student_number || studentNumber,
+            email: existing.email || email,
+            is_registered: existing.is_registered || false,
+          });
+        }
+
+        const emailName = email.split("@")[0] || "student";
+        const fullName = emailName
+          .split(/[._-]/)
+          .map(
+            (part) =>
+              part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
+          )
+          .join(" ");
+
+        const created = await db.collection("student_records").add({
+          registration_number: registrationNumber,
+          student_number: studentNumber,
+          email,
+          full_name: fullName || "New Student",
+          is_registered: false,
+          created_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return res.status(201).send({
+          id: created.id,
+          full_name: fullName || "New Student",
+          registration_number: registrationNumber,
+          student_number: studentNumber,
+          email,
+          is_registered: false,
+        });
+      } catch (err: any) {
+        console.error("validateStudentRecordHttp error:", err);
+        return res.status(500).send({ error: err.message || "Internal Error" });
+      }
+    });
+  },
+);
+
 /**
  * Generate MTN API request header signature
  */

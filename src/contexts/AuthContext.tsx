@@ -25,8 +25,10 @@ import {
   getDocs,
   limit,
 } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { auth, db, functions } from "@/integrations/firebase/client";
+import { auth, db } from "@/integrations/firebase/client";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 // Map Firebase User to a compatible interface if needed, or just use FirebaseUser
 type User = FirebaseUser;
@@ -91,7 +93,7 @@ interface AuthContextType {
   ) => Promise<{ data: StudentRecord | null; error: Error | null }>;
   generateOTP: (
     email: string,
-    studentRecordId: string,
+    studentRecordId: string | null,
   ) => Promise<{ otp: string; error: Error | null }>;
   verifyOTP: (
     email: string,
@@ -105,26 +107,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+async function postJson<T>(path: string, payload: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = data?.detail || data?.error || "Request failed";
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const sendSignupOtpCallable = httpsCallable<
-    { email: string; studentRecordId?: string | null },
-    { success: boolean; deliveryChannel: string; otp?: string }
-  >(functions, "sendSignupOtp");
-
-  const validateStudentRecordCallable = httpsCallable<
-    { registrationNumber: string; studentNumber: string; email: string },
-    StudentRecord
-  >(functions, "validateStudentRecord");
-
-  const verifySignupOtpCallable = httpsCallable<
-    { email: string; otp: string },
-    { valid: boolean; reason?: string }
-  >(functions, "verifySignupOtp");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -206,13 +212,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
   ): Promise<{ data: StudentRecord | null; error: Error | null }> => {
     try {
-      const response = await validateStudentRecordCallable({
-        registrationNumber,
-        studentNumber,
-        email,
-      });
+      const response = await postJson<StudentRecord>(
+        "/api/auth/validate-student-record/",
+        {
+          registrationNumber,
+          studentNumber,
+          email,
+        },
+      );
 
-      return { data: response.data, error: null };
+      return { data: response, error: null };
     } catch (error: any) {
       return { data: null, error: new Error(error.message) };
     }
@@ -224,13 +233,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     studentRecordId: string | null,
   ): Promise<{ otp: string; error: Error | null }> => {
     try {
-      const response = await sendSignupOtpCallable({
+      const response = await postJson<{
+        success: boolean;
+        deliveryChannel: string;
+        otp?: string;
+        verificationId?: string;
+      }>("/api/auth/send-signup-otp/", {
         email,
         studentRecordId,
       });
 
       return {
-        otp: import.meta.env.DEV ? response.data.otp || "" : "",
+        otp: import.meta.env.DEV ? response.otp || "" : "",
         error: null,
       };
     } catch (error: any) {
@@ -244,9 +258,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     otp: string,
   ): Promise<{ valid: boolean; error: Error | null }> => {
     try {
-      const response = await verifySignupOtpCallable({ email, otp });
+      const response = await postJson<{ valid: boolean; reason?: string }>(
+        "/api/auth/verify-signup-otp/",
+        { email, otp },
+      );
 
-      if (!response.data.valid) {
+      if (!response.valid) {
         return {
           valid: false,
           error: new Error("Invalid or expired OTP. Please request a new one."),
