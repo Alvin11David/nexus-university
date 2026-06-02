@@ -108,11 +108,17 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 async function postJson<T>(path: string, payload: unknown): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  try {
+    const token = await (auth.currentUser ? auth.currentUser.getIdToken() : null);
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch (e) {
+    // ignore token retrieval errors and proceed without Authorization header
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(payload),
   });
 
