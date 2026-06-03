@@ -44,3 +44,12 @@ class AcademicEventSerializer(serializers.Serializer):
     dueDate = serializers.DateTimeField(allow_null=True, required=False)
     type = serializers.CharField(allow_blank=True)
     isActive = serializers.BooleanField()
+
+
+class AnnouncementSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    course_id = serializers.CharField(allow_null=True)
+    author_id = serializers.CharField(allow_null=True)
+    title = serializers.CharField()
+    content = serializers.CharField()
+    created_at = serializers.DateTimeField()

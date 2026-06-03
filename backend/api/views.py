@@ -22,6 +22,8 @@ from .serializers import (
 
 from .serializers import ProgramSerializer, AcademicEventSerializer
 from .models import Program, AcademicEvent
+from .serializers import AnnouncementSerializer
+from .models import Announcement
 
 
 OTP_TTL_MINUTES = 10
@@ -311,4 +313,24 @@ class AcademicCalendarView(APIView):
             for e in events
         ]
 
+        return Response(data)
+
+
+class AnnouncementListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        announcements = Announcement.objects.all()
+        data = [
+            {
+                "id": str(a.id),
+                "course_id": a.course_id,
+                "author_id": a.author_id,
+                "title": a.title,
+                "content": a.content,
+                "created_at": a.created_at,
+            }
+            for a in announcements
+        ]
         return Response(data)

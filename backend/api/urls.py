@@ -7,6 +7,7 @@ from .views import (
     VerifySignupOtpView,
     ProgramListView,
     AcademicCalendarView,
+    AnnouncementListView,
 )
 
 urlpatterns = [
@@ -16,4 +17,5 @@ urlpatterns = [
     path("auth/verify-signup-otp/", VerifySignupOtpView.as_view()),
     path("programs/", ProgramListView.as_view()),
     path("academic-calendar/", AcademicCalendarView.as_view()),
+    path("announcements/", AnnouncementListView.as_view()),
 ]

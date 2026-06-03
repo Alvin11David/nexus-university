@@ -87,3 +87,18 @@ class AcademicEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.date.date()})"
+
+
+class Announcement(models.Model):
+    course_id = models.CharField(max_length=64, blank=True, null=True)
+    author_id = models.CharField(max_length=64, blank=True, null=True)
+    title = models.CharField(max_length=255)
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.created_at.date()})"
