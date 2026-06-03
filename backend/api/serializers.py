@@ -24,3 +24,13 @@ class StudentRecordSerializer(serializers.Serializer):
     student_number = serializers.CharField()
     email = serializers.EmailField()
     is_registered = serializers.BooleanField()
+
+
+class ProgramSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    code = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+    department_name = serializers.CharField(allow_null=True, allow_blank=True)
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()

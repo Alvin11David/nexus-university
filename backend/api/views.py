@@ -20,6 +20,9 @@ from .serializers import (
     VerifySignupOtpSerializer,
 )
 
+from .serializers import ProgramSerializer
+from .models import Program
+
 
 OTP_TTL_MINUTES = 10
 OTP_RESEND_COOLDOWN_SECONDS = 60
@@ -265,3 +268,25 @@ class VerifySignupOtpView(APIView):
         verification.save(update_fields=["verified", "verified_at"])
 
         return Response({"valid": True}, status=status.HTTP_200_OK)
+
+
+class ProgramListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        programs = Program.objects.all()
+        data = [
+            {
+                "id": str(p.id),
+                "title": p.title,
+                "code": p.code,
+                "description": p.description,
+                "department_name": p.department_name,
+                "status": p.status,
+                "created_at": p.created_at,
+            }
+            for p in programs
+        ]
+
+        return Response(data)

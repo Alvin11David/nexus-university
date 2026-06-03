@@ -15,15 +15,6 @@ import {
 } from "lucide-react";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
-import { db } from "@/firebase";
-import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  doc,
-  getDoc,
-} from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface Program {
@@ -124,27 +115,11 @@ export default function Programs() {
     const fetchPrograms = async () => {
       try {
         setLoading(true);
-        const coursesRef = collection(db, "courses");
-        const q = query(coursesRef, orderBy("created_at", "desc"));
-        const snapshot = await getDocs(q);
-        const coursesData = snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        })) as any[];
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const resp = await fetch(`${API_BASE_URL}/api/programs/`);
+        const programsData = (await resp.json()) as any[];
 
-        const enrollmentsSnapshot = await getDocs(
-          collection(db, "enrollments"),
-        );
-        const enrollmentCounts = enrollmentsSnapshot.docs.reduce(
-          (acc: any, doc: any) => {
-            const cid = doc.data().course_id;
-            acc[cid] = (acc[cid] || 0) + 1;
-            return acc;
-          },
-          {},
-        );
-
-        const mapped = coursesData.map((course: any, idx: number) => {
+        const mapped = programsData.map((course: any, idx: number) => {
           const icons = [
             BookOpen,
             GraduationCap,
@@ -162,15 +137,11 @@ export default function Programs() {
             title: course.title,
             code: course.code,
             description: course.description || "No description available",
-            students_count: enrollmentCounts[course.id] || 0,
-            status:
-              course.status === "active" || course.status === "published"
-                ? "running"
-                : course.status || "closed",
+            students_count: 0,
+            status: course.status === "running" ? "running" : course.status || "closed",
             color: programColors[idx % programColors.length],
             icon: <IconComponent className="h-6 w-6" />,
-            department:
-              course.department_name || course.department || "General",
+            department: course.department_name || course.department || "General",
           };
         });
 

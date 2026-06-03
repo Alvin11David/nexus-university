@@ -46,3 +46,27 @@ class OtpVerification(models.Model):
 
     def __str__(self) -> str:
         return f"OTP<{self.email}:{self.purpose}>"
+
+
+class Program(models.Model):
+    title = models.CharField(max_length=255)
+    code = models.CharField(max_length=64, blank=True)
+    description = models.TextField(blank=True)
+    department_name = models.CharField(max_length=128, blank=True, null=True)
+    status = models.CharField(
+        max_length=32,
+        choices=[
+            ("running", "Running"),
+            ("closed", "Closed"),
+            ("archived", "Archived"),
+        ],
+        default="running",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.code})"
