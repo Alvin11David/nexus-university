@@ -115,7 +115,8 @@ export default function Programs() {
     const fetchPrograms = async () => {
       try {
         setLoading(true);
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
         const resp = await fetch(`${API_BASE_URL}/api/programs/`);
         const programsData = (await resp.json()) as any[];
 
@@ -138,10 +139,14 @@ export default function Programs() {
             code: course.code,
             description: course.description || "No description available",
             students_count: 0,
-            status: course.status === "running" ? "running" : course.status || "closed",
+            status:
+              course.status === "running"
+                ? "running"
+                : course.status || "closed",
             color: programColors[idx % programColors.length],
             icon: <IconComponent className="h-6 w-6" />,
-            department: course.department_name || course.department || "General",
+            department:
+              course.department_name || course.department || "General",
           };
         });
 
