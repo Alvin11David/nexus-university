@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { addDoc, collection, getDocs } from "firebase/firestore";
+import { addDoc } from "firebase/firestore";
 import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
@@ -53,16 +53,11 @@ export default function AcademicCalendar() {
   useEffect(() => {
     const fetchCalendarData = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "AcademicCalendar"));
-        const events: Event[] = querySnapshot.docs.map(
-          (doc) =>
-            ({
-              id: doc.id,
-              ...doc.data(),
-            }) as Event,
-        );
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const resp = await fetch(`${API_BASE_URL}/api/academic-calendar/`);
+        if (!resp.ok) throw new Error("Failed to fetch academic calendar");
+        const events = (await resp.json()) as any[];
 
-        // Transform to calendarData structure
         const transformedData: CalendarData = {
           academicYear: "2025/2026",
           semesters: [
@@ -71,12 +66,8 @@ export default function AcademicCalendar() {
               status: "Current",
               events: events.map((event) => ({
                 title: event.title,
-                start: event.date.toDate
-                  ? event.date.toDate().toLocaleDateString()
-                  : event.date,
-                end: event.dueDate.toDate
-                  ? event.dueDate.toDate().toLocaleDateString()
-                  : event.dueDate,
+                start: event.date ? new Date(event.date).toLocaleDateString() : "",
+                end: event.dueDate ? new Date(event.dueDate).toLocaleDateString() : "",
                 status: event.isActive ? "Open" : "Close",
               })),
             },

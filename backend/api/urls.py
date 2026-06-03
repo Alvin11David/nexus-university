@@ -6,6 +6,7 @@ from .views import (
     ValidateStudentRecordView,
     VerifySignupOtpView,
     ProgramListView,
+    AcademicCalendarView,
 )
 
 urlpatterns = [
