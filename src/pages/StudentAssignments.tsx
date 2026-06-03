@@ -23,20 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db, storage } from "@/integrations/firebase/client";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { useMemo } from "react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface StudentAssignment {
@@ -83,142 +70,27 @@ export default function StudentAssignments() {
   // Load assignments for enrolled courses
   useEffect(() => {
     if (!user) return;
-
     const loadAssignments = async () => {
       try {
         setLoading(true);
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const resp = await fetch(`${API_BASE_URL}/api/assignments/`);
+        if (!resp.ok) throw new Error("Failed to fetch assignments");
+        const data = (await resp.json()) as any[];
 
-        // Get all courses the student is enrolled in
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
-        );
-        const enrollSnap = await getDocs(qEnroll);
-
-        const courseIds = enrollSnap.docs
-          .map((d) => d.data().course_id)
-          .filter(Boolean);
-        console.log("Enrolled course IDs:", courseIds);
-        console.log("Enrollment docs:", enrollSnap.docs.length);
-
-        if (courseIds.length === 0) {
-          setAssignments([]);
-          setLoading(false);
-          return;
-        }
-
-        // Get all assignments for these courses
-        const assignmentsRef = collection(db, "Assignments");
-        const assignmentsData: any[] = [];
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-          const qAssign = query(
-            assignmentsRef,
-            where("course_id", "in", chunk),
-          );
-          const assignSnap = await getDocs(qAssign);
-          console.log(
-            `Assignments found for courses ${chunk}:`,
-            assignSnap.docs.length,
-          );
-          assignmentsData.push(
-            ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          );
-        }
-
-        console.log("Total assignments found:", assignmentsData.length);
-        console.log("Assignments data:", assignmentsData);
-
-        // Filter to show assignments that are visible to students (not closed or graded)
-        const publishedAssignments = assignmentsData
-          .filter((a) => a.status !== "closed" && a.status !== "graded")
-          .sort(
-            (a, b) =>
-              new Date(a.due_date).getTime() - new Date(b.due_date).getTime(),
-          );
-        console.log("Published assignments:", publishedAssignments.length);
-        console.log(
-          "Assignment statuses found:",
-          assignmentsData.map((a) => ({ title: a.title, status: a.status })),
-        );
-        console.log(
-          "Visible assignments:",
-          publishedAssignments.map((a) => ({
-            title: a.title,
-            status: a.status,
-          })),
-        );
-
-        if (publishedAssignments.length === 0) {
-          setAssignments([]);
-          setLoading(false);
-          return;
-        }
-
-        const assignmentIds = publishedAssignments.map((a) => a.id);
-
-        // Get student's submissions for these assignments
-        const submissionsRef = collection(db, "submissions");
-        const submissionsData: any[] = [];
-        for (let i = 0; i < assignmentIds.length; i += 10) {
-          const chunk = assignmentIds.slice(i, i + 10);
-          const qSubs = query(
-            submissionsRef,
-            where("student_id", "==", user.uid),
-            where("assignment_id", "in", chunk),
-          );
-          const subSnap = await getDocs(qSubs);
-          submissionsData.push(...subSnap.docs.map((d) => d.data()));
-        }
-
-        // Fetch course details for these assignments
-        const uniqueCourseIds = Array.from(
-          new Set(publishedAssignments.map((a) => a.course_id)),
-        );
-        const courseMap = new Map();
-        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-          const chunk = uniqueCourseIds.slice(i, i + 10);
-          const qCourse = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const courseSnap = await getDocs(qCourse);
-          courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
-        }
-
-        // Map assignments with submission status
-        const mapped: StudentAssignment[] = publishedAssignments.map(
-          (assignment: any) => {
-            const submission = submissionsData.find(
-              (s) => s.assignment_id === assignment.id,
-            );
-
-            let status: "pending" | "submitted" | "graded" = "pending";
-            if (submission?.status === "submitted") {
-              status = submission.score !== undefined ? "graded" : "submitted";
-            }
-
-            const course = courseMap.get(assignment.course_id);
-
-            return {
-              id: assignment.id,
-              title: assignment.title,
-              description: assignment.description || "",
-              dueDate: assignment.due_date,
-              totalPoints: assignment.total_points ?? 100,
-              courseTitle: course?.name || "Course", // Changed from title to name
-              courseCode: course?.code || "",
-              status,
-              instructionDocumentUrl: assignment.instruction_document_url,
-              instructionDocumentName: assignment.instruction_document_name,
-              submissionStatus: submission?.status,
-              score: submission?.score,
-              feedback: submission?.feedback,
-            };
-          },
-        );
+        const mapped: StudentAssignment[] = data.map((a, idx) => ({
+          id: String(a.id),
+          title: a.title,
+          description: a.description || "",
+          dueDate: a.due_date || new Date().toISOString(),
+          totalPoints: a.total_points || 100,
+          courseTitle: a.course_title || "Course",
+          courseCode: a.course_code || "",
+          status: a.status === "pending" ? "pending" : a.status || "pending",
+          instructionDocumentUrl: a.instruction_document_url || undefined,
+          instructionDocumentName: a.instruction_document_name || undefined,
+        }));
 
         setAssignments(mapped);
       } catch (error: any) {
