@@ -8,6 +8,7 @@ from .views import (
     ProgramListView,
     AcademicCalendarView,
     AnnouncementListView,
+    AssignmentListView,
 )
 
 urlpatterns = [
@@ -18,4 +19,5 @@ urlpatterns = [
     path("programs/", ProgramListView.as_view()),
     path("academic-calendar/", AcademicCalendarView.as_view()),
     path("announcements/", AnnouncementListView.as_view()),
+        path("assignments/", AssignmentListView.as_view()),
 ]

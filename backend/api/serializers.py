@@ -53,3 +53,16 @@ class AnnouncementSerializer(serializers.Serializer):
     title = serializers.CharField()
     content = serializers.CharField()
     created_at = serializers.DateTimeField()
+
+
+class AssignmentSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    course_id = serializers.CharField(allow_null=True)
+    title = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+    due_date = serializers.DateTimeField()
+    total_points = serializers.IntegerField()
+    instruction_document_url = serializers.CharField(allow_null=True, allow_blank=True)
+    instruction_document_name = serializers.CharField(allow_null=True, allow_blank=True)
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()

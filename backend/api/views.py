@@ -24,6 +24,8 @@ from .serializers import ProgramSerializer, AcademicEventSerializer
 from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
+from .serializers import AssignmentSerializer
+from .models import Assignment
 
 
 OTP_TTL_MINUTES = 10
@@ -332,5 +334,35 @@ class AnnouncementListView(APIView):
                 "created_at": a.created_at,
             }
             for a in announcements
+        ]
+        return Response(data)
+
+
+class AssignmentListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        # Optional filter: ?course_ids=cid1,cid2
+        course_ids = request.query_params.get("course_ids")
+        qs = Assignment.objects.all()
+        if course_ids:
+            ids = [c.strip() for c in course_ids.split(",") if c.strip()]
+            qs = qs.filter(course_id__in=ids)
+
+        data = [
+            {
+                "id": str(a.id),
+                "course_id": a.course_id,
+                "title": a.title,
+                "description": a.description,
+                "due_date": a.due_date.isoformat(),
+                "total_points": a.total_points,
+                "instruction_document_url": a.instruction_document_url,
+                "instruction_document_name": a.instruction_document_name,
+                "status": a.status,
+                "created_at": a.created_at,
+            }
+            for a in qs
         ]
         return Response(data)

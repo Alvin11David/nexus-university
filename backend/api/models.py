@@ -102,3 +102,26 @@ class Announcement(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.created_at.date()})"
+
+
+class Assignment(models.Model):
+    course_id = models.CharField(max_length=64, blank=True, null=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    due_date = models.DateTimeField()
+    total_points = models.IntegerField(default=100)
+    instruction_document_url = models.CharField(max_length=1024, blank=True, null=True)
+    instruction_document_name = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(
+        max_length=32,
+        choices=[("pending", "Pending"), ("submitted", "Submitted"), ("graded", "Graded")],
+        default="pending",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.course_id})"
