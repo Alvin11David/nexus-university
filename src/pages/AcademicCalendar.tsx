@@ -53,7 +53,8 @@ export default function AcademicCalendar() {
   useEffect(() => {
     const fetchCalendarData = async () => {
       try {
-        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
         const resp = await fetch(`${API_BASE_URL}/api/academic-calendar/`);
         if (!resp.ok) throw new Error("Failed to fetch academic calendar");
         const events = (await resp.json()) as any[];
@@ -66,8 +67,12 @@ export default function AcademicCalendar() {
               status: "Current",
               events: events.map((event) => ({
                 title: event.title,
-                start: event.date ? new Date(event.date).toLocaleDateString() : "",
-                end: event.dueDate ? new Date(event.dueDate).toLocaleDateString() : "",
+                start: event.date
+                  ? new Date(event.date).toLocaleDateString()
+                  : "",
+                end: event.dueDate
+                  ? new Date(event.dueDate).toLocaleDateString()
+                  : "",
                 status: event.isActive ? "Open" : "Close",
               })),
             },
