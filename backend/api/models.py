@@ -70,3 +70,20 @@ class Program(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.code})"
+
+
+class AcademicEvent(models.Model):
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    date = models.DateTimeField()
+    due_date = models.DateTimeField(null=True, blank=True)
+    type = models.CharField(max_length=64, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.date.date()})"

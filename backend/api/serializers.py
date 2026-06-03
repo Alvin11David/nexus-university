@@ -34,3 +34,13 @@ class ProgramSerializer(serializers.Serializer):
     department_name = serializers.CharField(allow_null=True, allow_blank=True)
     status = serializers.CharField()
     created_at = serializers.DateTimeField()
+
+
+class AcademicEventSerializer(serializers.Serializer):
+    id = serializers.CharField()
+    title = serializers.CharField()
+    description = serializers.CharField(allow_blank=True)
+    date = serializers.DateTimeField()
+    dueDate = serializers.DateTimeField(allow_null=True, required=False)
+    type = serializers.CharField(allow_blank=True)
+    isActive = serializers.BooleanField()

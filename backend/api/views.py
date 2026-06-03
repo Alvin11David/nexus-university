@@ -20,8 +20,8 @@ from .serializers import (
     VerifySignupOtpSerializer,
 )
 
-from .serializers import ProgramSerializer
-from .models import Program
+from .serializers import ProgramSerializer, AcademicEventSerializer
+from .models import Program, AcademicEvent
 
 
 OTP_TTL_MINUTES = 10
@@ -287,6 +287,28 @@ class ProgramListView(APIView):
                 "created_at": p.created_at,
             }
             for p in programs
+        ]
+
+        return Response(data)
+
+
+class AcademicCalendarView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        events = AcademicEvent.objects.all()
+        data = [
+            {
+                "id": str(e.id),
+                "title": e.title,
+                "description": e.description,
+                "date": e.date.isoformat(),
+                "dueDate": e.due_date.isoformat() if e.due_date else None,
+                "type": e.type,
+                "isActive": e.is_active,
+            }
+            for e in events
         ]
 
         return Response(data)

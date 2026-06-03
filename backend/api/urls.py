@@ -14,4 +14,5 @@ urlpatterns = [
     path("auth/send-signup-otp/", SendSignupOtpView.as_view()),
     path("auth/verify-signup-otp/", VerifySignupOtpView.as_view()),
     path("programs/", ProgramListView.as_view()),
+    path("academic-calendar/", AcademicCalendarView.as_view()),
 ]
