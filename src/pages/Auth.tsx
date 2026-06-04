@@ -198,6 +198,19 @@ export default function Auth() {
     }
   }, [formData.college, allCourses]);
 
+  // Auto-verify OTP when all 4 digits are entered
+  useEffect(() => {
+    if (
+      step === "signup-otp" &&
+      otpValues.every((v) => v !== "") &&
+      !loading &&
+      !otpVerified
+    ) {
+      const enteredOtp = otpValues.join("");
+      verifyOTPAuto(enteredOtp);
+    }
+  }, [otpValues, step, loading, otpVerified]);
+
   // Handle OTP input
   const handleOtpChange = (index: number, value: string) => {
     if (value.length > 1) {
@@ -481,6 +494,46 @@ export default function Auth() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyOTPAuto = async (enteredOtp: string) => {
+    setLoading(true);
+
+    try {
+      // Use actualEmail for lecturers/registrars, regular email for students
+      const emailToVerify =
+        isLecturerSignup || isRegistrarSignup
+          ? formData.actualEmail
+          : formData.email;
+      const { valid, error } = await verifyOTP(emailToVerify, enteredOtp);
+      if (error) throw error;
+
+      if (valid) {
+        // Show success animation
+        setOtpVerified(true);
+        
+        // Wait for animation to complete before moving to next step
+        setTimeout(() => {
+          toast({
+            title: "Email Verified!",
+            description: "Please set your password.",
+          });
+          setStep("signup-password");
+          setOtpVerified(false);
+        }, 2000);
+      }
+    } catch (error: any) {
+      // Don't show error toast for auto-verification, just clear the last digit
+      setOtpValues((prev) => {
+        const newOtp = [...prev];
+        newOtp[3] = "";
+        return newOtp;
+      });
+      // Refocus on last input
+      otpRefs.current[3]?.focus();
     } finally {
       setLoading(false);
     }
@@ -1288,6 +1341,7 @@ export default function Auth() {
                   initial={{ opacity: 1 }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.3 }}
+                  className="space-y-4"
                 >
                   <div className="flex justify-center gap-3">
                     {otpValues.map((value, index) => (
@@ -1301,31 +1355,18 @@ export default function Auth() {
                         onChange={(e) => handleOtpChange(index, e.target.value)}
                         onKeyDown={(e) => handleOtpKeyDown(index, e)}
                         className="h-16 w-16 text-center text-2xl font-bold rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
+                        disabled={loading}
                       />
                     ))}
                   </div>
 
-                  <Button
-                    type="submit"
-                    className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group mt-6"
-                    disabled={loading || otpValues.some((v) => !v)}
-                  >
-                    {loading ? (
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    ) : (
-                      <>
-                        Verify Code
-                        <CheckCircle2 className="ml-2 h-5 w-5" />
-                      </>
-                    )}
-                  </Button>
-
-                  <p className="text-center text-sm text-muted-foreground mt-4">
+                  <p className="text-center text-sm text-muted-foreground">
                     Didn't receive the code?{" "}
                     <button
                       type="button"
                       onClick={handleResendOtp}
                       className="text-secondary font-medium hover:text-secondary/80"
+                      disabled={loading}
                     >
                       Resend
                     </button>
