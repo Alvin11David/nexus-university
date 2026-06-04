@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarDays,
@@ -30,23 +30,63 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 
 export default function IdCard() {
   const { user, profile } = useAuth();
+  const [studentData, setStudentData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const fetchStudentProfile = async () => {
+      try {
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+        const resp = await fetch(
+          `${API_BASE_URL}/api/students/${user.uid}/profile/`
+        );
+        if (!resp.ok) throw new Error("Failed to fetch profile");
+
+        const data = await resp.json();
+        setStudentData(data);
+      } catch (error) {
+        console.error("Error fetching student profile:", error);
+        // Fallback to auth context data if API fails
+        setStudentData(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStudentProfile();
+  }, [user?.uid]);
 
   const student = useMemo(
     () => ({
-      name: profile?.full_name || user?.displayName || "Student Name",
+      name:
+        studentData?.full_name ||
+        profile?.full_name ||
+        user?.displayName ||
+        "Student Name",
       program:
+        studentData?.programme ||
         profile?.programme ||
         profile?.department ||
         "Bachelor of Science in Computer Science",
-      studentNumber: profile?.student_number || "NU-2026-00123",
-      registrationNumber: profile?.registration_number || "2026/HD07/12345/PS",
-      year: "Year 2",
-      campus: profile?.college || "Main Campus",
-      phone: profile?.phone || "+256 700 000 000",
-      validThru: "Aug 2026",
-      blood: "O+",
+      studentNumber:
+        studentData?.student_number ||
+        profile?.student_number ||
+        "NU-2026-00123",
+      registrationNumber:
+        studentData?.registration_number ||
+        profile?.registration_number ||
+        "2026/HD07/12345/PS",
+      year: studentData?.year || "Year 2",
+      campus: studentData?.college || profile?.college || "Main Campus",
+      phone: studentData?.phone || profile?.phone || "+256 700 000 000",
+      validThru: studentData?.id_card_valid_thru || "Aug 2026",
+      blood: studentData?.blood_type || "O+",
     }),
-    [profile, user],
+    [studentData, profile, user],
   );
 
   const handlePrint = () => window.print();

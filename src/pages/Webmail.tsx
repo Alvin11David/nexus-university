@@ -37,25 +37,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  setDoc,
-  limit,
-  orderBy,
-  deleteDoc,
-  or,
-  and,
-} from "firebase/firestore";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, auth, storage } from "@/integrations/firebase/client";
 import { formatDistanceToNow, format } from "date-fns";
 import {
   DropdownMenu,
@@ -204,102 +185,9 @@ export default function Webmail() {
   }, []);
 
   const fetchUsers = async () => {
-    try {
-      const profilesRef = collection(db, "profiles");
-      const q = query(profilesRef, orderBy("full_name"));
-      const snapshot = await getDocs(q);
-
-      const allUsers = snapshot.docs
-        .map((d) => ({ id: d.id, ...d.data() }) as any)
-        .filter((u) => u.id !== user?.uid);
-
-      // Role-based recipient filtering
-      let recipients;
-      if (profile?.role?.toLowerCase() === "lecturer") {
-        // Lecturers can message students enrolled in their courses
-        try {
-          // Get courses taught by this lecturer
-          const lecturerCoursesQuery = query(
-            collection(db, "lecturer_courses"),
-            where("lecturer_id", "==", user?.uid),
-          );
-          const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
-          const courseIds = lecturerCoursesSnap.docs.map(
-            (doc) => doc.data().course_id,
-          );
-
-          // Also check direct instructor assignments
-          const directCoursesQuery = query(
-            collection(db, "courses"),
-            where("instructor_id", "==", user?.uid),
-          );
-          const directCoursesSnap = await getDocs(directCoursesQuery);
-          const directCourseIds = directCoursesSnap.docs.map((doc) => doc.id);
-
-          // Combine all course IDs
-          const allCourseIds = [...courseIds, ...directCourseIds];
-
-          if (allCourseIds.length > 0) {
-            // Get enrollments for these courses
-            const enrollmentsQuery = query(
-              collection(db, "enrollments"),
-              where("course_id", "in", allCourseIds.slice(0, 10)), // Firestore 'in' limit is 10
-            );
-            const enrollmentsSnap = await getDocs(enrollmentsQuery);
-
-            // Get unique student IDs
-            const studentIds = [
-              ...new Set(
-                enrollmentsSnap.docs.map((doc) => doc.data().student_id),
-              ),
-            ];
-
-            if (studentIds.length > 0) {
-              // Get student profiles
-              recipients = allUsers.filter(
-                (u) =>
-                  u.role?.toLowerCase() === "student" &&
-                  studentIds.includes(u.id),
-              );
-            } else {
-              // Fallback to all students if no enrollments found
-              recipients = allUsers.filter(
-                (u) => u.role?.toLowerCase() === "student",
-              );
-            }
-          } else {
-            // Fallback to all students if no courses assigned
-            recipients = allUsers.filter(
-              (u) => u.role?.toLowerCase() === "student",
-            );
-          }
-        } catch (error) {
-          console.error("Error fetching enrolled students:", error);
-          // Fallback to all students
-          recipients = allUsers.filter(
-            (u) => u.role?.toLowerCase() === "student",
-          );
-        }
-        setShowingAllUsers(false);
-      } else {
-        // Students can message lecturers
-        recipients = allUsers.filter(
-          (u) => u.role && u.role.toLowerCase() === "lecturer",
-        );
-        setShowingAllUsers(false);
-      }
-
-      // Fallback to all users if no role-specific recipients found
-      if (recipients.length === 0) {
-        setUsers(allUsers);
-        setShowingAllUsers(true);
-      } else {
-        setUsers(recipients);
-        setShowingAllUsers(false);
-      }
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    }
+    // Users list will be handled by manual input in compose view
+    // In a full implementation, you would fetch from Django API
+    setUsers([]);
   };
 
   const fetchMessages = async () => {
@@ -307,89 +195,17 @@ export default function Webmail() {
 
     try {
       setLoading(true);
-      const messagesRef = collection(db, "messages");
-      let q;
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-      if (selectedView === "inbox") {
-        q = query(
-          messagesRef,
-          where("to_user_id", "==", user.uid),
-          where("is_deleted_by_recipient", "==", false),
-          orderBy("created_at", "desc"),
-        );
-      } else if (selectedView === "sent") {
-        q = query(
-          messagesRef,
-          where("from_user_id", "==", user.uid),
-          where("is_deleted_by_sender", "==", false),
-          orderBy("created_at", "desc"),
-        );
-      } else if (selectedView === "starred") {
-        q = query(
-          messagesRef,
-          and(
-            where("is_starred", "==", true),
-            or(
-              where("to_user_id", "==", user.uid),
-              where("from_user_id", "==", user.uid),
-            ),
-          ),
-          orderBy("created_at", "desc"),
-        );
-      } else if (selectedView === "archived") {
-        q = query(
-          messagesRef,
-          and(
-            where("is_archived", "==", true),
-            or(
-              where("to_user_id", "==", user.uid),
-              where("from_user_id", "==", user.uid),
-            ),
-          ),
-          orderBy("created_at", "desc"),
-        );
-      } else {
-        q = query(messagesRef, orderBy("created_at", "desc"));
-      }
-
-      const snapshot = await getDocs(q);
-      const messagesData = snapshot.docs.map(
-        (d) => ({ id: d.id, ...(d.data() as any) }) as Message,
+      const resp = await fetch(
+        `${API_BASE_URL}/api/messages/${user.uid}/?view=${selectedView}`
       );
+      if (!resp.ok) throw new Error("Failed to fetch messages");
 
-      if (messagesData.length === 0) {
-        setMessages([]);
-        return;
-      }
+      const messagesData = await resp.json();
 
-      // Get unique user IDs
-      const userIds = Array.from(
-        new Set(messagesData.flatMap((m) => [m.from_user_id, m.to_user_id])),
-      );
-
-      // Fetch profiles in chunks (Firestore 'in' limit is 10)
-      const profilesData: any[] = [];
-      for (let i = 0; i < userIds.length; i += 10) {
-        const chunk = userIds.slice(i, i + 10);
-        const pQuery = query(
-          collection(db, "profiles"),
-          where("__name__", "in", chunk),
-        );
-        const pSnapshot = await getDocs(pQuery);
-        profilesData.push(
-          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
-        );
-      }
-
-      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
-
-      const messagesWithProfiles = messagesData.map((msg) => ({
-        ...msg,
-        from_profile: profileMap.get(msg.from_user_id) || null,
-        to_profile: profileMap.get(msg.to_user_id) || null,
-      }));
-
-      setMessages(messagesWithProfiles);
+      setMessages(messagesData);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -401,55 +217,15 @@ export default function Webmail() {
     if (!user) return;
 
     try {
-      const draftsRef = collection(db, "message_drafts");
-      const q = query(
-        draftsRef,
-        where("user_id", "==", user.uid),
-        orderBy("updated_at", "desc"),
-      );
-      const snapshot = await getDocs(q);
-      const draftsData = snapshot.docs.map(
-        (d) => ({ id: d.id, ...d.data() }) as any,
-      );
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-      if (draftsData.length === 0) {
-        setDrafts([]);
-        return;
-      }
+      const resp = await fetch(`${API_BASE_URL}/api/drafts/${user.uid}/`);
+      if (!resp.ok) throw new Error("Failed to fetch drafts");
 
-      const recipientIds = draftsData
-        .filter((d: any) => d.to_user_id)
-        .map((d: any) => d.to_user_id as string);
+      const draftsData = await resp.json();
 
-      if (recipientIds.length === 0) {
-        setDrafts(draftsData);
-        return;
-      }
-
-      // Fetch profiles for recipients
-      const profilesData: any[] = [];
-      for (let i = 0; i < recipientIds.length; i += 10) {
-        const chunk = recipientIds.slice(i, i + 10);
-        const pQuery = query(
-          collection(db, "profiles"),
-          where("__name__", "in", chunk),
-        );
-        const pSnapshot = await getDocs(pQuery);
-        profilesData.push(
-          ...pSnapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
-        );
-      }
-
-      const profileMap = new Map(profilesData.map((p) => [p.id, p]));
-
-      const draftsWithProfiles = draftsData.map((draft: any) => ({
-        ...draft,
-        to_profile: draft.to_user_id
-          ? profileMap.get(draft.to_user_id) || null
-          : null,
-      }));
-
-      setDrafts(draftsWithProfiles);
+      setDrafts(draftsData);
     } catch (error) {
       console.error("Error fetching drafts:", error);
     }
@@ -479,57 +255,21 @@ export default function Webmail() {
     try {
       setSending(true);
 
-      let attachmentUrl = null;
-      let attachmentName = null;
-      let attachmentSize = null;
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-      // Upload attachment if present
-      if (attachmentFile) {
-        setUploadingAttachment(true);
-        const fileExt = attachmentFile.name.split(".").pop();
-        const fileName = `${user.uid}/${Date.now()}.${fileExt}`;
-        const storageRef = ref(storage, `message-attachments/${fileName}`);
-
-        await uploadBytes(storageRef, attachmentFile);
-
-        attachmentUrl = `message-attachments/${fileName}`;
-        attachmentName = attachmentFile.name;
-        attachmentSize = attachmentFile.size;
-        setUploadingAttachment(false);
-      }
-
-      const messageData = {
-        from_user_id: user.uid,
-        to_user_id: composeToId,
-        subject: composeSubject,
-        body: composeBody,
-        thread_id: crypto.randomUUID(),
-        is_read: false,
-        is_starred: false,
-        is_archived: false,
-        is_deleted_by_sender: false,
-        is_deleted_by_recipient: false,
-        attachment_url: attachmentUrl,
-        attachment_name: attachmentName,
-        attachment_size: attachmentSize,
-        created_at: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, "messages"), messageData);
-
-      // Notify the recipient
-      const senderName = profile?.full_name || "Student";
-      await addDoc(collection(db, "notifications"), {
-        user_id: composeToId,
-        title: `New message from ${senderName}`,
-        message: composeSubject || "You have a new message",
-        type: "info",
-        link: "/webmail",
-        created_at: serverTimestamp(),
+      const resp = await fetch(`${API_BASE_URL}/api/messages/send/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from_user_id: user.uid,
+          to_user_id: composeToId,
+          subject: composeSubject,
+          body: composeBody,
+        }),
       });
 
-      // Emit event to update notification counts
-      window.dispatchEvent(new Event("notifications-updated"));
+      if (!resp.ok) throw new Error("Failed to send message");
 
       // Reset compose form
       setComposeTo("");
@@ -558,13 +298,18 @@ export default function Webmail() {
 
     try {
       setSavingDraft(true);
-      await addDoc(collection(db, "message_drafts"), {
-        user_id: user.uid,
-        to_user_id: composeToId,
-        subject: composeSubject,
-        body: composeBody,
-        updated_at: serverTimestamp(),
-        created_at: serverTimestamp(),
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+      await fetch(`${API_BASE_URL}/api/drafts/save/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.uid,
+          to_user_id: composeToId,
+          subject: composeSubject,
+          body: composeBody,
+        }),
       });
 
       setComposeTo("");
@@ -596,11 +341,18 @@ export default function Webmail() {
     }
 
     try {
-      await updateDoc(doc(db, "messages", messageId), {
-        is_starred: !currentValue,
-        updated_at: serverTimestamp(),
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+      await fetch(`${API_BASE_URL}/api/messages/${messageId}/action/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "star",
+          user_id: user?.uid,
+        }),
       });
-      // Refresh messages to ensure consistency
+
       fetchMessages();
     } catch (error) {
       console.error("Error toggling star:", error);
@@ -618,10 +370,18 @@ export default function Webmail() {
 
   const handleMarkAsRead = async (messageId: string) => {
     try {
-      await updateDoc(doc(db, "messages", messageId), {
-        is_read: true,
-        updated_at: serverTimestamp(),
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+      await fetch(`${API_BASE_URL}/api/messages/${messageId}/action/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "read",
+          user_id: user?.uid,
+        }),
       });
+
       fetchMessages();
       if (selectedMessage?.id === messageId) {
         setSelectedMessage({ ...selectedMessage, is_read: true });
@@ -635,17 +395,16 @@ export default function Webmail() {
     if (!user) return;
 
     try {
-      const message = messages.find((m) => m.id === messageId);
-      if (!message) return;
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
-      const isSent = message.from_user_id === user.uid;
-      const updateField = isSent
-        ? "is_deleted_by_sender"
-        : "is_deleted_by_recipient";
-
-      await updateDoc(doc(db, "messages", messageId), {
-        [updateField]: true,
-        updated_at: serverTimestamp(),
+      await fetch(`${API_BASE_URL}/api/messages/${messageId}/action/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          user_id: user.uid,
+        }),
       });
 
       setSelectedMessage(null);

@@ -867,3 +867,32 @@ class DraftDeleteView(APIView):
             return Response({"success": True})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
+
+
+class StudentProfileView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, student_id):
+        try:
+            student = StudentRecord.objects.get(id=student_id)
+
+            data = {
+                "id": str(student.id),
+                "full_name": student.full_name,
+                "email": student.email,
+                "student_number": student.student_number,
+                "registration_number": student.registration_number,
+                "phone": student.phone or "+256 700 000 000",
+                "programme": student.programme or "Bachelor of Science in Computer Science",
+                "college": student.college or "Main Campus",
+                "year": student.year or "Year 1",
+                "blood_type": student.blood_type or "O+",
+                "id_card_valid_thru": student.id_card_valid_thru or "Aug 2026",
+            }
+
+            return Response(data)
+        except StudentRecord.DoesNotExist:
+            return Response({"error": "Student not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
