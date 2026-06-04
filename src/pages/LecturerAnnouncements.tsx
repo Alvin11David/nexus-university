@@ -15,7 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/components/ui/use-toast";
 import { getBackend, postBackend, deleteBackend } from "@/lib/backendApi";
 
 interface Announcement {
@@ -70,97 +69,36 @@ export default function LecturerAnnouncements() {
     content: "",
     audience: "All Students",
     priority: "normal" as const,
+    course_id: "",
   });
 
   useEffect(() => {
     if (!user) return;
-
     fetchAnnouncements();
-
-    // Listen for engagement changes
-    const unsubLikes = onSnapshot(collection(db, "announcement_likes"), () =>
-      fetchAnnouncements(),
-    );
-    const unsubComments = onSnapshot(
-      collection(db, "announcement_comments"),
-      () => fetchAnnouncements(),
-    );
-    const unsubViews = onSnapshot(collection(db, "announcement_views"), () =>
-      fetchAnnouncements(),
-    );
-
-    return () => {
-      unsubLikes();
-      unsubComments();
-      unsubViews();
-    };
   }, [user]);
 
   const fetchAnnouncements = async () => {
     if (!user?.uid) return;
+
     try {
       setIsLoading(true);
-      const lecturerCoursesQuery = query(
-        collection(db, "lecturer_courses"),
-        where("lecturer_id", "==", user.uid),
-      );
-      const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
+      const data = await getBackend<any[]>(`/api/announcements/?author_id=${encodeURIComponent(
+        user.uid,
+      )}`);
 
-      if (lecturerCoursesSnap.empty) {
-        setAnnouncements([]);
-        return;
-      }
-
-      const courseIds = lecturerCoursesSnap.docs.map((d) => d.data().course_id);
-      const annData: any[] = [];
-
-      for (let i = 0; i < courseIds.length; i += 30) {
-        const chunk = courseIds.slice(i, i + 30);
-        const qAnn = query(
-          collection(db, "announcements"),
-          where("course_id", "in", chunk),
-          orderBy("created_at", "desc"),
-        );
-        const annSnap = await getDocs(qAnn);
-        annSnap.docs.forEach((d) => annData.push({ id: d.id, ...d.data() }));
-      }
-
-      const transformedAnnouncements = await Promise.all(
-        annData.map(async (ann) => {
-          const viewsCountSnap = await getCountFromServer(
-            query(
-              collection(db, "announcement_views"),
-              where("announcement_id", "==", ann.id),
-            ),
-          );
-          const likesCountSnap = await getCountFromServer(
-            query(
-              collection(db, "announcement_likes"),
-              where("announcement_id", "==", ann.id),
-            ),
-          );
-          const commentsCountSnap = await getCountFromServer(
-            query(
-              collection(db, "announcement_comments"),
-              where("announcement_id", "==", ann.id),
-            ),
-          );
-
-          return {
-            id: ann.id,
-            title: ann.title,
-            content: ann.content,
-            date: ann.created_at?.toDate
-              ? ann.created_at.toDate().toLocaleDateString()
-              : new Date().toLocaleDateString(),
-            audience: "All Students",
-            views: viewsCountSnap.data().count,
-            likes: likesCountSnap.data().count,
-            comments: commentsCountSnap.data().count,
-            priority: ann.priority || "normal",
-          };
-        }),
-      );
+      const transformedAnnouncements = data.map((ann) => ({
+        id: ann.id,
+        title: ann.title,
+        content: ann.content,
+        date: ann.created_at
+          ? new Date(ann.created_at).toLocaleDateString()
+          : new Date().toLocaleDateString(),
+        audience: "All Students",
+        views: 0,
+        likes: 0,
+        comments: 0,
+        priority: ann.priority || "normal",
+      }));
       setAnnouncements(transformedAnnouncements);
     } catch (error) {
       console.error("Error fetching announcements:", error);
@@ -193,61 +131,39 @@ export default function LecturerAnnouncements() {
     if (!user || !formData.title || !formData.content) return;
     try {
       setIsPublishing(true);
-      const lecturerCoursesQuery = query(
-        collection(db, "lecturer_courses"),
-        where("lecturer_id", "==", user.uid),
-      );
-      const lecturerCoursesSnap = await getDocs(lecturerCoursesQuery);
-      if (lecturerCoursesSnap.empty) throw new Error("No courses found");
-
-      const courseIds = lecturerCoursesSnap.docs.map((d) => d.data().course_id);
-      const announcementDoc = {
-        course_id: courseIds[0],
+      const payload = {
+        course_id: formData.course_id || "",
         author_id: user.uid,
         title: formData.title,
         content: formData.content,
         priority: formData.priority,
-        is_global: false,
-        is_pinned: false,
-        created_at: serverTimestamp(),
       };
 
-      const annRef = await addDoc(
-        collection(db, "announcements"),
-        announcementDoc,
-      );
-      const studentIdsSet = new Set<string>();
-      for (let i = 0; i < courseIds.length; i += 30) {
-        const chunk = courseIds.slice(i, i + 30);
-        const enrollSnap = await getDocs(
-          query(collection(db, "enrollments"), where("course_id", "in", chunk)),
-        );
-        enrollSnap.docs.forEach((d) => studentIdsSet.add(d.data().student_id));
-      }
-
-      await Promise.all(
-        Array.from(studentIdsSet).map((studentId) =>
-          addDoc(collection(db, "notifications"), {
-            user_id: studentId,
-            title: `New Announcement: ${formData.title}`,
-            message: formData.content.substring(0, 100),
-            type: "announcement",
-            link: `/announcements?id=${annRef.id}`,
-            created_at: serverTimestamp(),
-            is_read: false,
-          }),
-        ),
-      );
-
+      const created = await postBackend<any>("/api/announcements/", payload);
+      setAnnouncements((current) => [
+        {
+          id: created.id,
+          title: created.title,
+          content: created.content,
+          date: created.created_at
+            ? new Date(created.created_at).toLocaleDateString()
+            : new Date().toLocaleDateString(),
+          audience: "All Students",
+          views: 0,
+          likes: 0,
+          comments: 0,
+          priority: created.priority || "normal",
+        },
+        ...current,
+      ]);
       setFormData({
         title: "",
         content: "",
         audience: "All Students",
         priority: "normal",
+        course_id: "",
       });
       setShowCreateModal(false);
-      await fetchAnnouncements();
-      alert("Announcement published successfully!");
     } catch (error) {
       console.error("Error creating announcement:", error);
       alert("Failed to publish announcement.");
@@ -259,68 +175,13 @@ export default function LecturerAnnouncements() {
   const fetchEngagementDetails = async (announcementId: string) => {
     try {
       setLoadingEngagement(true);
-      const [viewsSnap, likesSnap, commentsSnap] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, "announcement_views"),
-            where("announcement_id", "==", announcementId),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "announcement_likes"),
-            where("announcement_id", "==", announcementId),
-          ),
-        ),
-        getDocs(
-          query(
-            collection(db, "announcement_comments"),
-            where("announcement_id", "==", announcementId),
-            orderBy("created_at", "desc"),
-          ),
-        ),
-      ]);
-
-      const studentIds = Array.from(
-        new Set(
-          [...viewsSnap.docs, ...likesSnap.docs, ...commentsSnap.docs].map(
-            (d) => d.data().student_id,
-          ),
-        ),
-      );
-      const profileMap = new Map();
-      if (studentIds.length > 0) {
-        for (let i = 0; i < studentIds.length; i += 30) {
-          const chunk = studentIds.slice(i, i + 30);
-          const profilesSnap = await getDocs(
-            query(collection(db, "profiles"), where("__name__", "in", chunk)),
-          );
-          profilesSnap.docs.forEach((d) =>
-            profileMap.set(d.id, d.data().full_name),
-          );
-        }
-      }
-
-      const formatDate = (ts: any) =>
-        ts?.toDate ? ts.toDate().toISOString() : new Date().toISOString();
       setEngagementDetails({
-        views: viewsSnap.docs.map((v) => ({
-          student_id: v.data().student_id,
-          student_name: profileMap.get(v.data().student_id) || "Unknown",
-          viewed_at: formatDate(v.data().viewed_at || v.data().created_at),
-        })),
-        likes: likesSnap.docs.map((l) => ({
-          student_id: l.data().student_id,
-          student_name: profileMap.get(l.data().student_id) || "Unknown",
-          created_at: formatDate(l.data().created_at),
-        })),
-        comments: commentsSnap.docs.map((c) => ({
-          student_id: c.data().student_id,
-          student_name: profileMap.get(c.data().student_id) || "Unknown",
-          content: c.data().content,
-          created_at: formatDate(c.data().created_at),
-        })),
+        views: [],
+        likes: [],
+        comments: [],
       });
+      // Engagement data is not available in the current Django backend.
+      // This placeholder allows the details panel to render safely.
     } catch (error) {
       console.error("Error fetching engagement details:", error);
     } finally {
@@ -329,12 +190,13 @@ export default function LecturerAnnouncements() {
   };
 
   const handleDeleteAnnouncement = async (announcementId: string) => {
-    if (!window.confirm("Are you sure?")) return;
+    if (!window.confirm("Are you sure you want to delete this announcement?")) return;
     try {
       setDeletingId(announcementId);
-      await deleteDoc(doc(db, "announcements", announcementId));
-      setAnnouncements(announcements.filter((a) => a.id !== announcementId));
-      alert("Deleted successfully!");
+      await deleteBackend(`/api/announcements/${announcementId}/`);
+      setAnnouncements((current) =>
+        current.filter((a) => a.id !== announcementId),
+      );
     } catch (error) {
       console.error("Error deleting announcement:", error);
     } finally {

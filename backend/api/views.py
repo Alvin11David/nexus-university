@@ -352,9 +352,9 @@ class AnnouncementListView(APIView):
         author_id = request.data.get("author_id")
         course_id = request.data.get("course_id")
         priority = request.data.get("priority") or "normal"
-        if not title or not content or not author_id or not course_id:
+        if not title or not content or not author_id:
             return Response(
-                {"error": "Missing required fields: title, content, author_id, course_id."},
+                {"error": "Missing required fields: title, content, author_id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -362,7 +362,7 @@ class AnnouncementListView(APIView):
             title=title,
             content=content,
             author_id=author_id,
-            course_id=course_id,
+            course_id=course_id if course_id else None,
             priority=priority,
         )
         return Response(
