@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Settings as SettingsIcon,
@@ -52,7 +52,9 @@ const baseSettingsTabs = [
 ];
 
 export default function Settings() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
+  const [userSettings, setUserSettings] = useState<any>(null);
+  const [loadingSettings, setLoadingSettings] = useState(true);
   const canManageBranding =
     profile?.role === "admin" || profile?.role === "registrar";
   const settingsTabs = canManageBranding
@@ -64,6 +66,33 @@ export default function Settings() {
   const [activeTab, setActiveTab] = useState("prn");
   const [sheetOpen, setSheetOpen] = useState(false);
   const isMobile = useIsMobile();
+
+  // Fetch user settings from Django
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const fetchSettings = async () => {
+      try {
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+
+        const resp = await fetch(
+          `${API_BASE_URL}/api/students/${user.uid}/settings/`
+        );
+        if (!resp.ok) throw new Error("Failed to fetch settings");
+
+        const data = await resp.json();
+        setUserSettings(data);
+      } catch (error) {
+        console.error("Error fetching user settings:", error);
+        // Continue without settings - they're optional
+      } finally {
+        setLoadingSettings(false);
+      }
+    };
+
+    fetchSettings();
+  }, [user?.uid]);
 
   const handleTabChange = (tabId: string) => {
     setActiveTab(tabId);
