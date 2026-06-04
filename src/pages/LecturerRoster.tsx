@@ -24,15 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 interface Student {
   id: string;
@@ -77,73 +69,18 @@ export default function LecturerRoster() {
       setLoading(true);
       if (!user?.uid) return;
 
-      // Fetch lecturer's profile to get assigned_course_units
-      const assignedCourseUnits: string[] = [];
-      try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourses = profileData.assigned_course_units || [];
-          assignedCourseUnits.push(...assignedCourses);
-        }
-      } catch (err) {
-        console.error("Failed to fetch lecturer profile:", err);
-      }
-
-      if (assignedCourseUnits.length === 0) {
-        setStudents([]);
-        return;
-      }
-
-      // Fetch enrollments for all lecturer's courses
-      const studentIds = new Set<string>();
-      const courseChunks = [];
-      for (let i = 0; i < assignedCourseUnits.length; i += 10) {
-        courseChunks.push(assignedCourseUnits.slice(i, i + 10));
-      }
-
-      for (const chunk of courseChunks) {
-        const enrollQuery = query(
-          collection(db, "enrollments"),
-          where("course_id", "in", chunk),
-          where("status", "==", "approved"),
-        );
-        const enrollSnap = await getDocs(enrollQuery);
-        enrollSnap.docs.forEach((doc) => {
-          studentIds.add(doc.data().student_id);
-        });
-      }
-
-      if (studentIds.size === 0) {
-        setStudents([]);
-        return;
-      }
-
-      // Fetch student profiles
-      const studentProfiles: Student[] = [];
-      const studentIdArray = Array.from(studentIds);
-      for (let i = 0; i < studentIdArray.length; i += 10) {
-        const chunk = studentIdArray.slice(i, i + 10);
-        const profilesQuery = query(
-          collection(db, "profiles"),
-          where("__name__", "in", chunk),
-        );
-        const profilesSnap = await getDocs(profilesQuery);
-        profilesSnap.docs.forEach((doc) => {
-          const data = doc.data();
-          studentProfiles.push({
-            id: doc.id,
-            name: data.full_name || data.name || "Unknown Student",
-            email: data.email || "",
-            phone: data.phone || "",
-            studentId: data.student_id || doc.id,
-            status: "active" as const,
-            gpa: data.gpa || 0,
-            enrollmentDate: data.created_at || new Date().toISOString(),
-            track: data.programme || "General",
-          });
-        });
-      }
+      const data = await getBackend<any[]>("/api/students/");
+      const studentProfiles = data.map((item) => ({
+        id: item.id,
+        name: item.full_name || "Unknown Student",
+        email: item.email || "",
+        phone: item.phone || "",
+        studentId: item.student_number || item.registration_number || item.id,
+        status: "active" as const,
+        gpa: 0,
+        enrollmentDate: new Date().toISOString(),
+        track: item.programme || "General",
+      }));
 
       setStudents(studentProfiles);
     } catch (error) {

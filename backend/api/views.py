@@ -436,6 +436,8 @@ class AssignmentListView(APIView):
         course_title = request.data.get("course_title") or ""
         course_code = request.data.get("course_code") or ""
         status_value = request.data.get("status") or "pending"
+        instruction_document_url = request.data.get("instruction_document_url")
+        instruction_document_name = request.data.get("instruction_document_name") or ""
 
         if not lecturer_id or not course_id or not title or not due_date:
             return Response(
@@ -454,6 +456,8 @@ class AssignmentListView(APIView):
                 due_date=due_date,
                 total_points=int(total_points),
                 status=status_value,
+                instruction_document_url=instruction_document_url,
+                instruction_document_name=instruction_document_name,
             )
         except Exception as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
@@ -945,11 +949,15 @@ class MessageSendView(APIView):
             to_user_id = request.data.get("to_user_id")
             subject = request.data.get("subject", "").strip()
             body = request.data.get("body", "").strip()
+            attachment_url = request.data.get("attachment_url")
+            attachment_name = request.data.get("attachment_name")
+            attachment_size = request.data.get("attachment_size")
+            draft_id = request.data.get("draft_id")
 
             if not all([from_user_id, to_user_id, subject, body]):
                 return Response(
                     {"error": "Missing required fields"},
-                    status=status.HTTP_400_BAD_REQUEST
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
             message = Message.objects.create(
@@ -960,17 +968,21 @@ class MessageSendView(APIView):
                 is_read=False,
                 is_starred=False,
                 is_archived=False,
+                attachment_url=attachment_url,
+                attachment_name=attachment_name,
+                attachment_size=attachment_size,
             )
 
-            # Delete draft if sending from draft
-            draft_id = request.data.get("draft_id")
             if draft_id:
                 MessageDraft.objects.filter(id=draft_id).delete()
 
-            return Response({
-                "id": str(message.id),
-                "created_at": message.created_at.isoformat(),
-            }, status=status.HTTP_201_CREATED)
+            return Response(
+                {
+                    "id": str(message.id),
+                    "created_at": message.created_at.isoformat(),
+                },
+                status=status.HTTP_201_CREATED,
+            )
         except Exception as e:
             return Response({"error": str(e)}, status=400)
 

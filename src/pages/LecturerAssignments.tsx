@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, storage } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import {
   collection,
   query,
@@ -139,122 +140,42 @@ export default function LecturerAssignments() {
 
   // Load assignments created by this lecturer from Firebase
   useEffect(() => {
-    let submissionsUnsubscribe: (() => void) | null = null;
-
     const loadAssignments = async () => {
       if (!user) return;
       setLoading(true);
       try {
-        // Fetch assignments from Firestore
-        const assignmentsQuery = query(
-          collection(db, "Assignments"),
-          where("lecturer_id", "==", user.uid),
+        const data = await getBackend<any[]>(
+          `/api/assignments/?lecturer_id=${encodeURIComponent(user.uid)}`,
         );
-        const snapshot = await getDocs(assignmentsQuery);
-        const assignmentIds = snapshot.docs.map((doc) => doc.id);
 
-        // Fetch submission counts for all assignments
-        const submissionCounts: Record<string, number> = {};
-        if (assignmentIds.length > 0) {
-          for (let i = 0; i < assignmentIds.length; i += 10) {
-            const chunk = assignmentIds.slice(i, i + 10);
-            const submissionsQuery = query(
-              collection(db, "submissions"),
-              where("assignment_id", "in", chunk),
-            );
-            const submissionsSnapshot = await getDocs(submissionsQuery);
-            chunk.forEach((assignmentId) => {
-              submissionCounts[assignmentId] = submissionsSnapshot.docs.filter(
-                (doc) => doc.data().assignment_id === assignmentId,
-              ).length;
-            });
-          }
-        }
+        const mapped: Assignment[] = data.map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description || "",
+          dueDate: item.due_date,
+          totalPoints: item.total_points ?? 100,
+          submissions: 0,
+          totalStudents: 0,
+          status: item.status || "draft",
+          courseTitle: item.course_title || "",
+          instructionDocumentUrl: item.instruction_document_url || undefined,
+          instructionDocumentName: item.instruction_document_name || undefined,
+        }));
 
-        // Fetch enrollment counts for each course
-        const enrollmentCounts: Record<string, number> = {};
-        const courseIds = [
-          ...new Set(
-            snapshot.docs.map((doc) => doc.data().course_id).filter(Boolean),
-          ),
-        ];
-        if (courseIds.length > 0) {
-          for (let i = 0; i < courseIds.length; i += 10) {
-            const chunk = courseIds.slice(i, i + 10);
-            const enrollmentsQuery = query(
-              collection(db, "enrollments"),
-              where("course_id", "in", chunk),
-            );
-            const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
-            chunk.forEach((courseId) => {
-              const count = enrollmentsSnapshot.docs.filter(
-                (doc) => doc.data().course_id === courseId,
-              ).length;
-              enrollmentCounts[courseId] = count;
-            });
-          }
-        }
-
-        const mapped: Assignment[] = snapshot.docs.map((docSnap) => {
-          const a = docSnap.data();
-          return {
-            id: docSnap.id,
-            title: a.title,
-            description: a.description || "",
-            dueDate: a.due_date,
-            totalPoints: a.total_points ?? 100,
-            submissions: submissionCounts[docSnap.id] || 0,
-            totalStudents: enrollmentCounts[a.course_id] || 0,
-            status: a.status || "draft",
-            courseTitle: a.course_title || "",
-            instructionDocumentUrl: a.instruction_document_url,
-            instructionDocumentName: a.instruction_document_name,
-          };
-        });
         setAssignments(mapped);
-
-        // Set up real-time listener for submissions
-        if (assignmentIds.length > 0) {
-          const submissionsQuery = query(
-            collection(db, "submissions"),
-            where("assignment_id", "in", assignmentIds.slice(0, 10)), // Firestore limit
-          );
-
-          submissionsUnsubscribe = onSnapshot(submissionsQuery, (snapshot) => {
-            console.log("Submissions updated:", snapshot.docs.length);
-            // Update submission counts in real-time
-            setAssignments((currentAssignments) => {
-              return currentAssignments.map((assignment) => {
-                const submissionCount = snapshot.docs.filter(
-                  (doc) => doc.data().assignment_id === assignment.id,
-                ).length;
-                return {
-                  ...assignment,
-                  submissions: submissionCount,
-                };
-              });
-            });
-          });
-        }
       } catch (error: any) {
         console.error("Error loading assignments", error);
         toast({
           title: "Could not load assignments",
-          description: error.message,
+          description: error.message || "Failed to load assignments",
           variant: "destructive",
         });
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     loadAssignments();
-
-    // Cleanup function
-    return () => {
-      if (submissionsUnsubscribe) {
-        submissionsUnsubscribe();
-      }
-    };
   }, [toast, user]);
 
   // Load lecturer courses from Firebase
@@ -384,58 +305,35 @@ export default function LecturerAssignments() {
 
       const course = courses.find((c) => c.id === selectedCourse);
 
-      // Create assignment in Firestore
-      const assignmentDoc = await addDoc(collection(db, "Assignments"), {
+      const payload = {
+        lecturer_id: user.uid,
         course_id: selectedCourse,
         course_title: course?.title || "",
-        lecturer_id: user.uid,
+        course_code: course?.code || "",
         title: formData.title,
         description: formData.description,
         due_date: new Date(formData.dueDate).toISOString(),
         total_points: formData.totalPoints,
         status: "draft",
         instruction_document_url: instructionDocUrl,
-        created_at: serverTimestamp(),
-      });
+        instruction_document_name: instructionDocName,
+      };
 
-      // Get all enrolled students for this course
-      const enrollmentsQuery = query(
-        collection(db, "enrollments"),
-        where("course_id", "==", selectedCourse),
-      );
-      const enrollmentsSnapshot = await getDocs(enrollmentsQuery);
-      const enrolledStudents = enrollmentsSnapshot.docs.map(
-        (docSnap) => docSnap.data().student_id,
-      );
-      // Send notifications to all enrolled students
-      if (enrolledStudents && enrolledStudents.length > 0) {
-        for (const studentId of enrolledStudents) {
-          await addDoc(collection(db, "notifications"), {
-            user_id: studentId,
-            title: `New Assignment: ${formData.title}`,
-            message: `A new assignment has been added to your course. Due: ${new Date(
-              formData.dueDate,
-            ).toLocaleDateString()}`,
-            type: "assignment",
-            related_id: assignmentDoc.id,
-            is_read: false,
-            created_at: serverTimestamp(),
-          });
-        }
-      }
-      // Add to local state
+      const created = await postBackend<any>("/api/assignments/", payload);
+
       const newAssignment: Assignment = {
-        id: assignmentDoc.id,
-        title: formData.title,
-        description: formData.description,
-        dueDate: formData.dueDate,
-        totalPoints: formData.totalPoints,
+        id: created.id,
+        title: created.title,
+        description: created.description,
+        dueDate: created.due_date,
+        totalPoints: created.total_points,
         submissions: 0,
-        totalStudents: enrolledStudents.length,
-        status: "draft",
-        courseTitle: course?.title,
-        instructionDocumentUrl: instructionDocUrl || undefined,
-        instructionDocumentName: instructionDocName || undefined,
+        totalStudents: 0,
+        status: created.status || "draft",
+        courseTitle: created.course_title || course?.title,
+        instructionDocumentUrl: created.instruction_document_url || instructionDocUrl || undefined,
+        instructionDocumentName:
+          created.instruction_document_name || instructionDocName || undefined,
       };
       setAssignments((prev) => [...prev, newAssignment]);
       setFormData({

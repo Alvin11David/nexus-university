@@ -31,16 +31,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend } from "@/lib/backendApi";
 
 type ScheduleItem = {
   time: string;
@@ -121,79 +112,21 @@ export default function LecturerDashboard() {
       const lecturerUid = user?.uid;
       if (!lecturerUid) return;
 
-      const profileDoc = await getDoc(doc(db, "profiles", lecturerUid));
-      const profileData = profileDoc.exists() ? (profileDoc.data() as any) : {};
-
-      let lecturerCourseIds: string[] = (
-        profileData.assigned_course_units || []
-      ).filter(Boolean);
-
-      // Fallback to courses authored by lecturer when explicit assignments are unavailable.
-      if (lecturerCourseIds.length === 0) {
-        const coursesRef = collection(db, "courses");
-        const qCourses = query(
-          coursesRef,
-          where("lecturer_id", "==", lecturerUid),
-        );
-        const coursesSnapshot = await getDocs(qCourses);
-        lecturerCourseIds = coursesSnapshot.docs.map((d) => d.id);
-      }
-
-      const uniqueCourseIds = Array.from(new Set(lecturerCourseIds));
-
-      let students = 0;
-      let pendingMarks = 0;
-      let submissions = 0;
-
-      for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-        const chunk = uniqueCourseIds.slice(i, i + 10);
-
-        const qEnrollments = query(
-          collection(db, "enrollments"),
-          where("course_id", "in", chunk),
-        );
-        const enrollmentsSnapshot = await getDocs(qEnrollments);
-        students += enrollmentsSnapshot.size;
-
-        const qGrades = query(
-          collection(db, "student_grades"),
-          where("course_id", "in", chunk),
-        );
-        const gradesSnapshot = await getDocs(qGrades);
-        pendingMarks += gradesSnapshot.docs.filter((gradeDoc) => {
-          const grade = gradeDoc.data() as any;
-          return (
-            grade.grade == null || grade.gp == null || grade.grade_point == null
-          );
-        }).length;
-
-        const qAssignments = query(
-          collection(db, "Assignments"),
-          where("course_id", "in", chunk),
-        );
-        const assignmentsSnapshot = await getDocs(qAssignments);
-        const assignmentIds = assignmentsSnapshot.docs.map((d) => d.id);
-
-        for (let j = 0; j < assignmentIds.length; j += 10) {
-          const assignmentChunk = assignmentIds.slice(j, j + 10);
-          const qSubmissions = query(
-            collection(db, "submissions"),
-            where("assignment_id", "in", assignmentChunk),
-          );
-          const submissionsSnapshot = await getDocs(qSubmissions);
-          submissions += submissionsSnapshot.size;
-        }
-      }
+      const data = await getBackend<any>(
+        `/api/lecturer/summary/?lecturer_id=${encodeURIComponent(
+          lecturerUid,
+        )}`,
+      );
 
       setStats({
-        courses: uniqueCourseIds.length,
-        students,
-        pendingMarks,
-        submissions,
+        courses: data.assignments_count ?? 0,
+        students: data.announcements_count ?? 0,
+        pendingMarks: data.quizzes_count ?? 0,
+        submissions:
+          (data.messages_received ?? 0) + (data.messages_sent ?? 0),
       });
     } catch (error) {
       console.error("Error loading stats:", error);
-      // Set default values on error
       setStats({
         courses: 0,
         students: 0,

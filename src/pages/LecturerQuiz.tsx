@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/firebase";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import {
   collection,
   query,
@@ -102,19 +103,9 @@ export default function LecturerQuiz() {
       setLoading(true);
       if (!user?.uid) return;
 
-      const quizzesRef = collection(db, "quizzes");
-      const q = query(
-        quizzesRef,
-        where("lecturer_id", "==", user.uid),
-        orderBy("created_at", "desc"),
+      const data = await getBackend<any[]>(
+        `/api/quizzes/?lecturer_id=${encodeURIComponent(user.uid)}`,
       );
-
-      console.log("LecturerQuiz: Loading quizzes for user:", user.uid);
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
 
       console.log("LecturerQuiz: Query result count:", data.length);
 
@@ -130,10 +121,7 @@ export default function LecturerQuiz() {
           totalPoints: row.total_points,
           timeLimit: row.time_limit,
           passingScore: row.passing_score,
-          dueDate:
-            row.due_date instanceof Timestamp
-              ? row.due_date.toDate().toISOString()
-              : row.due_date,
+          dueDate: row.due_date,
           status: row.status,
           totalAttempts: row.total_attempts || 0,
           averageScore: row.average_score || 0,

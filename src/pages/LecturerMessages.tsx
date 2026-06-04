@@ -36,22 +36,8 @@ import {
 } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, storage } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  updateDoc,
-  doc,
-  orderBy,
-  or,
-  and,
-  serverTimestamp,
-  getDoc,
-  limit,
-} from "firebase/firestore";
+import { storage } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface Message {
@@ -145,17 +131,22 @@ export default function LecturerMessages() {
     try {
       if (!user?.uid) return;
 
-      const q = query(
-        collection(db, "profiles"),
-        where("role", "==", "student"),
-        orderBy("full_name"),
-      );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
+      const data = await getBackend<any[]>("/api/students/");
+      const studentsData = data
+        .map((item) => ({
+          id: item.id,
+          name: item.full_name || "Unknown Student",
+          email: item.email || "",
+          phone: item.phone || "",
+          studentId: item.student_number || item.registration_number || item.id,
+          status: "active" as const,
+          gpa: 0,
+          enrollmentDate: new Date().toISOString(),
+          track: item.programme || "General",
+        }))
         .filter((p) => p.id !== user.uid);
 
-      setStudents(data);
+      setStudents(studentsData);
     } catch (error) {
       console.error("Error fetching students:", error);
     }
@@ -166,87 +157,34 @@ export default function LecturerMessages() {
 
     try {
       setLoading(true);
-      let q;
-
-      if (selectedView === "inbox") {
-        q = query(
-          collection(db, "messages"),
-          where("to_user_id", "==", user.uid),
-          where("is_deleted_by_recipient", "==", false),
-        );
-      } else if (selectedView === "sent") {
-        q = query(
-          collection(db, "messages"),
-          where("from_user_id", "==", user.uid),
-          where("is_deleted_by_sender", "==", false),
-        );
-      } else if (selectedView === "starred") {
-        q = query(
-          collection(db, "messages"),
-          and(
-            where("is_starred", "==", true),
-            or(
-              where("to_user_id", "==", user.uid),
-              where("from_user_id", "==", user.uid),
-            ),
-          ),
-        );
-      } else {
-        return;
+      const params = new URLSearchParams();
+      params.set("view", selectedView);
+      if (searchQuery.trim()) {
+        params.set("search", searchQuery.trim());
       }
 
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((d) => {
-        const docData = d.data() as any;
-        return {
-          id: d.id,
-          ...docData,
-          created_at:
-            docData.created_at?.toDate?.()?.toISOString() || docData.created_at,
-        };
-      }) as Message[];
-
-      // Sort messages locally since compound queries with 'or' and 'where' might require indexes
-      data.sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      const data = await getBackend<any[]>(
+        `/api/messages/${encodeURIComponent(user.uid)}/?${params.toString()}`,
       );
 
-      if (data.length === 0) {
-        setMessages([]);
-        return;
-      }
-
-      // Get unique user IDs
-      const userIds = new Set<string>();
-      data.forEach((msg) => {
-        userIds.add(msg.from_user_id);
-        userIds.add(msg.to_user_id);
-      });
-
-      // Fetch profiles chunked
-      const profileMap = new Map<string, any>();
-      const idsArray = Array.from(userIds);
-      for (let i = 0; i < idsArray.length; i += 30) {
-        const chunk = idsArray.slice(i, i + 30);
-        const profilesQuery = query(
-          collection(db, "profiles"),
-          where("__name__", "in", chunk),
-        );
-        const profilesSnap = await getDocs(profilesQuery);
-        profilesSnap.forEach((doc) => {
-          profileMap.set(doc.id, doc.data());
-        });
-      }
-
-      // Attach profiles
-      const messagesWithProfiles = data.map((msg) => ({
+      const messagesData: Message[] = data.map((msg) => ({
         ...msg,
-        from_profile: profileMap.get(msg.from_user_id) || null,
-        to_profile: profileMap.get(msg.to_user_id) || null,
+        created_at: msg.created_at,
+        from_profile: {
+          id: msg.from_user_id,
+          full_name: msg.from_user_id,
+          email: "",
+          avatar_url: null,
+        },
+        to_profile: {
+          id: msg.to_user_id,
+          full_name: msg.to_user_id,
+          email: "",
+          avatar_url: null,
+        },
       }));
 
-      setMessages(messagesWithProfiles);
+      setMessages(messagesData);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -293,35 +231,12 @@ export default function LecturerMessages() {
         to_user_id: composeToId,
         subject: composeSubject,
         body: composeBody,
-        thread_id: crypto.randomUUID(),
-        is_read: false,
-        is_starred: false,
-        is_archived: false,
-        is_deleted_by_sender: false,
-        is_deleted_by_recipient: false,
         attachment_url: attachmentUrl,
         attachment_name: attachmentName,
         attachment_size: attachmentSize,
-        created_at: serverTimestamp(),
       };
 
-      await addDoc(collection(db, "messages"), messageData);
-
-      // Notify the student recipient
-      const senderName = profile?.full_name || "Lecturer";
-
-      await addDoc(collection(db, "notifications"), {
-        user_id: composeToId,
-        title: `New message from ${senderName}`,
-        message: composeSubject || "You have a new message",
-        type: "info",
-        link: "/webmail",
-        created_at: serverTimestamp(),
-        is_read: false,
-      });
-
-      // Emit event to update notification counts
-      window.dispatchEvent(new Event("notifications-updated"));
+      await postBackend("/api/messages/send/", messageData);
 
       // Reset compose form
       setComposeTo("");
@@ -352,9 +267,12 @@ export default function LecturerMessages() {
   };
 
   const handleToggleStar = async (messageId: string, currentValue: boolean) => {
+    if (!user?.uid) return;
     try {
-      const messageRef = doc(db, "messages", messageId);
-      await updateDoc(messageRef, { is_starred: !currentValue });
+      await postBackend(`/api/messages/${messageId}/action/`, {
+        action: "star",
+        user_id: user.uid,
+      });
 
       setMessages((prev) =>
         prev.map((m) =>
@@ -370,16 +288,10 @@ export default function LecturerMessages() {
     if (!user?.uid) return;
 
     try {
-      const message = messages.find((m) => m.id === messageId);
-      if (!message) return;
-
-      const isSent = message.from_user_id === user.uid;
-      const updateField = isSent
-        ? "is_deleted_by_sender"
-        : "is_deleted_by_recipient";
-
-      const messageRef = doc(db, "messages", messageId);
-      await updateDoc(messageRef, { [updateField]: true });
+      await postBackend(`/api/messages/${messageId}/action/`, {
+        action: "delete",
+        user_id: user.uid,
+      });
 
       setMessages((prev) => prev.filter((m) => m.id !== messageId));
       setSelectedMessage(null);
@@ -389,9 +301,13 @@ export default function LecturerMessages() {
   };
 
   const markAsRead = async (messageId: string) => {
+    if (!user?.uid) return;
+
     try {
-      const messageRef = doc(db, "messages", messageId);
-      await updateDoc(messageRef, { is_read: true });
+      await postBackend(`/api/messages/${messageId}/action/`, {
+        action: "read",
+        user_id: user.uid,
+      });
 
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? { ...m, is_read: true } : m)),
