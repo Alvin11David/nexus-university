@@ -185,3 +185,30 @@ class QuizAttempt(models.Model):
 
     def __str__(self) -> str:
         return f"{self.quiz.title} - Student {self.student_id}"
+
+
+class ExamResult(models.Model):
+    student_id = models.CharField(max_length=255)
+    course_id = models.CharField(max_length=64)
+    course_title = models.CharField(max_length=255, blank=True)
+    course_code = models.CharField(max_length=64, blank=True)
+    credits = models.PositiveIntegerField(default=3)
+    academic_year = models.CharField(max_length=32)
+    semester = models.CharField(max_length=32)
+    assignment1 = models.PositiveIntegerField(default=0)
+    assignment2 = models.PositiveIntegerField(default=0)
+    midterm = models.PositiveIntegerField(default=0)
+    participation = models.PositiveIntegerField(default=0)
+    final_exam = models.PositiveIntegerField(default=0)
+    marks = models.PositiveIntegerField(default=0)
+    grade = models.CharField(max_length=2, blank=True, null=True)
+    grade_point = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    remark = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-academic_year", "-semester", "course_code"]
+
+    def __str__(self) -> str:
+        return f"{self.student_id} - {self.course_code} ({self.academic_year})"

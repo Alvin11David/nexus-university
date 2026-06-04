@@ -25,7 +25,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import AssignmentSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult
 
 
 OTP_TTL_MINUTES = 10
@@ -491,5 +491,133 @@ class QuizSubmitView(APIView):
             )
         except Quiz.DoesNotExist:
             return Response({"error": "Quiz not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class StudentResultsView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, student_id):
+        try:
+            # Fetch exam results
+            exam_results = ExamResult.objects.filter(student_id=student_id).order_by(
+                "-academic_year", "-semester", "course_code"
+            )
+
+            exam_data = [
+                {
+                    "id": str(r.id),
+                    "course_id": r.course_id,
+                    "course_title": r.course_title,
+                    "course_code": r.course_code,
+                    "credits": r.credits,
+                    "academic_year": r.academic_year,
+                    "semester": r.semester,
+                    "assignment1": r.assignment1,
+                    "assignment2": r.assignment2,
+                    "midterm": r.midterm,
+                    "participation": r.participation,
+                    "final_exam": r.final_exam,
+                    "marks": r.marks,
+                    "grade": r.grade,
+                    "grade_point": float(r.grade_point),
+                    "remark": r.remark,
+                }
+                for r in exam_results
+            ]
+
+            # Fetch quiz results
+            quiz_attempts = QuizAttempt.objects.filter(student_id=student_id).order_by(
+                "-completed_at"
+            )
+
+            quiz_data = [
+                {
+                    "id": str(a.id),
+                    "quiz_id": a.quiz.id,
+                    "quiz_title": a.quiz.title,
+                    "score": a.score,
+                    "total_points": a.total_points,
+                    "percentage": int((a.score / a.total_points * 100) if a.total_points > 0 else 0),
+                    "completed_at": a.completed_at.isoformat(),
+                    "time_taken": a.time_taken,
+                    "status": "completed",
+                }
+                for a in quiz_attempts
+            ]
+
+            return Response({
+                "exam_results": exam_data,
+                "quiz_results": quiz_data,
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class StudentExamResultsView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, student_id):
+        try:
+            exam_results = ExamResult.objects.filter(student_id=student_id).order_by(
+                "-academic_year", "-semester", "course_code"
+            )
+
+            data = [
+                {
+                    "id": str(r.id),
+                    "course_id": r.course_id,
+                    "course_title": r.course_title,
+                    "course_code": r.course_code,
+                    "credits": r.credits,
+                    "academic_year": r.academic_year,
+                    "semester": r.semester,
+                    "assignment1": r.assignment1,
+                    "assignment2": r.assignment2,
+                    "midterm": r.midterm,
+                    "participation": r.participation,
+                    "final_exam": r.final_exam,
+                    "marks": r.marks,
+                    "grade": r.grade,
+                    "grade_point": float(r.grade_point),
+                    "remark": r.remark,
+                }
+                for r in exam_results
+            ]
+
+            return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class StudentQuizResultsView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, student_id):
+        try:
+            quiz_attempts = QuizAttempt.objects.filter(student_id=student_id).order_by(
+                "-completed_at"
+            )
+
+            data = [
+                {
+                    "id": str(a.id),
+                    "quiz_id": a.quiz.id,
+                    "quiz_title": a.quiz.title,
+                    "score": a.score,
+                    "total_points": a.total_points,
+                    "percentage": int((a.score / a.total_points * 100) if a.total_points > 0 else 0),
+                    "completed_at": a.completed_at.isoformat(),
+                    "time_taken": a.time_taken,
+                    "status": "completed",
+                }
+                for a in quiz_attempts
+            ]
+
+            return Response(data)
         except Exception as e:
             return Response({"error": str(e)}, status=400)

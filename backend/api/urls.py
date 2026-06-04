@@ -12,6 +12,9 @@ from .views import (
     QuizListView,
     QuizDetailView,
     QuizSubmitView,
+    StudentResultsView,
+    StudentExamResultsView,
+    StudentQuizResultsView,
 )
 
 urlpatterns = [
@@ -26,4 +29,7 @@ urlpatterns = [
     path("quizzes/", QuizListView.as_view()),
     path("quizzes/<int:quiz_id>/", QuizDetailView.as_view()),
     path("quizzes/submit/", QuizSubmitView.as_view()),
+    path("students/<str:student_id>/results/", StudentResultsView.as_view()),
+    path("students/<str:student_id>/results/exams/", StudentExamResultsView.as_view()),
+    path("students/<str:student_id>/results/quizzes/", StudentQuizResultsView.as_view()),
 ]
