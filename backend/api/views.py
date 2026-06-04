@@ -354,6 +354,8 @@ class AssignmentListView(APIView):
             {
                 "id": str(a.id),
                 "course_id": a.course_id,
+                "course_title": a.course_title or "",
+                "course_code": a.course_code or "",
                 "title": a.title,
                 "description": a.description,
                 "due_date": a.due_date.isoformat(),

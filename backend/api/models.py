@@ -106,6 +106,8 @@ class Announcement(models.Model):
 
 class Assignment(models.Model):
     course_id = models.CharField(max_length=64, blank=True, null=True)
+    course_title = models.CharField(max_length=255, blank=True, null=True)
+    course_code = models.CharField(max_length=64, blank=True, null=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     due_date = models.DateTimeField()
