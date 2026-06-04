@@ -15,22 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
-  getCountFromServer,
-  getDoc,
-  Timestamp,
-} from "firebase/firestore";
+import { useToast } from "@/components/ui/use-toast";
+import { getBackend, postBackend, deleteBackend } from "@/lib/backendApi";
 
 interface Announcement {
   id: string;
