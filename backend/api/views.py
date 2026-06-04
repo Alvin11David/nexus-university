@@ -379,6 +379,19 @@ class AnnouncementListView(APIView):
         )
 
 
+class AnnouncementDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def delete(self, request, announcement_id):
+        try:
+            announcement = Announcement.objects.get(id=announcement_id)
+            announcement.delete()
+            return Response({"success": True})
+        except Announcement.DoesNotExist:
+            return Response({"error": "Announcement not found"}, status=404)
+
+
 class AssignmentListView(APIView):
     authentication_classes = []
     permission_classes = []
