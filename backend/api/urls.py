@@ -15,6 +15,13 @@ from .views import (
     StudentResultsView,
     StudentExamResultsView,
     StudentQuizResultsView,
+    MessageListView,
+    MessageDetailView,
+    MessageSendView,
+    MessageActionView,
+    DraftListView,
+    DraftSaveView,
+    DraftDeleteView,
 )
 
 urlpatterns = [
@@ -32,4 +39,11 @@ urlpatterns = [
     path("students/<str:student_id>/results/", StudentResultsView.as_view()),
     path("students/<str:student_id>/results/exams/", StudentExamResultsView.as_view()),
     path("students/<str:student_id>/results/quizzes/", StudentQuizResultsView.as_view()),
+    path("messages/<str:user_id>/", MessageListView.as_view()),
+    path("messages/<int:message_id>/detail/", MessageDetailView.as_view()),
+    path("messages/send/", MessageSendView.as_view()),
+    path("messages/<int:message_id>/action/", MessageActionView.as_view()),
+    path("drafts/<str:user_id>/", DraftListView.as_view()),
+    path("drafts/save/", DraftSaveView.as_view()),
+    path("drafts/<int:draft_id>/delete/", DraftDeleteView.as_view()),
 ]

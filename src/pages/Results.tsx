@@ -154,6 +154,7 @@ const calculateSemesterRemark = (gp: number, grade: string | null): string => {
 
 export default function Results() {
   const { user, profile } = useAuth();
+  const { toast } = useToast();
   const [resultsLoading, setResultsLoading] = useState(true);
   const [termResults, setTermResults] = useState<TermResult[]>([]);
   const [quizResults, setQuizResults] = useState<QuizResult[]>([]);
@@ -240,7 +241,7 @@ export default function Results() {
         setQuizResults(quizData);
       } catch (error: any) {
         console.error("Error loading results:", error);
-        useToast().toast({
+        toast({
           title: "Error",
           description: "Failed to load results",
           variant: "destructive",

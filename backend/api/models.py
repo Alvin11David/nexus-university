@@ -212,3 +212,41 @@ class ExamResult(models.Model):
 
     def __str__(self) -> str:
         return f"{self.student_id} - {self.course_code} ({self.academic_year})"
+
+
+class Message(models.Model):
+    from_user_id = models.CharField(max_length=255)
+    to_user_id = models.CharField(max_length=255)
+    subject = models.CharField(max_length=255)
+    body = models.TextField()
+    is_read = models.BooleanField(default=False)
+    is_starred = models.BooleanField(default=False)
+    is_archived = models.BooleanField(default=False)
+    is_deleted_by_sender = models.BooleanField(default=False)
+    is_deleted_by_recipient = models.BooleanField(default=False)
+    attachment_url = models.CharField(max_length=512, blank=True, null=True)
+    attachment_name = models.CharField(max_length=255, blank=True, null=True)
+    attachment_size = models.PositiveIntegerField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.subject} ({self.from_user_id} to {self.to_user_id})"
+
+
+class MessageDraft(models.Model):
+    user_id = models.CharField(max_length=255)
+    to_user_id = models.CharField(max_length=255, blank=True, null=True)
+    subject = models.CharField(max_length=255, blank=True, null=True)
+    body = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"Draft - {self.subject or '(no subject)'} by {self.user_id}"

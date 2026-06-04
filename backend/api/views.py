@@ -25,7 +25,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import AssignmentSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft
 
 
 OTP_TTL_MINUTES = 10
@@ -619,5 +619,251 @@ class StudentQuizResultsView(APIView):
             ]
 
             return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class MessageListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, user_id):
+        try:
+            view_type = request.query_params.get("view", "inbox")
+            search_query = request.query_params.get("search", "").strip()
+
+            if view_type == "inbox":
+                messages = Message.objects.filter(
+                    to_user_id=user_id,
+                    is_deleted_by_recipient=False
+                ).order_by("-created_at")
+            elif view_type == "sent":
+                messages = Message.objects.filter(
+                    from_user_id=user_id,
+                    is_deleted_by_sender=False
+                ).order_by("-created_at")
+            elif view_type == "starred":
+                messages = Message.objects.filter(
+                    is_starred=True
+                ).filter(
+                    models.Q(to_user_id=user_id) | models.Q(from_user_id=user_id)
+                ).order_by("-created_at")
+            elif view_type == "archived":
+                messages = Message.objects.filter(
+                    is_archived=True
+                ).filter(
+                    models.Q(to_user_id=user_id) | models.Q(from_user_id=user_id)
+                ).order_by("-created_at")
+            else:
+                messages = Message.objects.none()
+
+            # Apply search filter
+            if search_query:
+                messages = messages.filter(
+                    models.Q(subject__icontains=search_query) |
+                    models.Q(body__icontains=search_query)
+                )
+
+            data = [
+                {
+                    "id": str(m.id),
+                    "from_user_id": m.from_user_id,
+                    "to_user_id": m.to_user_id,
+                    "subject": m.subject,
+                    "body": m.body[:100] + "..." if len(m.body) > 100 else m.body,
+                    "is_read": m.is_read,
+                    "is_starred": m.is_starred,
+                    "is_archived": m.is_archived,
+                    "created_at": m.created_at.isoformat(),
+                    "attachment_name": m.attachment_name,
+                }
+                for m in messages
+            ]
+
+            return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class MessageDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, message_id):
+        try:
+            message = Message.objects.get(id=message_id)
+
+            # Mark as read if recipient viewing
+            if request.query_params.get("mark_read") == "true":
+                if message.to_user_id == request.query_params.get("user_id"):
+                    message.is_read = True
+                    message.save(update_fields=["is_read"])
+
+            data = {
+                "id": str(message.id),
+                "from_user_id": message.from_user_id,
+                "to_user_id": message.to_user_id,
+                "subject": message.subject,
+                "body": message.body,
+                "is_read": message.is_read,
+                "is_starred": message.is_starred,
+                "is_archived": message.is_archived,
+                "created_at": message.created_at.isoformat(),
+                "attachment_url": message.attachment_url,
+                "attachment_name": message.attachment_name,
+                "attachment_size": message.attachment_size,
+            }
+
+            return Response(data)
+        except Message.DoesNotExist:
+            return Response({"error": "Message not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class MessageSendView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        try:
+            from_user_id = request.data.get("from_user_id")
+            to_user_id = request.data.get("to_user_id")
+            subject = request.data.get("subject", "").strip()
+            body = request.data.get("body", "").strip()
+
+            if not all([from_user_id, to_user_id, subject, body]):
+                return Response(
+                    {"error": "Missing required fields"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            message = Message.objects.create(
+                from_user_id=from_user_id,
+                to_user_id=to_user_id,
+                subject=subject,
+                body=body,
+                is_read=False,
+                is_starred=False,
+                is_archived=False,
+            )
+
+            # Delete draft if sending from draft
+            draft_id = request.data.get("draft_id")
+            if draft_id:
+                MessageDraft.objects.filter(id=draft_id).delete()
+
+            return Response({
+                "id": str(message.id),
+                "created_at": message.created_at.isoformat(),
+            }, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class MessageActionView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, message_id):
+        try:
+            message = Message.objects.get(id=message_id)
+            action = request.data.get("action")
+            user_id = request.data.get("user_id")
+
+            if action == "star":
+                message.is_starred = not message.is_starred
+                message.save(update_fields=["is_starred"])
+            elif action == "archive":
+                message.is_archived = not message.is_archived
+                message.save(update_fields=["is_archived"])
+            elif action == "delete":
+                if message.from_user_id == user_id:
+                    message.is_deleted_by_sender = True
+                    message.save(update_fields=["is_deleted_by_sender"])
+                elif message.to_user_id == user_id:
+                    message.is_deleted_by_recipient = True
+                    message.save(update_fields=["is_deleted_by_recipient"])
+            elif action == "read":
+                message.is_read = True
+                message.save(update_fields=["is_read"])
+
+            return Response({"success": True})
+        except Message.DoesNotExist:
+            return Response({"error": "Message not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class DraftListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, user_id):
+        try:
+            drafts = MessageDraft.objects.filter(user_id=user_id).order_by("-updated_at")
+
+            data = [
+                {
+                    "id": str(d.id),
+                    "to_user_id": d.to_user_id,
+                    "subject": d.subject or "(no subject)",
+                    "body": (d.body[:100] + "..." if d.body and len(d.body) > 100 else d.body) or "",
+                    "created_at": d.created_at.isoformat(),
+                    "updated_at": d.updated_at.isoformat(),
+                }
+                for d in drafts
+            ]
+
+            return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class DraftSaveView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        try:
+            user_id = request.data.get("user_id")
+            draft_id = request.data.get("draft_id")
+            to_user_id = request.data.get("to_user_id")
+            subject = request.data.get("subject")
+            body = request.data.get("body")
+
+            if draft_id:
+                draft = MessageDraft.objects.get(id=draft_id, user_id=user_id)
+                draft.to_user_id = to_user_id
+                draft.subject = subject
+                draft.body = body
+                draft.save()
+            else:
+                draft = MessageDraft.objects.create(
+                    user_id=user_id,
+                    to_user_id=to_user_id,
+                    subject=subject,
+                    body=body,
+                )
+
+            return Response({
+                "id": str(draft.id),
+                "updated_at": draft.updated_at.isoformat(),
+            }, status=status.HTTP_201_CREATED)
+        except MessageDraft.DoesNotExist:
+            return Response({"error": "Draft not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class DraftDeleteView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def delete(self, request, draft_id):
+        try:
+            user_id = request.query_params.get("user_id")
+            MessageDraft.objects.filter(id=draft_id, user_id=user_id).delete()
+            return Response({"success": True})
         except Exception as e:
             return Response({"error": str(e)}, status=400)
