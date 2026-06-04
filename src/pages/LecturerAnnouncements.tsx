@@ -82,9 +82,9 @@ export default function LecturerAnnouncements() {
 
     try {
       setIsLoading(true);
-      const data = await getBackend<any[]>(`/api/announcements/?author_id=${encodeURIComponent(
-        user.uid,
-      )}`);
+      const data = await getBackend<any[]>(
+        `/api/announcements/?author_id=${encodeURIComponent(user.uid)}`,
+      );
 
       const transformedAnnouncements = data.map((ann) => ({
         id: ann.id,
@@ -190,7 +190,8 @@ export default function LecturerAnnouncements() {
   };
 
   const handleDeleteAnnouncement = async (announcementId: string) => {
-    if (!window.confirm("Are you sure you want to delete this announcement?")) return;
+    if (!window.confirm("Are you sure you want to delete this announcement?"))
+      return;
     try {
       setDeletingId(announcementId);
       await deleteBackend(`/api/announcements/${announcementId}/`);
