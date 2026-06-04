@@ -25,7 +25,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import AssignmentSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings
 
 
 OTP_TTL_MINUTES = 10
@@ -894,5 +894,64 @@ class StudentProfileView(APIView):
             return Response(data)
         except StudentRecord.DoesNotExist:
             return Response({"error": "Student not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class StudentSettingsView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, user_id):
+        try:
+            settings, created = UserSettings.objects.get_or_create(user_id=user_id)
+
+            data = {
+                "id": str(settings.id),
+                "user_id": settings.user_id,
+                "theme": settings.theme,
+                "notifications_enabled": settings.notifications_enabled,
+                "email_notifications": settings.email_notifications,
+                "privacy_level": settings.privacy_level,
+                "language": settings.language,
+                "two_factor_enabled": settings.two_factor_enabled,
+            }
+
+            return Response(data)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+    def post(self, request, user_id):
+        try:
+            settings, created = UserSettings.objects.get_or_create(user_id=user_id)
+
+            # Update settings from request data
+            if "theme" in request.data:
+                settings.theme = request.data["theme"]
+            if "notifications_enabled" in request.data:
+                settings.notifications_enabled = request.data["notifications_enabled"]
+            if "email_notifications" in request.data:
+                settings.email_notifications = request.data["email_notifications"]
+            if "privacy_level" in request.data:
+                settings.privacy_level = request.data["privacy_level"]
+            if "language" in request.data:
+                settings.language = request.data["language"]
+            if "two_factor_enabled" in request.data:
+                settings.two_factor_enabled = request.data["two_factor_enabled"]
+
+            settings.save()
+
+            data = {
+                "id": str(settings.id),
+                "user_id": settings.user_id,
+                "theme": settings.theme,
+                "notifications_enabled": settings.notifications_enabled,
+                "email_notifications": settings.email_notifications,
+                "privacy_level": settings.privacy_level,
+                "language": settings.language,
+                "two_factor_enabled": settings.two_factor_enabled,
+            }
+
+            return Response(data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=400)

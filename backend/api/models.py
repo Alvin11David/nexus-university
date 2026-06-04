@@ -256,3 +256,21 @@ class MessageDraft(models.Model):
 
     def __str__(self) -> str:
         return f"Draft - {self.subject or '(no subject)'} by {self.user_id}"
+
+
+class UserSettings(models.Model):
+    user_id = models.CharField(max_length=255, unique=True)
+    theme = models.CharField(max_length=32, default="system", choices=[("light", "Light"), ("dark", "Dark"), ("system", "System")])
+    notifications_enabled = models.BooleanField(default=True)
+    email_notifications = models.BooleanField(default=True)
+    privacy_level = models.CharField(max_length=32, default="private", choices=[("public", "Public"), ("friends", "Friends Only"), ("private", "Private")])
+    language = models.CharField(max_length=32, default="en", choices=[("en", "English"), ("sw", "Swahili")])
+    two_factor_enabled = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"Settings for {self.user_id}"

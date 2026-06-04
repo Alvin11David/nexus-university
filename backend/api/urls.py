@@ -23,6 +23,7 @@ from .views import (
     DraftSaveView,
     DraftDeleteView,
     StudentProfileView,
+    StudentSettingsView,
 )
 
 urlpatterns = [
@@ -41,6 +42,7 @@ urlpatterns = [
     path("students/<str:student_id>/results/exams/", StudentExamResultsView.as_view()),
     path("students/<str:student_id>/results/quizzes/", StudentQuizResultsView.as_view()),
     path("students/<str:student_id>/profile/", StudentProfileView.as_view()),
+    path("students/<str:user_id>/settings/", StudentSettingsView.as_view()),
     path("messages/<str:user_id>/", MessageListView.as_view()),
     path("messages/<int:message_id>/detail/", MessageDetailView.as_view()),
     path("messages/send/", MessageSendView.as_view()),
