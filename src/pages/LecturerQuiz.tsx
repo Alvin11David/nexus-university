@@ -400,7 +400,6 @@ export default function LecturerQuiz() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-background via-background to-primary/5">
-  
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="h-8 w-8 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
         </div>
@@ -416,8 +415,6 @@ export default function LecturerQuiz() {
         <div className="absolute -top-40 -left-40 w-80 h-80 bg-gradient-to-br from-primary/20 to-secondary/10 blur-3xl rounded-full opacity-60" />
         <div className="absolute top-1/3 -right-40 w-96 h-96 bg-gradient-to-bl from-secondary/15 via-primary/10 to-transparent blur-3xl rounded-full opacity-40" />
       </div>
-
-
 
       <main className="px-4 pb-28 sm:px-6 lg:px-8 relative">
         <div className="max-w-7xl mx-auto pt-6 lg:pt-10">

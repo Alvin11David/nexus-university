@@ -331,7 +331,8 @@ export default function LecturerAssignments() {
         totalStudents: 0,
         status: created.status || "draft",
         courseTitle: created.course_title || course?.title,
-        instructionDocumentUrl: created.instruction_document_url || instructionDocUrl || undefined,
+        instructionDocumentUrl:
+          created.instruction_document_url || instructionDocUrl || undefined,
         instructionDocumentName:
           created.instruction_document_name || instructionDocName || undefined,
       };
@@ -554,8 +555,6 @@ export default function LecturerAssignments() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white via-orange-50/30 to-white pb-28">
-
-
       <main className="px-4 py-8 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
         {/* No Courses Message */}
         {courses.length === 0 && (

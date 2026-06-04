@@ -113,17 +113,14 @@ export default function LecturerDashboard() {
       if (!lecturerUid) return;
 
       const data = await getBackend<any>(
-        `/api/lecturer/summary/?lecturer_id=${encodeURIComponent(
-          lecturerUid,
-        )}`,
+        `/api/lecturer/summary/?lecturer_id=${encodeURIComponent(lecturerUid)}`,
       );
 
       setStats({
         courses: data.assignments_count ?? 0,
         students: data.announcements_count ?? 0,
         pendingMarks: data.quizzes_count ?? 0,
-        submissions:
-          (data.messages_received ?? 0) + (data.messages_sent ?? 0),
+        submissions: (data.messages_received ?? 0) + (data.messages_sent ?? 0),
       });
     } catch (error) {
       console.error("Error loading stats:", error);
