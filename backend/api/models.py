@@ -127,3 +127,61 @@ class Assignment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.course_id})"
+
+
+class Quiz(models.Model):
+    course_id = models.CharField(max_length=64, blank=True, null=True)
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    time_limit_minutes = models.PositiveIntegerField(default=30)
+    max_attempts = models.PositiveIntegerField(default=1)
+    passing_score = models.PositiveIntegerField(default=60)
+    show_answers = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=32,
+        choices=[("draft", "Draft"), ("active", "Active"), ("closed", "Closed")],
+        default="draft",
+    )
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.status})"
+
+
+class QuizQuestion(models.Model):
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="questions")
+    question = models.TextField()
+    options = models.JSONField(default=list)
+    correct_answer = models.PositiveIntegerField()
+    points = models.PositiveIntegerField(default=1)
+    explanation = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self) -> str:
+        return f"{self.quiz.title} - Q{self.id}"
+
+
+class QuizAttempt(models.Model):
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="attempts")
+    student_id = models.CharField(max_length=255)
+    answers = models.JSONField(default=dict)
+    score = models.PositiveIntegerField()
+    total_points = models.PositiveIntegerField()
+    time_taken = models.PositiveIntegerField()
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-completed_at"]
+
+    def __str__(self) -> str:
+        return f"{self.quiz.title} - Student {self.student_id}"

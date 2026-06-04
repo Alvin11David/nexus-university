@@ -27,22 +27,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-  and,
-  or,
-  addDoc,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
 import { useToast } from "@/components/ui/use-toast";
-import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
 interface Quiz {
   id: string;
@@ -129,42 +114,11 @@ export default function StudentQuiz() {
   const fetchQuizzes = async () => {
     try {
       setLoading(true);
-      const now = new Date().toISOString();
-
-      const quizzesRef = collection(db, "quizzes");
-      const q = query(
-        quizzesRef,
-        and(
-          where("status", "==", "active"),
-          or(where("end_date", "==", null), where("end_date", ">=", now)),
-        ),
-        orderBy("created_at", "desc"),
-      );
-
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Quiz[];
-
-      // Load student's quiz attempts
-      if (user?.uid) {
-        const attemptsRef = collection(db, "quiz_attempts");
-        const attemptsQuery = query(
-          attemptsRef,
-          where("student_id", "==", user.uid),
-        );
-        const attemptsSnapshot = await getDocs(attemptsQuery);
-        const attemptsMap: Record<string, QuizAttempt> = {};
-        attemptsSnapshot.docs.forEach((doc) => {
-          const attempt = doc.data() as QuizAttempt;
-          attemptsMap[attempt.quiz_id] = attempt;
-        });
-        setQuizAttempts(attemptsMap);
-      }
-
-      // Check for any expired active quizzes and auto-close them
-      await autoCloseExpiredQuizzes();
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+      const resp = await fetch(`${API_BASE_URL}/api/quizzes/`);
+      if (!resp.ok) throw new Error("Failed to fetch quizzes");
+      const data = (await resp.json()) as Quiz[];
 
       setQuizzes(data);
     } catch (error: any) {
@@ -204,36 +158,25 @@ export default function StudentQuiz() {
         return;
       }
 
-      // Fetch actual questions from Firestore
+      // Fetch actual questions from Django API
       try {
-        const questionsRef = collection(db, "quizzes", quiz.id, "questions");
-        const questionsQuery = query(questionsRef);
-        const questionsSnapshot = await getDocs(questionsQuery);
+        const API_BASE_URL =
+          import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+        const resp = await fetch(`${API_BASE_URL}/api/quizzes/${quiz.id}/`);
+        if (!resp.ok) throw new Error("Failed to fetch quiz details");
+        const quizData = await resp.json();
 
-        const questions: QuizQuestion[] = questionsSnapshot.docs.map((doc) => {
-          const data = doc.data();
-
-          // Ensure options is an array
-          let options = data.options || [];
-          if (!Array.isArray(options)) {
-            // Try to split if it's a string
-            if (typeof options === "string") {
-              options = options.split(",").map((opt: string) => opt.trim());
-            } else {
-              options = [];
-            }
-          }
-
-          return {
-            id: doc.id,
+        const questions: QuizQuestion[] = quizData.questions.map(
+          (q: any) => ({
+            id: q.id,
             quiz_id: quiz.id,
-            question: data.question || "",
-            options: options,
-            correct_answer: data.correct_answer ?? 0,
-            points: 1,
-            explanation: data.explanation || "",
-          };
-        });
+            question: q.question || "",
+            options: q.options || [],
+            correct_answer: q.correct_answer ?? 0,
+            points: q.points || 1,
+            explanation: q.explanation || "",
+          })
+        );
 
         if (questions.length === 0) {
           toast({
@@ -277,15 +220,6 @@ export default function StudentQuiz() {
     if (!takingQuiz || !quizStartTime || !user) return;
 
     try {
-      const attemptsRef = collection(db, "quiz_attempts");
-      const attemptCountQuery = query(
-        attemptsRef,
-        where("student_id", "==", user.uid),
-        where("quiz_id", "==", takingQuiz.id),
-      );
-      const attemptCountSnapshot = await getDocs(attemptCountQuery);
-      const attemptNumber = attemptCountSnapshot.size + 1;
-
       const timeTaken = Math.floor(
         (new Date().getTime() - quizStartTime.getTime()) / 1000,
       );
@@ -301,44 +235,31 @@ export default function StudentQuiz() {
         }
       });
 
-      setQuizScore(totalScore);
-
       // Calculate total points
       let total = 0;
       quizQuestions.forEach((question) => {
         total += question.points;
       });
 
+      setQuizScore(totalScore);
       setTotalPoints(total);
 
-      // Save quiz attempt to database for lecturer grading
-      const attemptRef = await addDoc(collection(db, "quiz_attempts"), {
-        quiz_id: takingQuiz.id,
-        student_id: user.uid,
-        answers: answers,
-        attempt_number: attemptNumber,
-        started_at: quizStartTime.toISOString(),
-        completed_at: new Date().toISOString(),
-        score: totalScore, // Always record the calculated score automatically
-        total_points: total,
-        status: "graded", // Always mark as graded since score is calculated
-        time_taken: timeTaken,
-      });
-
-      // Update attempts state
-      setQuizAttempts((prev) => ({
-        ...prev,
-        [takingQuiz.id]: {
-          id: attemptRef.id,
+      // Submit to Django API
+      const API_BASE_URL =
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+      const resp = await fetch(`${API_BASE_URL}/api/quizzes/submit/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           quiz_id: takingQuiz.id,
           student_id: user.uid,
           answers: answers,
-          score: totalScore, // Always use the calculated score
-          total_points: total,
-          completed_at: new Date().toISOString(),
           time_taken: timeTaken,
-        },
-      }));
+        }),
+      });
+
+      if (!resp.ok) throw new Error("Failed to submit quiz");
+      const result = await resp.json();
 
       setShowResults(true);
 

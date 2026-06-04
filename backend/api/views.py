@@ -6,7 +6,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.mail import send_mail
-from django.db import transaction
+from django.db import transaction, models
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
@@ -25,7 +25,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import AssignmentSerializer
-from .models import Assignment
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt
 
 
 OTP_TTL_MINUTES = 10
@@ -368,3 +368,128 @@ class AssignmentListView(APIView):
             for a in qs
         ]
         return Response(data)
+
+
+class QuizListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        from datetime import datetime
+        from django.utils import timezone
+
+        # Filter active quizzes that haven't ended
+        now = timezone.now()
+        qs = Quiz.objects.filter(status="active").filter(
+            models.Q(end_date__isnull=True) | models.Q(end_date__gte=now)
+        )
+        qs = qs.order_by("-created_at")
+
+        data = [
+            {
+                "id": str(q.id),
+                "course_id": q.course_id,
+                "title": q.title,
+                "description": q.description,
+                "time_limit_minutes": q.time_limit_minutes,
+                "max_attempts": q.max_attempts,
+                "passing_score": q.passing_score,
+                "show_answers": q.show_answers,
+                "status": q.status,
+                "start_date": q.start_date.isoformat() if q.start_date else None,
+                "end_date": q.end_date.isoformat() if q.end_date else None,
+                "created_at": q.created_at.isoformat(),
+                "total_questions": q.questions.count(),
+                "total_points": sum(
+                    q.questions.values_list("points", flat=True)
+                ),
+            }
+            for q in qs
+        ]
+        return Response(data)
+
+
+class QuizDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, quiz_id):
+        try:
+            quiz = Quiz.objects.get(id=quiz_id)
+            questions = quiz.questions.all().values(
+                "id",
+                "question",
+                "options",
+                "correct_answer",
+                "points",
+                "explanation",
+            )
+            return Response(
+                {
+                    "id": str(quiz.id),
+                    "course_id": quiz.course_id,
+                    "title": quiz.title,
+                    "description": quiz.description,
+                    "time_limit_minutes": quiz.time_limit_minutes,
+                    "max_attempts": quiz.max_attempts,
+                    "passing_score": quiz.passing_score,
+                    "show_answers": quiz.show_answers,
+                    "status": quiz.status,
+                    "start_date": quiz.start_date.isoformat()
+                    if quiz.start_date
+                    else None,
+                    "end_date": quiz.end_date.isoformat() if quiz.end_date else None,
+                    "created_at": quiz.created_at.isoformat(),
+                    "questions": list(questions),
+                }
+            )
+        except Quiz.DoesNotExist:
+            return Response({"error": "Quiz not found"}, status=404)
+
+
+class QuizSubmitView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        quiz_id = request.data.get("quiz_id")
+        student_id = request.data.get("student_id")
+        answers = request.data.get("answers", {})
+        time_taken = request.data.get("time_taken", 0)
+
+        try:
+            quiz = Quiz.objects.get(id=quiz_id)
+
+            # Calculate score
+            questions = quiz.questions.all()
+            total_score = 0
+            total_points = 0
+
+            for question in questions:
+                total_points += question.points
+                if str(question.id) in answers:
+                    if answers[str(question.id)] == question.correct_answer:
+                        total_score += question.points
+
+            # Create attempt record
+            attempt = QuizAttempt.objects.create(
+                quiz=quiz,
+                student_id=student_id,
+                answers=answers,
+                score=total_score,
+                total_points=total_points,
+                time_taken=time_taken,
+            )
+
+            return Response(
+                {
+                    "id": str(attempt.id),
+                    "score": total_score,
+                    "total_points": total_points,
+                    "completed_at": attempt.completed_at.isoformat(),
+                }
+            )
+        except Quiz.DoesNotExist:
+            return Response({"error": "Quiz not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)

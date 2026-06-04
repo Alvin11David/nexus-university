@@ -9,6 +9,9 @@ from .views import (
     AcademicCalendarView,
     AnnouncementListView,
     AssignmentListView,
+    QuizListView,
+    QuizDetailView,
+    QuizSubmitView,
 )
 
 urlpatterns = [
@@ -19,5 +22,8 @@ urlpatterns = [
     path("programs/", ProgramListView.as_view()),
     path("academic-calendar/", AcademicCalendarView.as_view()),
     path("announcements/", AnnouncementListView.as_view()),
-        path("assignments/", AssignmentListView.as_view()),
+    path("assignments/", AssignmentListView.as_view()),
+    path("quizzes/", QuizListView.as_view()),
+    path("quizzes/<int:quiz_id>/", QuizDetailView.as_view()),
+    path("quizzes/submit/", QuizSubmitView.as_view()),
 ]
