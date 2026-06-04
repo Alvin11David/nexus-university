@@ -111,6 +111,7 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [otpValues, setOtpValues] = useState(["", "", "", ""]);
+  const [otpVerified, setOtpVerified] = useState(false);
   const [studentRecord, setStudentRecord] = useState<any>(null);
   const [isLecturerSignup, setIsLecturerSignup] = useState(false); // Auto-detect based on email
   const [isRegistrarSignup, setIsRegistrarSignup] = useState(false); // Auto-detect based on email
@@ -461,11 +462,18 @@ export default function Auth() {
       if (error) throw error;
 
       if (valid) {
-        toast({
-          title: "Email Verified!",
-          description: "Please set your password.",
-        });
-        setStep("signup-password");
+        // Show success animation
+        setOtpVerified(true);
+        
+        // Wait for animation to complete before moving to next step
+        setTimeout(() => {
+          toast({
+            title: "Email Verified!",
+            description: "Please set your password.",
+          });
+          setStep("signup-password");
+          setOtpVerified(false);
+        }, 2000);
       }
     } catch (error: any) {
       toast({
@@ -1193,63 +1201,138 @@ export default function Auth() {
         return (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
             <div className="text-center mb-6">
-              <div className="h-16 w-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
-                <KeyRound className="h-8 w-8 text-secondary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">
-                Enter Verification Code
-              </h3>
-              <p className="text-muted-foreground text-sm">
-                We've sent a 4-digit code to{" "}
-                <span className="font-medium text-foreground">
-                  {isLecturerSignup || isRegistrarSignup
-                    ? formData.actualEmail
-                    : formData.email}
-                </span>
-              </p>
+              <AnimatePresence mode="wait">
+                {!otpVerified ? (
+                  <motion.div
+                    key="otp-input"
+                    initial={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div className="h-16 w-16 rounded-2xl bg-secondary/10 flex items-center justify-center mx-auto mb-4">
+                      <KeyRound className="h-8 w-8 text-secondary" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">
+                      Enter Verification Code
+                    </h3>
+                    <p className="text-muted-foreground text-sm">
+                      We've sent a 4-digit code to{" "}
+                      <span className="font-medium text-foreground">
+                        {isLecturerSignup || isRegistrarSignup
+                          ? formData.actualEmail
+                          : formData.email}
+                      </span>
+                    </p>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="otp-success"
+                    initial={{ opacity: 0, scale: 0.5 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ 
+                      duration: 0.5,
+                      type: "spring",
+                      stiffness: 200,
+                      damping: 20
+                    }}
+                  >
+                    <motion.div
+                      className="h-20 w-20 rounded-2xl bg-orange-500 flex items-center justify-center mx-auto mb-4"
+                      animate={{
+                        scale: [1, 1.1, 1],
+                        rotate: [0, 5, -5, 0]
+                      }}
+                      transition={{
+                        duration: 0.6,
+                        ease: "easeInOut"
+                      }}
+                    >
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{
+                          delay: 0.2,
+                          type: "spring",
+                          stiffness: 200,
+                          damping: 15
+                        }}
+                      >
+                        <CheckCircle2 className="h-10 w-10 text-white" />
+                      </motion.div>
+                    </motion.div>
+                    <motion.h3
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className="text-lg font-semibold mb-2 text-green-600"
+                    >
+                      Verified!
+                    </motion.h3>
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.4 }}
+                      className="text-muted-foreground text-sm"
+                    >
+                      Your email has been verified successfully
+                    </motion.p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
-            <div className="flex justify-center gap-3">
-              {otpValues.map((value, index) => (
-                <Input
-                  key={index}
-                  ref={(el) => (otpRefs.current[index] = el)}
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={1}
-                  value={value}
-                  onChange={(e) => handleOtpChange(index, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(index, e)}
-                  className="h-16 w-16 text-center text-2xl font-bold rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
-                />
-              ))}
-            </div>
+            <AnimatePresence>
+              {!otpVerified && (
+                <motion.div
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <div className="flex justify-center gap-3">
+                    {otpValues.map((value, index) => (
+                      <Input
+                        key={index}
+                        ref={(el) => (otpRefs.current[index] = el)}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={value}
+                        onChange={(e) => handleOtpChange(index, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(index, e)}
+                        className="h-16 w-16 text-center text-2xl font-bold rounded-xl bg-muted/50 border-border focus:bg-background focus:border-secondary transition-all"
+                      />
+                    ))}
+                  </div>
 
-            <Button
-              type="submit"
-              className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group"
-              disabled={loading || otpValues.some((v) => !v)}
-            >
-              {loading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <>
-                  Verify Code
-                  <CheckCircle2 className="ml-2 h-5 w-5" />
-                </>
+                  <Button
+                    type="submit"
+                    className="w-full h-14 text-base font-semibold bg-secondary text-secondary-foreground hover:bg-secondary/90 rounded-xl shadow-glow group mt-6"
+                    disabled={loading || otpValues.some((v) => !v)}
+                  >
+                    {loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        Verify Code
+                        <CheckCircle2 className="ml-2 h-5 w-5" />
+                      </>
+                    )}
+                  </Button>
+
+                  <p className="text-center text-sm text-muted-foreground mt-4">
+                    Didn't receive the code?{" "}
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      className="text-secondary font-medium hover:text-secondary/80"
+                    >
+                      Resend
+                    </button>
+                  </p>
+                </motion.div>
               )}
-            </Button>
-
-            <p className="text-center text-sm text-muted-foreground">
-              Didn't receive the code?{" "}
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                className="text-secondary font-medium hover:text-secondary/80"
-              >
-                Resend
-              </button>
-            </p>
+            </AnimatePresence>
           </form>
         );
 
