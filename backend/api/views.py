@@ -323,29 +323,11 @@ class AnnouncementListView(APIView):
     permission_classes = []
 
     def get(self, request):
-        announcements = Announcement.objects.all()
-        data = [
-            {
-                "id": str(a.id),
-                "course_id": a.course_id,
-                "author_id": a.author_id,
-                "title": a.title,
-                "content": a.content,
-                "created_at": a.created_at,
-            }
-            for a in announcements
-        ]
-        return Response(data)
-
-
-class AssignmentListView(APIView):
-    authentication_classes = []
-    permission_classes = []
-
-    def get(self, request):
-        # Optional filter: ?course_ids=cid1,cid2
+        author_id = request.query_params.get("author_id")
         course_ids = request.query_params.get("course_ids")
-        qs = Assignment.objects.all()
+        qs = Announcement.objects.all()
+        if author_id:
+            qs = qs.filter(author_id=author_id)
         if course_ids:
             ids = [c.strip() for c in course_ids.split(",") if c.strip()]
             qs = qs.filter(course_id__in=ids)
@@ -353,6 +335,68 @@ class AssignmentListView(APIView):
         data = [
             {
                 "id": str(a.id),
+                "course_id": a.course_id,
+                "author_id": a.author_id,
+                "title": a.title,
+                "content": a.content,
+                "priority": a.priority,
+                "created_at": a.created_at,
+            }
+            for a in qs
+        ]
+        return Response(data)
+
+    def post(self, request):
+        title = (request.data.get("title") or "").strip()
+        content = (request.data.get("content") or "").strip()
+        author_id = request.data.get("author_id")
+        course_id = request.data.get("course_id")
+        priority = request.data.get("priority") or "normal"
+        if not title or not content or not author_id or not course_id:
+            return Response(
+                {"error": "Missing required fields: title, content, author_id, course_id."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        announcement = Announcement.objects.create(
+            title=title,
+            content=content,
+            author_id=author_id,
+            course_id=course_id,
+            priority=priority,
+        )
+        return Response(
+            {
+                "id": str(announcement.id),
+                "course_id": announcement.course_id,
+                "author_id": announcement.author_id,
+                "title": announcement.title,
+                "content": announcement.content,
+                "priority": announcement.priority,
+                "created_at": announcement.created_at,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AssignmentListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        lecturer_id = request.query_params.get("lecturer_id")
+        course_ids = request.query_params.get("course_ids")
+        qs = Assignment.objects.all()
+        if lecturer_id:
+            qs = qs.filter(lecturer_id=lecturer_id)
+        if course_ids:
+            ids = [c.strip() for c in course_ids.split(",") if c.strip()]
+            qs = qs.filter(course_id__in=ids)
+
+        data = [
+            {
+                "id": str(a.id),
+                "lecturer_id": a.lecturer_id,
                 "course_id": a.course_id,
                 "course_title": a.course_title or "",
                 "course_code": a.course_code or "",
@@ -369,25 +413,79 @@ class AssignmentListView(APIView):
         ]
         return Response(data)
 
+    def post(self, request):
+        lecturer_id = request.data.get("lecturer_id")
+        course_id = request.data.get("course_id")
+        title = (request.data.get("title") or "").strip()
+        description = request.data.get("description") or ""
+        due_date = request.data.get("due_date")
+        total_points = request.data.get("total_points") or 100
+        course_title = request.data.get("course_title") or ""
+        course_code = request.data.get("course_code") or ""
+        status_value = request.data.get("status") or "pending"
+
+        if not lecturer_id or not course_id or not title or not due_date:
+            return Response(
+                {"error": "Missing required fields: lecturer_id, course_id, title, due_date."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            assignment = Assignment.objects.create(
+                lecturer_id=lecturer_id,
+                course_id=course_id,
+                course_title=course_title,
+                course_code=course_code,
+                title=title,
+                description=description,
+                due_date=due_date,
+                total_points=int(total_points),
+                status=status_value,
+            )
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "id": str(assignment.id),
+                "lecturer_id": assignment.lecturer_id,
+                "course_id": assignment.course_id,
+                "course_title": assignment.course_title,
+                "course_code": assignment.course_code,
+                "title": assignment.title,
+                "description": assignment.description,
+                "due_date": assignment.due_date.isoformat(),
+                "total_points": assignment.total_points,
+                "instruction_document_url": assignment.instruction_document_url,
+                "instruction_document_name": assignment.instruction_document_name,
+                "status": assignment.status,
+                "created_at": assignment.created_at,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class QuizListView(APIView):
     authentication_classes = []
     permission_classes = []
 
     def get(self, request):
+        lecturer_id = request.query_params.get("lecturer_id")
         from datetime import datetime
         from django.utils import timezone
 
-        # Filter active quizzes that haven't ended
         now = timezone.now()
         qs = Quiz.objects.filter(status="active").filter(
             models.Q(end_date__isnull=True) | models.Q(end_date__gte=now)
         )
+        if lecturer_id:
+            qs = qs.filter(lecturer_id=lecturer_id)
         qs = qs.order_by("-created_at")
 
         data = [
             {
                 "id": str(q.id),
+                "lecturer_id": q.lecturer_id,
                 "course_id": q.course_id,
                 "title": q.title,
                 "description": q.description,
@@ -407,6 +505,109 @@ class QuizListView(APIView):
             for q in qs
         ]
         return Response(data)
+
+    def post(self, request):
+        lecturer_id = request.data.get("lecturer_id")
+        course_id = request.data.get("course_id")
+        title = (request.data.get("title") or "").strip()
+        description = request.data.get("description") or ""
+        time_limit_minutes = request.data.get("time_limit_minutes") or 30
+        max_attempts = request.data.get("max_attempts") or 1
+        passing_score = request.data.get("passing_score") or 60
+        show_answers = bool(request.data.get("show_answers", True))
+        status_value = request.data.get("status") or "draft"
+        start_date = request.data.get("start_date")
+        end_date = request.data.get("end_date")
+
+        if not lecturer_id or not course_id or not title:
+            return Response(
+                {"error": "Missing required fields: lecturer_id, course_id, title."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            quiz = Quiz.objects.create(
+                lecturer_id=lecturer_id,
+                course_id=course_id,
+                title=title,
+                description=description,
+                time_limit_minutes=int(time_limit_minutes),
+                max_attempts=int(max_attempts),
+                passing_score=int(passing_score),
+                show_answers=show_answers,
+                status=status_value,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "id": str(quiz.id),
+                "lecturer_id": quiz.lecturer_id,
+                "course_id": quiz.course_id,
+                "title": quiz.title,
+                "description": quiz.description,
+                "time_limit_minutes": quiz.time_limit_minutes,
+                "max_attempts": quiz.max_attempts,
+                "passing_score": quiz.passing_score,
+                "show_answers": quiz.show_answers,
+                "status": quiz.status,
+                "start_date": quiz.start_date.isoformat() if quiz.start_date else None,
+                "end_date": quiz.end_date.isoformat() if quiz.end_date else None,
+                "created_at": quiz.created_at.isoformat(),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class StudentListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        students = StudentRecord.objects.filter(is_registered=True)
+        data = [
+            {
+                "id": str(s.id),
+                "full_name": s.full_name,
+                "registration_number": s.registration_number,
+                "student_number": s.student_number,
+                "email": s.email,
+            }
+            for s in students
+        ]
+        return Response(data)
+
+
+class LecturerSummaryView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        lecturer_id = request.query_params.get("lecturer_id")
+        if not lecturer_id:
+            return Response(
+                {"error": "lecturer_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        assignments_count = Assignment.objects.filter(lecturer_id=lecturer_id).count()
+        quizzes_count = Quiz.objects.filter(lecturer_id=lecturer_id).count()
+        announcements_count = Announcement.objects.filter(author_id=lecturer_id).count()
+        messages_received = Message.objects.filter(to_user_id=lecturer_id, is_deleted_by_recipient=False).count()
+        messages_sent = Message.objects.filter(from_user_id=lecturer_id, is_deleted_by_sender=False).count()
+
+        return Response(
+            {
+                "assignments_count": assignments_count,
+                "quizzes_count": quizzes_count,
+                "announcements_count": announcements_count,
+                "messages_received": messages_received,
+                "messages_sent": messages_sent,
+            }
+        )
 
 
 class QuizDetailView(APIView):

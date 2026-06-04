@@ -97,9 +97,18 @@ class AcademicEvent(models.Model):
 
 class Announcement(models.Model):
     course_id = models.CharField(max_length=64, blank=True, null=True)
-    author_id = models.CharField(max_length=64, blank=True, null=True)
+    author_id = models.CharField(max_length=255, blank=True, null=True)
     title = models.CharField(max_length=255)
     content = models.TextField()
+    priority = models.CharField(
+        max_length=16,
+        choices=[
+            ("high", "High"),
+            ("normal", "Normal"),
+            ("low", "Low"),
+        ],
+        default="normal",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -111,6 +120,7 @@ class Announcement(models.Model):
 
 
 class Assignment(models.Model):
+    lecturer_id = models.CharField(max_length=255, blank=True, null=True)
     course_id = models.CharField(max_length=64, blank=True, null=True)
     course_title = models.CharField(max_length=255, blank=True, null=True)
     course_code = models.CharField(max_length=64, blank=True, null=True)
@@ -136,6 +146,7 @@ class Assignment(models.Model):
 
 
 class Quiz(models.Model):
+    lecturer_id = models.CharField(max_length=255, blank=True, null=True)
     course_id = models.CharField(max_length=64, blank=True, null=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
