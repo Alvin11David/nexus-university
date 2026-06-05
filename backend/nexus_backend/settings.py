@@ -113,9 +113,12 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# CORS Configuration - allows multiple frontend apps to connect
+# In development: allow all origins. In production: specify allowed origins in env
 CORS_ALLOW_ALL_ORIGINS = DEBUG
-CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
-CORS_ALLOW_CREDENTIALS = False
+CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")
+CORS_ALLOW_CREDENTIALS = True  # Allow cross-origin requests with credentials (tokens)
+CORS_EXPOSE_HEADERS = ["Content-Type"]
 
 INSTALLED_APPS += [
     "rest_framework.authtoken",
@@ -128,6 +131,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
 }
 
 EMAIL_BACKEND = os.getenv(
