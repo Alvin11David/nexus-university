@@ -462,7 +462,7 @@ class AuthSignupView(APIView):
                     "email": user.email,
                     "displayName": user.get_full_name() or None,
                 },
-                "profile": serialize_profile(user),
+                "profile": serialize_profile(user, role),
             },
             status=status.HTTP_201_CREATED,
         )
