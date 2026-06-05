@@ -64,15 +64,27 @@ def resolve_email_from_identifier(identifier: str) -> str | None:
     return normalize_email(student.email) if student else None
 
 
-def serialize_profile(user) -> dict | None:
+def infer_role_from_email(email: str) -> str:
+    normalized_email = normalize_email(email)
+    if normalized_email.endswith("@lecturer.com"):
+        return "lecturer"
+    if normalized_email.endswith("@registrar.com"):
+        return "registrar"
+    return "student"
+
+
+def serialize_profile(user, role: str | None = None) -> dict | None:
     if not user:
         return None
+
+    normalized_email = normalize_email(user.email or "")
+    profile_role = role or infer_role_from_email(normalized_email)
 
     profile_data: dict = {
         "id": str(user.id),
         "email": user.email,
         "full_name": user.get_full_name() if user.get_full_name() else None,
-        "role": "student",
+        "role": profile_role,
         "student_number": None,
         "registration_number": None,
         "department": None,
