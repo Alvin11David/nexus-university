@@ -368,6 +368,19 @@ class AuthLoginView(APIView):
         )
 
 
+class AuthLogoutView(APIView):
+    def post(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response(
+                {"detail": "Authentication credentials were not provided."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        Token.objects.filter(user=user).delete()
+        return Response({"success": True}, status=status.HTTP_200_OK)
+
+
 class AuthSignupView(APIView):
     authentication_classes = []
     permission_classes = []

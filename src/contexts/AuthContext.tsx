@@ -1,6 +1,13 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const AUTH_TOKEN_STORAGE_KEY = "nexus-auth-token";
 
 interface User {
@@ -263,7 +270,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     department?: string,
     college?: string,
     programme?: string,
-  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
+  ): Promise<{
+    error: Error | null;
+    user?: User;
+    profile?: Profile | null;
+  }> => {
     try {
       const response = await postJson<{
         token: string;
@@ -296,7 +307,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (
     identifier: string,
     password: string,
-  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
+  ): Promise<{
+    error: Error | null;
+    user?: User;
+    profile?: Profile | null;
+  }> => {
     try {
       const response = await postJson<{
         token: string;
@@ -321,7 +336,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithStudentId = async (
     identifier: string,
     password: string,
-  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
+  ): Promise<{
+    error: Error | null;
+    user?: User;
+    profile?: Profile | null;
+  }> => {
     return signIn(identifier, password);
   };
 

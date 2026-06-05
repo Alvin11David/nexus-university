@@ -471,7 +471,7 @@ export default function Auth() {
       if (valid) {
         // Show success animation
         setOtpVerified(true);
-        
+
         // Wait for animation to complete before moving to next step
         setTimeout(() => {
           toast({
@@ -508,7 +508,7 @@ export default function Auth() {
       if (valid) {
         // Show success animation
         setOtpVerified(true);
-        
+
         // Wait for animation to complete before moving to next step
         setTimeout(() => {
           toast({
@@ -1266,22 +1266,22 @@ export default function Auth() {
                     initial={{ opacity: 0, scale: 0.5 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.5 }}
-                    transition={{ 
+                    transition={{
                       duration: 0.5,
                       type: "spring",
                       stiffness: 200,
-                      damping: 20
+                      damping: 20,
                     }}
                   >
                     <motion.div
                       className="h-20 w-20 rounded-2xl bg-orange-500 flex items-center justify-center mx-auto mb-4"
                       animate={{
                         scale: [1, 1.1, 1],
-                        rotate: [0, 5, -5, 0]
+                        rotate: [0, 5, -5, 0],
                       }}
                       transition={{
                         duration: 0.6,
-                        ease: "easeInOut"
+                        ease: "easeInOut",
                       }}
                     >
                       <motion.div
@@ -1291,7 +1291,7 @@ export default function Auth() {
                           delay: 0.2,
                           type: "spring",
                           stiffness: 200,
-                          damping: 15
+                          damping: 15,
                         }}
                       >
                         <CheckCircle2 className="h-10 w-10 text-white" />
