@@ -17,6 +17,32 @@ class VerifySignupOtpSerializer(serializers.Serializer):
     otp = serializers.CharField(max_length=8)
 
 
+class LoginSerializer(serializers.Serializer):
+    identifier = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+
+class SignupSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)
+    fullName = serializers.CharField(max_length=255)
+    registrationNumber = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    studentNumber = serializers.CharField(max_length=64, required=False, allow_blank=True)
+    role = serializers.ChoiceField(
+        choices=["student", "lecturer", "admin", "registrar"],
+        default="student",
+        required=False,
+    )
+    department = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    college = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    programme = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+
+class PasswordResetSerializer(serializers.Serializer):
+    identifier = serializers.CharField()
+    newPassword = serializers.CharField(write_only=True)
+
+
 class StudentRecordSerializer(serializers.Serializer):
     id = serializers.CharField()
     full_name = serializers.CharField()

@@ -5,10 +5,12 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.auth import authenticate, get_user_model
 from django.core.mail import send_mail
 from django.db import transaction, models
 from django.utils import timezone
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -41,6 +43,56 @@ def normalize_email(value: str) -> str:
 def validate_email_format(email: str) -> None:
     if "@" not in email or "." not in email.split("@")[-1]:
         raise ValueError("A valid email address is required.")
+
+
+def get_user_model_by_email(email: str):
+    User = get_user_model()
+    return User.objects.filter(email__iexact=email).first()
+
+
+def resolve_email_from_identifier(identifier: str) -> str | None:
+    identifier = identifier.strip()
+    if "@" in identifier:
+        return normalize_email(identifier)
+
+    student = StudentRecord.objects.filter(
+        models.Q(registration_number=identifier) | models.Q(student_number=identifier)
+    ).first()
+    return normalize_email(student.email) if student else None
+
+
+def serialize_profile(user) -> dict | None:
+    if not user:
+        return None
+
+    profile_data: dict = {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.get_full_name() if user.get_full_name() else None,
+        "role": "student",
+        "student_number": None,
+        "registration_number": None,
+        "department": None,
+        "college": None,
+        "programme": None,
+        "phone": None,
+        "bio": None,
+    }
+
+    student = StudentRecord.objects.filter(email__iexact=user.email).first()
+    if student:
+        profile_data.update(
+            {
+                "full_name": student.full_name,
+                "student_number": student.student_number,
+                "registration_number": student.registration_number,
+                "college": student.college,
+                "programme": student.programme,
+                "phone": student.phone,
+            }
+        )
+
+    return profile_data
 
 
 def generate_full_name_from_email(email: str) -> str:
