@@ -2,6 +2,11 @@ from django.urls import path
 
 from .views import (
     HealthView,
+    AuthLoginView,
+    AuthLogoutView,
+    AuthMeView,
+    AuthSignupView,
+    AuthResetPasswordView,
     SendSignupOtpView,
     ValidateStudentRecordView,
     VerifySignupOtpView,
@@ -31,6 +36,11 @@ from .views import (
 
 urlpatterns = [
     path("health/", HealthView.as_view()),
+    path("auth/login/", AuthLoginView.as_view()),
+    path("auth/logout/", AuthLogoutView.as_view()),
+    path("auth/me/", AuthMeView.as_view()),
+    path("auth/signup/", AuthSignupView.as_view()),
+    path("auth/reset-password/", AuthResetPasswordView.as_view()),
     path("auth/validate-student-record/", ValidateStudentRecordView.as_view()),
     path("auth/send-signup-otp/", SendSignupOtpView.as_view()),
     path("auth/verify-signup-otp/", VerifySignupOtpView.as_view()),

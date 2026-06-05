@@ -1,37 +1,14 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-  ReactNode,
-} from "react";
-import {
-  User as FirebaseUser,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  updatePassword,
-} from "firebase/auth";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  updateDoc,
-  onSnapshot,
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-} from "firebase/firestore";
-import { auth, db } from "@/integrations/firebase/client";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const AUTH_TOKEN_STORAGE_KEY = "nexus-auth-token";
 
-// Map Firebase User to a compatible interface if needed, or just use FirebaseUser
-type User = FirebaseUser;
+interface User {
+  uid: string;
+  email: string | null;
+  displayName?: string | null;
+}
+
 type Session = { user: User } | null;
 
 interface Profile {
@@ -76,15 +53,15 @@ interface AuthContextType {
     department?: string,
     college?: string,
     programme?: string,
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ error: Error | null; user?: User; profile?: Profile | null }>;
   signIn: (
     identifier: string,
     password: string,
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ error: Error | null; user?: User; profile?: Profile | null }>;
   signInWithStudentId: (
     identifier: string,
     password: string,
-  ) => Promise<{ error: Error | null }>;
+  ) => Promise<{ error: Error | null; user?: User; profile?: Profile | null }>;
   signOut: () => Promise<void>;
   validateStudent: (
     registrationNumber: string,
@@ -107,23 +84,60 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
+function saveToken(token: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, token);
+}
+
+function clearToken() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
+}
+
 async function postJson<T>(path: string, payload: unknown): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  try {
-    const token = await (auth.currentUser
-      ? auth.currentUser.getIdToken()
-      : null);
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-  } catch (e) {
-    // ignore token retrieval errors and proceed without Authorization header
+
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Token ${token}`;
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers,
     body: JSON.stringify(payload),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const message = data?.detail || data?.error || "Request failed";
+    throw new Error(message);
+  }
+
+  return data as T;
+}
+
+async function getJson<T>(path: string): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  const token = getToken();
+  if (token) {
+    headers["Authorization"] = `Token ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "GET",
+    headers,
   });
 
   const data = await response.json().catch(() => null);
@@ -143,77 +157,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setSession(currentUser ? { user: currentUser } : null);
+    const initialize = async () => {
+      const token = getToken();
+      if (!token) {
+        setLoading(false);
+        return;
+      }
 
-      if (currentUser) {
-        fetchProfile(currentUser.uid);
-      } else {
-        setProfile(null);
+      try {
+        const response = await getJson<{ user: User; profile: Profile | null }>(
+          "/api/auth/me/",
+        );
+
+        setUser(response.user);
+        setSession({ user: response.user });
+        setProfile(response.profile);
+      } catch (error) {
+        clearToken();
+      } finally {
         setLoading(false);
       }
-    });
+    };
 
-    return () => unsubscribe();
+    initialize();
   }, []);
-
-  const fetchProfile = async (userId: string) => {
-    try {
-      const profileDoc = await getDoc(doc(db, "profiles", userId));
-
-      if (profileDoc.exists()) {
-        const data = profileDoc.data() as Profile;
-        setProfile({ ...data, id: userId });
-        console.log("Profile loaded:", { id: userId, role: data.role });
-
-        // Subscribe to real-time profile updates
-        const unsubscribe = onSnapshot(doc(db, "profiles", userId), (doc) => {
-          if (doc.exists()) {
-            setProfile({ ...(doc.data() as Profile), id: userId });
-          }
-        });
-
-        // If student_number is missing, try to get it from student_records
-        if (!data.student_number) {
-          const recordsRef = collection(db, "student_records");
-          const q = query(
-            recordsRef,
-            where("email", "==", data.email),
-            limit(1),
-          );
-          const querySnapshot = await getDocs(q);
-
-          if (!querySnapshot.empty) {
-            const studentRecord = querySnapshot.docs[0].data();
-
-            // Update the profile with student_number and registration_number
-            await updateDoc(doc(db, "profiles", userId), {
-              student_number: studentRecord.student_number,
-              registration_number: studentRecord.registration_number,
-            });
-
-            // Update local state
-            setProfile((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    student_number: studentRecord.student_number,
-                    registration_number: studentRecord.registration_number,
-                  }
-                : null,
-            );
-          }
-        }
-
-        return () => unsubscribe();
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Validate if student exists in the system, create if not
   const validateStudent = async (
@@ -296,159 +263,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     department?: string,
     college?: string,
     programme?: string,
-  ) => {
+  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
     try {
-      const { user } = await createUserWithEmailAndPassword(
-        auth,
+      const response = await postJson<{
+        token: string;
+        user: User;
+        profile: Profile | null;
+      }>("/api/auth/signup/", {
         email,
         password,
-      );
+        fullName,
+        registrationNumber,
+        studentNumber,
+        role,
+        department,
+        college,
+        programme,
+      });
 
-      if (user) {
-        const profileData: any = {
-          full_name: fullName,
-          email: email,
-          role: role,
-          college: college || null,
-          programme: programme || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
+      saveToken(response.token);
+      setUser(response.user);
+      setSession({ user: response.user });
+      setProfile(response.profile);
 
-        if (role === "student") {
-          profileData.student_number = studentNumber;
-          profileData.registration_number = registrationNumber;
-        } else if (role === "lecturer") {
-          profileData.department = department;
-        }
-
-        await setDoc(doc(db, "profiles", user.uid), profileData);
-
-        // Update student record (if student)
-        if (role === "student" && registrationNumber && studentNumber) {
-          const recordsRef = collection(db, "student_records");
-          const q = query(
-            recordsRef,
-            where("registration_number", "==", registrationNumber),
-            where("student_number", "==", studentNumber),
-            limit(1),
-          );
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            await updateDoc(
-              doc(db, "student_records", querySnapshot.docs[0].id),
-              {
-                is_registered: true,
-                full_name: fullName,
-                email: email,
-              },
-            );
-          }
-        }
-      }
-
-      return { error: null };
+      return { error: null, user: response.user, profile: response.profile };
     } catch (error: any) {
-      if (error.code === "auth/email-already-in-use") {
-        return {
-          error: new Error(
-            'An account with this email already exists. Please sign in or use "Forgot Password" to reset your password.',
-          ),
-        };
-      }
-      return { error };
+      return { error: new Error(error.message) };
     }
   };
 
-  // Sign in with email and password (legacy method)
-  const signIn = async (email: string, password: string) => {
+  // Sign in with email or identifier and password
+  const signIn = async (
+    identifier: string,
+    password: string,
+  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      return { error: null };
+      const response = await postJson<{
+        token: string;
+        user: User;
+        profile: Profile | null;
+      }>("/api/auth/login/", {
+        identifier,
+        password,
+      });
+
+      saveToken(response.token);
+      setUser(response.user);
+      setSession({ user: response.user });
+      setProfile(response.profile);
+
+      return { error: null, user: response.user, profile: response.profile };
     } catch (error: any) {
-      return { error };
+      return { error: new Error(error.message) };
     }
   };
 
-  // Sign in with student number or registration number
-  const signInWithStudentId = async (identifier: string, password: string) => {
-    try {
-      // Check if identifier is an email (for lecturers)
-      if (identifier.includes("@")) {
-        await signInWithEmailAndPassword(auth, identifier, password);
-        return { error: null };
-      }
-
-      // First, find the student by registration number or student number in student_records
-      const recordsRef = collection(db, "student_records");
-      const qReg = query(
-        recordsRef,
-        where("registration_number", "==", identifier),
-        limit(1),
-      );
-      const qStu = query(
-        recordsRef,
-        where("student_number", "==", identifier),
-        limit(1),
-      );
-
-      let querySnapshot = await getDocs(qReg);
-      if (querySnapshot.empty) {
-        querySnapshot = await getDocs(qStu);
-      }
-
-      if (querySnapshot.empty) {
-        return {
-          error: new Error(
-            "Student not found. Please check your registration or student number.",
-          ),
-        };
-      }
-
-      const studentData = querySnapshot.docs[0].data();
-
-      // Check if email exists in student record
-      if (!studentData.email) {
-        // Try to find the email from profiles collection
-        const profilesRef = collection(db, "profiles");
-        const qProfReg = query(
-          profilesRef,
-          where("registration_number", "==", identifier),
-          limit(1),
-        );
-        const qProfStu = query(
-          profilesRef,
-          where("student_number", "==", identifier),
-          limit(1),
-        );
-
-        let profSnapshot = await getDocs(qProfReg);
-        if (profSnapshot.empty) {
-          profSnapshot = await getDocs(qProfStu);
-        }
-
-        if (profSnapshot.empty || !profSnapshot.docs[0].data().email) {
-          return {
-            error: new Error(
-              "No email associated with this student. Please contact support.",
-            ),
-          };
-        }
-
-        await signInWithEmailAndPassword(
-          auth,
-          profSnapshot.docs[0].data().email,
-          password,
-        );
-        return { error: null };
-      }
-
-      // Sign in with the email
-      await signInWithEmailAndPassword(auth, studentData.email, password);
-      return { error: null };
-    } catch (error: any) {
-      return { error };
-    }
+  const signInWithStudentId = async (
+    identifier: string,
+    password: string,
+  ): Promise<{ error: Error | null; user?: User; profile?: Profile | null }> => {
+    return signIn(identifier, password);
   };
 
   const resetPassword = async (
@@ -456,86 +330,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     newPassword: string,
   ): Promise<{ error: Error | null }> => {
     try {
-      let targetEmail = identifier;
-
-      // Check if identifier is a student/registration number instead of email
-      if (!identifier.includes("@")) {
-        const recordsRef = collection(db, "student_records");
-        const qReg = query(
-          recordsRef,
-          where("registration_number", "==", identifier),
-          limit(1),
-        );
-        const qStu = query(
-          recordsRef,
-          where("student_number", "==", identifier),
-          limit(1),
-        );
-
-        let querySnapshot = await getDocs(qReg);
-        if (querySnapshot.empty) {
-          querySnapshot = await getDocs(qStu);
-        }
-
-        if (!querySnapshot.empty && querySnapshot.docs[0].data().email) {
-          targetEmail = querySnapshot.docs[0].data().email;
-        } else {
-          // If not in records, check profiles
-          const profilesRef = collection(db, "profiles");
-          const qProfReg = query(
-            profilesRef,
-            where("registration_number", "==", identifier),
-            limit(1),
-          );
-          const qProfStu = query(
-            profilesRef,
-            where("student_number", "==", identifier),
-            limit(1),
-          );
-
-          let profSnapshot = await getDocs(qProfReg);
-          if (profSnapshot.empty) {
-            profSnapshot = await getDocs(qProfStu);
-          }
-
-          if (!profSnapshot.empty && profSnapshot.docs[0].data().email) {
-            targetEmail = profSnapshot.docs[0].data().email;
-          } else {
-            return {
-              error: new Error(
-                "No account found with this identifier or no email is linked.",
-              ),
-            };
-          }
-        }
-      }
-
-      // Check if we are currently logged in as this user
-      const currentUser = auth.currentUser;
-      if (currentUser && currentUser.email === targetEmail) {
-        // Legitimate update
-        await updatePassword(currentUser, newPassword);
-        return { error: null };
-      }
-
-      // FOR DEMO PURPOSES: We return success without modifying Firebase Auth directly,
-      // since Client SDK forbids unauthenticated password changes without the old password.
-      // In a real application, you would invoke a Firebase Cloud Function here.
-      console.log(`[Demo Mode] Password reset simulated for ${targetEmail}`);
-
+      await postJson<{ success: boolean }>("/api/auth/reset-password/", {
+        identifier,
+        newPassword,
+      });
       return { error: null };
     } catch (error: any) {
-      return {
-        error:
-          error instanceof Error
-            ? error
-            : new Error("Failed to reset password"),
-      };
+      return { error: new Error(error.message) };
     }
   };
 
   const signOut = async () => {
-    await firebaseSignOut(auth);
+    try {
+      await postJson<{ success: boolean }>("/api/auth/logout/", {});
+    } catch {
+      // ignore logout errors - still clear local token
+    }
+    clearToken();
+    setUser(null);
+    setSession(null);
     setProfile(null);
   };
 

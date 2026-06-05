@@ -34,8 +34,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
-import { doc, getDoc, addDoc, collection, getDocs } from "firebase/firestore";
-import { auth, db } from "@/integrations/firebase/client";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "@/integrations/firebase/client";
 
 type AuthStep =
   | "signin"
@@ -329,21 +329,15 @@ export default function Auth() {
     setLoading(true);
 
     try {
-      const { error } = await signInWithStudentId(
+      const { error, profile } = await signInWithStudentId(
         formData.identifier,
         formData.password,
       );
       if (error) throw error;
 
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        const profileDoc = await getDoc(doc(db, "profiles", currentUser.uid));
-        const profileData = profileDoc.exists() ? profileDoc.data() : null;
-
-        const userRole = profileData?.role || "student";
-        toast({ title: "Welcome back!" });
-        navigate(userRole === "lecturer" ? "/lecturer" : "/dashboard");
-      }
+      const userRole = profile?.role || "student";
+      toast({ title: "Welcome back!" });
+      navigate(userRole === "lecturer" ? "/lecturer" : "/dashboard");
     } catch (error: any) {
       toast({
         title: "Error",
@@ -616,17 +610,6 @@ export default function Auth() {
         }
         throw error;
       }
-
-      // Save sign-up details to Firestore 'Sign Up' collection
-      await addDoc(collection(db, "Sign Up"), {
-        ...formData,
-        createdAt: new Date().toISOString(),
-        role: isLecturerSignup
-          ? "lecturer"
-          : isRegistrarSignup
-            ? "registrar"
-            : "student",
-      });
 
       toast({
         title: "Account Created!",

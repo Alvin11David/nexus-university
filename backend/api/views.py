@@ -16,7 +16,10 @@ from rest_framework.views import APIView
 
 from .models import OtpVerification, StudentRecord
 from .serializers import (
+    LoginSerializer,
+    PasswordResetSerializer,
     SendSignupOtpSerializer,
+    SignupSerializer,
     StudentRecordSerializer,
     ValidateStudentRecordSerializer,
     VerifySignupOtpSerializer,
@@ -324,6 +327,169 @@ class VerifySignupOtpView(APIView):
         verification.save(update_fields=["verified", "verified_at"])
 
         return Response({"valid": True}, status=status.HTTP_200_OK)
+
+
+class AuthLoginView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        identifier = serializer.validated_data["identifier"].strip()
+        password = serializer.validated_data["password"]
+        email = resolve_email_from_identifier(identifier)
+        if not email:
+            return Response(
+                {"detail": "No account associated with this identifier."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user = authenticate(request, username=email, password=password)
+        if user is None:
+            return Response(
+                {"detail": "Invalid credentials."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response(
+            {
+                "token": token.key,
+                "user": {
+                    "uid": str(user.id),
+                    "email": user.email,
+                    "displayName": user.get_full_name() or None,
+                },
+                "profile": serialize_profile(user),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AuthSignupView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = SignupSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = normalize_email(serializer.validated_data["email"])
+        password = serializer.validated_data["password"]
+        full_name = serializer.validated_data["fullName"].strip()
+        registration_number = serializer.validated_data.get("registrationNumber") or None
+        student_number = serializer.validated_data.get("studentNumber") or None
+        role = serializer.validated_data.get("role") or "student"
+        department = serializer.validated_data.get("department") or None
+        college = serializer.validated_data.get("college") or None
+        programme = serializer.validated_data.get("programme") or None
+
+        try:
+            validate_email_format(email)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        if User.objects.filter(username__iexact=email).exists() or User.objects.filter(email__iexact=email).exists():
+            return Response(
+                {"detail": "An account with this email already exists."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        first_name, *last_name_parts = full_name.split()
+        last_name = " ".join(last_name_parts) if last_name_parts else ""
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+        if role == "student" and registration_number and student_number:
+            student_record, created = StudentRecord.objects.get_or_create(
+                registration_number=registration_number,
+                student_number=student_number,
+                defaults={
+                    "email": email,
+                    "full_name": full_name,
+                    "is_registered": True,
+                    "college": college,
+                    "programme": programme,
+                },
+            )
+            if not created:
+                student_record.email = email
+                student_record.full_name = full_name
+                student_record.is_registered = True
+                student_record.college = college or student_record.college
+                student_record.programme = programme or student_record.programme
+                student_record.save(update_fields=["email", "full_name", "is_registered", "college", "programme", "updated_at"])
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response(
+            {
+                "token": token.key,
+                "user": {
+                    "uid": str(user.id),
+                    "email": user.email,
+                    "displayName": user.get_full_name() or None,
+                },
+                "profile": serialize_profile(user),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class AuthMeView(APIView):
+    def get(self, request):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        return Response(
+            {
+                "user": {
+                    "uid": str(user.id),
+                    "email": user.email,
+                    "displayName": user.get_full_name() or None,
+                },
+                "profile": serialize_profile(user),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AuthResetPasswordView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        identifier = serializer.validated_data["identifier"].strip()
+        new_password = serializer.validated_data["newPassword"]
+
+        email = resolve_email_from_identifier(identifier)
+        if not email:
+            return Response(
+                {"detail": "No account associated with this identifier."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user = get_user_model_by_email(email)
+        if not user:
+            return Response(
+                {"detail": "No user account found for this email."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        return Response({"success": True}, status=status.HTTP_200_OK)
 
 
 class ProgramListView(APIView):
