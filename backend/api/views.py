@@ -14,7 +14,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import OtpVerification, StudentRecord
+from .models import Course, CourseUnit, OtpVerification, StudentRecord, Profile, Registrar, FeeAssignment, StudentGrade, Activity, SignUp
 from .serializers import (
     LoginSerializer,
     PasswordResetSerializer,
@@ -29,7 +29,7 @@ from .serializers import ProgramSerializer, AcademicEventSerializer
 from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
-from .serializers import AssignmentSerializer
+from .serializers import CourseSerializer, CourseUnitSerializer, AssignmentSerializer, ProfileSerializer, RegistrarSerializer, FeeAssignmentSerializer, StudentGradeSerializer, ActivitySerializer, SignUpSerializer
 from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings
 
 
@@ -1424,3 +1424,457 @@ class StudentSettingsView(APIView):
             return Response(data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({"error": str(e)}, status=400)
+
+
+class CourseListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = Course.objects.all()
+        college = request.query_params.get("college")
+        if college:
+            qs = qs.filter(college=college)
+        serializer = CourseSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = CourseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        course = Course.objects.create(**serializer.validated_data)
+        return Response(CourseSerializer(course).data, status=status.HTTP_201_CREATED)
+
+
+class CourseDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get_object(self, pk):
+        try:
+            return Course.objects.get(pk=pk)
+        except Course.DoesNotExist:
+            return None
+
+    def get(self, request, course_id):
+        course = self.get_object(course_id)
+        if not course:
+            return Response({"error": "Course not found"}, status=404)
+        return Response(CourseSerializer(course).data)
+
+    def put(self, request, course_id):
+        course = self.get_object(course_id)
+        if not course:
+            return Response({"error": "Course not found"}, status=404)
+        serializer = CourseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        for attr, value in serializer.validated_data.items():
+            setattr(course, attr, value)
+        course.save()
+        return Response(CourseSerializer(course).data)
+
+    def delete(self, request, course_id):
+        course = self.get_object(course_id)
+        if not course:
+            return Response({"error": "Course not found"}, status=404)
+        course.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class CourseUnitListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = CourseUnit.objects.all()
+        course_id = request.query_params.get("course_id")
+        if course_id:
+            qs = qs.filter(course_id=course_id)
+        serializer = CourseUnitSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = CourseUnitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        course_id = data.pop("course_id")
+        try:
+            course = Course.objects.get(pk=course_id)
+        except Course.DoesNotExist:
+            return Response({"error": "Course not found"}, status=404)
+        unit = CourseUnit.objects.create(course=course, **data)
+        return Response(CourseUnitSerializer(unit).data, status=status.HTTP_201_CREATED)
+
+
+class CourseUnitDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get_object(self, pk):
+        try:
+            return CourseUnit.objects.get(pk=pk)
+        except CourseUnit.DoesNotExist:
+            return None
+
+    def put(self, request, unit_id):
+        unit = self.get_object(unit_id)
+        if not unit:
+            return Response({"error": "Course unit not found"}, status=404)
+        serializer = CourseUnitSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        data = serializer.validated_data
+        course_id = data.pop("course_id", None)
+        if course_id:
+            try:
+                unit.course = Course.objects.get(pk=course_id)
+            except Course.DoesNotExist:
+                return Response({"error": "Course not found"}, status=404)
+        for attr, value in data.items():
+            setattr(unit, attr, value)
+        unit.save()
+        return Response(CourseUnitSerializer(unit).data)
+
+    def delete(self, request, unit_id):
+        unit = self.get_object(unit_id)
+        if not unit:
+            return Response({"error": "Course unit not found"}, status=404)
+        unit.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProfileListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = Profile.objects.all()
+        role = request.query_params.get("role")
+        if role:
+            qs = qs.filter(role=role)
+        serializer = ProfileSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ProfileSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        profile = Profile.objects.create(**serializer.validated_data)
+        return Response(ProfileSerializer(profile).data, status=status.HTTP_201_CREATED)
+
+
+class ProfileDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get_object(self, pk):
+        try:
+            return Profile.objects.get(pk=pk)
+        except Profile.DoesNotExist:
+            return None
+
+    def get(self, request, profile_id):
+        profile = self.get_object(profile_id)
+        if not profile:
+            return Response({"error": "Profile not found"}, status=404)
+        return Response(ProfileSerializer(profile).data)
+
+    def put(self, request, profile_id):
+        profile = self.get_object(profile_id)
+        if not profile:
+            return Response({"error": "Profile not found"}, status=404)
+        serializer = ProfileSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        for attr, value in serializer.validated_data.items():
+            setattr(profile, attr, value)
+        profile.save()
+        return Response(ProfileSerializer(profile).data)
+
+    def delete(self, request, profile_id):
+        profile = self.get_object(profile_id)
+        if not profile:
+            return Response({"error": "Profile not found"}, status=404)
+        profile.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class RegistrarDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, user_id):
+        try:
+            registrar = Registrar.objects.get(user_id=user_id)
+        except Registrar.DoesNotExist:
+            return Response({"error": "Registrar not found"}, status=404)
+        return Response(RegistrarSerializer(registrar).data)
+
+    def put(self, request, user_id):
+        try:
+            registrar = Registrar.objects.get(user_id=user_id)
+        except Registrar.DoesNotExist:
+            return Response({"error": "Registrar not found"}, status=404)
+        serializer = RegistrarSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        for attr, value in serializer.validated_data.items():
+            setattr(registrar, attr, value)
+        registrar.save()
+        return Response(RegistrarSerializer(registrar).data)
+
+    def post(self, request, user_id):
+        data = request.data.copy()
+        data["user_id"] = user_id
+        serializer = RegistrarSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        registrar = Registrar.objects.create(**serializer.validated_data)
+        return Response(RegistrarSerializer(registrar).data, status=status.HTTP_201_CREATED)
+
+
+class FeeAssignmentListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = FeeAssignment.objects.all()
+        college = request.query_params.get("college")
+        if college:
+            qs = qs.filter(college=college)
+        serializer = FeeAssignmentSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = FeeAssignmentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        fee = FeeAssignment.objects.create(**serializer.validated_data)
+        return Response(FeeAssignmentSerializer(fee).data, status=status.HTTP_201_CREATED)
+
+
+class FeeAssignmentDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get_object(self, pk):
+        try:
+            return FeeAssignment.objects.get(pk=pk)
+        except FeeAssignment.DoesNotExist:
+            return None
+
+    def put(self, request, fee_id):
+        fee = self.get_object(fee_id)
+        if not fee:
+            return Response({"error": "Fee not found"}, status=404)
+        serializer = FeeAssignmentSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        for attr, value in serializer.validated_data.items():
+            setattr(fee, attr, value)
+        fee.save()
+        return Response(FeeAssignmentSerializer(fee).data)
+
+    def delete(self, request, fee_id):
+        fee = self.get_object(fee_id)
+        if not fee:
+            return Response({"error": "Fee not found"}, status=404)
+        fee.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AcademicCalendarEventListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        events = AcademicEvent.objects.all()
+        data = [
+            {
+                "id": str(e.id),
+                "title": e.title,
+                "date": e.date.isoformat(),
+                "dueDate": e.due_date.isoformat() if e.due_date else None,
+                "type": e.type,
+                "description": e.description,
+                "isActive": e.is_active,
+            }
+            for e in events
+        ]
+        return Response(data)
+
+    def post(self, request):
+        title = request.data.get("title", "").strip()
+        if not title:
+            return Response({"error": "Title is required"}, status=400)
+        event = AcademicEvent.objects.create(
+            title=title,
+            description=request.data.get("description", ""),
+            date=request.data.get("date"),
+            due_date=request.data.get("dueDate"),
+            type=request.data.get("type", ""),
+            is_active=request.data.get("isActive", True),
+        )
+        return Response(
+            {
+                "id": str(event.id),
+                "title": event.title,
+                "date": event.date.isoformat(),
+                "dueDate": event.due_date.isoformat() if event.due_date else None,
+                "type": event.type,
+                "description": event.description,
+                "isActive": event.is_active,
+            },
+            status=201,
+        )
+
+
+class AcademicCalendarEventDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def put(self, request, event_id):
+        try:
+            event = AcademicEvent.objects.get(pk=event_id)
+        except AcademicEvent.DoesNotExist:
+            return Response({"error": "Event not found"}, status=404)
+        if "isActive" in request.data:
+            event.is_active = request.data["isActive"]
+        if "title" in request.data:
+            event.title = request.data["title"]
+        if "description" in request.data:
+            event.description = request.data["description"]
+        if "date" in request.data:
+            event.date = request.data["date"]
+        if "dueDate" in request.data:
+            event.due_date = request.data["dueDate"]
+        if "type" in request.data:
+            event.type = request.data["type"]
+        event.save()
+        return Response(
+            {
+                "id": str(event.id),
+                "title": event.title,
+                "date": event.date.isoformat(),
+                "dueDate": event.due_date.isoformat() if event.due_date else None,
+                "type": event.type,
+                "description": event.description,
+                "isActive": event.is_active,
+            }
+        )
+
+    def delete(self, request, event_id):
+        try:
+            event = AcademicEvent.objects.get(pk=event_id)
+        except AcademicEvent.DoesNotExist:
+            return Response({"error": "Event not found"}, status=404)
+        event.delete()
+        return Response(status=204)
+
+
+class StudentGradeListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = StudentGrade.objects.all()
+        student_id = request.query_params.get("student_id")
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        serializer = StudentGradeSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def put(self, request, grade_id):
+        try:
+            grade = StudentGrade.objects.get(pk=grade_id)
+        except StudentGrade.DoesNotExist:
+            return Response({"error": "Grade not found"}, status=404)
+        serializer = StudentGradeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        for attr, value in serializer.validated_data.items():
+            setattr(grade, attr, value)
+        grade.save()
+        return Response(StudentGradeSerializer(grade).data)
+
+
+class ActivityListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = Activity.objects.all()
+        limit = request.query_params.get("limit")
+        if limit:
+            try:
+                qs = qs[:int(limit)]
+            except (ValueError, TypeError):
+                pass
+        serializer = ActivitySerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = ActivitySerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        activity = Activity.objects.create(**serializer.validated_data)
+        return Response(ActivitySerializer(activity).data, status=201)
+
+
+class SignUpListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = SignUp.objects.all()
+        lecturer_id = request.query_params.get("lecturer_id")
+        if lecturer_id:
+            qs = qs.filter(lecturer_id=lecturer_id)
+        course_unit_id = request.query_params.get("course_unit_id")
+        if course_unit_id:
+            qs = qs.filter(course_unit_id=course_unit_id)
+        serializer = SignUpSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        serializer = SignUpSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        signup = SignUp.objects.create(**serializer.validated_data)
+        return Response(SignUpSerializer(signup).data, status=201)
+
+    def delete(self, request):
+        signup_id = request.query_params.get("id")
+        lecturer_id = request.query_params.get("lecturer_id")
+        course_unit_id = request.query_params.get("course_unit_id")
+        if signup_id:
+            try:
+                signup = SignUp.objects.get(pk=signup_id)
+            except SignUp.DoesNotExist:
+                return Response({"error": "SignUp not found"}, status=404)
+            signup.delete()
+            return Response(status=204)
+        if lecturer_id and course_unit_id:
+            deleted, _ = SignUp.objects.filter(lecturer_id=lecturer_id, course_unit_id=course_unit_id).delete()
+            return Response(status=204)
+        return Response({"error": "Provide id or lecturer_id + course_unit_id"}, status=400)
+
+    def put(self, request):
+        data = request.data
+        lecturer_id = data.get("lecturer_id")
+        course_unit_id = data.get("course_unit_id")
+        if not lecturer_id or not course_unit_id:
+            return Response({"error": "lecturer_id and course_unit_id required"}, status=400)
+        existing = SignUp.objects.filter(lecturer_id=lecturer_id, course_unit_id=course_unit_id).first()
+        if existing:
+            for attr, value in data.items():
+                setattr(existing, attr, value)
+            existing.save()
+            return Response(SignUpSerializer(existing).data)
+        serializer = SignUpSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        signup = SignUp.objects.create(**serializer.validated_data)
+        return Response(SignUpSerializer(signup).data, status=201)

@@ -81,6 +81,123 @@ class AnnouncementSerializer(serializers.Serializer):
     created_at = serializers.DateTimeField()
 
 
+class CourseSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    code = serializers.CharField(max_length=20)
+    name = serializers.CharField(max_length=255)
+    college = serializers.CharField(max_length=255)
+    department = serializers.CharField(max_length=255)
+    duration_years = serializers.IntegerField()
+    fee_structure = serializers.JSONField(default=list)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class CourseUnitSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    code = serializers.CharField(max_length=20)
+    name = serializers.CharField(max_length=255)
+    course_id = serializers.CharField()
+    semester = serializers.IntegerField()
+    year = serializers.IntegerField()
+    credits = serializers.IntegerField()
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class ProfileSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    role = serializers.ChoiceField(choices=["student", "lecturer"])
+    full_name = serializers.CharField(allow_blank=True, default="")
+    email = serializers.CharField(allow_blank=True, default="")
+    department = serializers.CharField(allow_blank=True, default="")
+    college = serializers.CharField(allow_blank=True, default="")
+    avatar_url = serializers.CharField(allow_blank=True, default="")
+    is_registered = serializers.BooleanField(default=False)
+    student_number = serializers.CharField(allow_blank=True, default="")
+    registration_number = serializers.CharField(allow_blank=True, default="")
+    program = serializers.CharField(allow_blank=True, default="")
+    year_of_study = serializers.IntegerField(default=1)
+    status = serializers.CharField(allow_blank=True, default="Active")
+    admission_date = serializers.CharField(allow_blank=True, default="")
+    lecturer_number = serializers.CharField(allow_blank=True, default="")
+    phone = serializers.CharField(allow_blank=True, default="")
+    address = serializers.CharField(allow_blank=True, default="")
+    bio = serializers.CharField(allow_blank=True, default="")
+    specialization = serializers.CharField(allow_blank=True, default="")
+    employment_date = serializers.CharField(allow_blank=True, default="")
+    assigned_course_units = serializers.JSONField(default=list)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class RegistrarSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    user_id = serializers.CharField()
+    email = serializers.EmailField(allow_blank=True, default="")
+    first_name = serializers.CharField(allow_blank=True, default="")
+    last_name = serializers.CharField(allow_blank=True, default="")
+    employee_id = serializers.CharField(allow_blank=True, default="")
+    department = serializers.CharField(allow_blank=True, default="")
+    college = serializers.CharField(allow_blank=True, default="")
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class FeeAssignmentSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    item_name = serializers.CharField()
+    category = serializers.CharField(allow_blank=True, default="")
+    year_level = serializers.IntegerField(default=1)
+    semester = serializers.IntegerField(default=1)
+    academic_year = serializers.CharField()
+    amount = serializers.FloatField(default=0)
+    currency = serializers.CharField(allow_blank=True, default="UGX")
+    college = serializers.CharField(allow_blank=True, default="")
+    notes = serializers.CharField(allow_blank=True, default="")
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class StudentGradeSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    student_id = serializers.CharField()
+    course_id = serializers.CharField(allow_blank=True, default="")
+    academic_year = serializers.CharField()
+    semester = serializers.CharField()
+    total = serializers.FloatField(default=0)
+    grade = serializers.CharField(allow_blank=True, default="")
+    gp = serializers.FloatField(default=0)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+
+class ActivitySerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    action = serializers.CharField()
+    entity = serializers.CharField(allow_blank=True, default="")
+    entity_id = serializers.CharField(allow_blank=True, default="")
+    entity_name = serializers.CharField(allow_blank=True, default="")
+    details = serializers.CharField(allow_blank=True, default="")
+    timestamp = serializers.DateTimeField(read_only=True)
+    user_id = serializers.CharField(allow_blank=True, default="")
+    user_name = serializers.CharField(allow_blank=True, default="")
+
+
+class SignUpSerializer(serializers.Serializer):
+    id = serializers.CharField(read_only=True)
+    lecturer_id = serializers.CharField()
+    lecturer_name = serializers.CharField(allow_blank=True, default="")
+    lecturer_email = serializers.CharField(allow_blank=True, default="")
+    course_unit_id = serializers.CharField()
+    course_unit_code = serializers.CharField(allow_blank=True, default="")
+    course_unit_name = serializers.CharField(allow_blank=True, default="")
+    course_id = serializers.CharField(allow_blank=True, default="")
+    assigned_by = serializers.CharField(allow_blank=True, default="")
+    assigned_at = serializers.DateTimeField(read_only=True)
+    status = serializers.CharField(allow_blank=True, default="active")
+
+
 class AssignmentSerializer(serializers.Serializer):
     id = serializers.CharField()
     course_id = serializers.CharField(allow_null=True)
