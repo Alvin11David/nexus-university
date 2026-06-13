@@ -494,6 +494,41 @@ class ClassroomEnrollment(models.Model):
         return f"{self.student_id} in {self.classroom.name} ({self.role})"
 
 
+class Schedule(models.Model):
+    course_id = models.CharField(max_length=64)
+    day_of_week = models.IntegerField()
+    start_time = models.CharField(max_length=16)
+    end_time = models.CharField(max_length=16)
+    room = models.CharField(max_length=64, blank=True, default="")
+    building = models.CharField(max_length=128, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["day_of_week", "start_time"]
+
+    def __str__(self) -> str:
+        return f"Schedule: course {self.course_id} on day {self.day_of_week}"
+
+
+class StudentFee(models.Model):
+    student_id = models.CharField(max_length=255)
+    amount = models.FloatField(default=0)
+    paid_amount = models.FloatField(default=0)
+    due_date = models.DateTimeField()
+    semester = models.CharField(max_length=32, blank=True, default="")
+    academic_year = models.CharField(max_length=32, blank=True, default="")
+    description = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-due_date"]
+
+    def __str__(self) -> str:
+        return f"Fee: {self.student_id} - {self.amount}"
+
+
 class Submission(models.Model):
     assignment_id = models.CharField(max_length=64)
     student_id = models.CharField(max_length=255)

@@ -30,7 +30,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import CourseSerializer, CourseUnitSerializer, AssignmentSerializer, ProfileSerializer, RegistrarSerializer, FeeAssignmentSerializer, StudentGradeSerializer, ActivitySerializer, SignUpSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings, Enrollment, LiveSession, Classroom, ClassroomEnrollment, Submission
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings, Enrollment, LiveSession, Classroom, ClassroomEnrollment, Submission, Schedule, StudentFee
 
 
 OTP_TTL_MINUTES = 10
@@ -2134,6 +2134,109 @@ class ClassroomJoinView(APIView):
             "student_id": enrollment.student_id,
             "enrolled_at": enrollment.enrolled_at.isoformat(),
         }, status=201)
+
+
+class EnrollmentListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        student_id = request.query_params.get("student_id")
+        course_ids_param = request.query_params.get("course_ids")
+        qs = Enrollment.objects.all()
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        if course_ids_param:
+            ids = [c.strip() for c in course_ids_param.split(",") if c.strip()]
+            qs = qs.filter(course_id__in=ids)
+        data = [
+            {
+                "id": str(e.id),
+                "student_id": e.student_id,
+                "course_id": e.course_id,
+                "status": e.status,
+                "enrolled_at": e.enrolled_at.isoformat(),
+            }
+            for e in qs
+        ]
+        return Response(data)
+
+
+class SubmissionListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        student_id = request.query_params.get("student_id")
+        assignment_ids = request.query_params.get("assignment_ids")
+        qs = Submission.objects.all()
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        if assignment_ids:
+            ids = [a.strip() for a in assignment_ids.split(",") if a.strip()]
+            qs = qs.filter(assignment_id__in=ids)
+        data = [
+            {
+                "id": str(s.id),
+                "assignment_id": s.assignment_id,
+                "student_id": s.student_id,
+                "status": s.status,
+                "score": s.score if hasattr(s, 'score') else None,
+                "feedback": s.feedback if hasattr(s, 'feedback') else None,
+                "submitted_at": s.submitted_at.isoformat(),
+            }
+            for s in qs
+        ]
+        return Response(data)
+
+
+class ScheduleListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        qs = Schedule.objects.all()
+        course_ids = request.query_params.get("course_ids")
+        if course_ids:
+            ids = [c.strip() for c in course_ids.split(",") if c.strip()]
+            qs = qs.filter(course_id__in=ids)
+        data = [
+            {
+                "id": str(s.id),
+                "course_id": s.course_id,
+                "day_of_week": s.day_of_week,
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "room": s.room,
+                "building": s.building,
+            }
+            for s in qs
+        ]
+        return Response(data)
+
+
+class StudentFeeListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        student_id = request.query_params.get("student_id")
+        qs = StudentFee.objects.all()
+        if student_id:
+            qs = qs.filter(student_id=student_id)
+        data = [
+            {
+                "id": str(f.id),
+                "amount": f.amount,
+                "paid_amount": f.paid_amount,
+                "due_date": f.due_date.isoformat(),
+                "semester": f.semester,
+                "academic_year": f.academic_year,
+                "description": f.description,
+            }
+            for f in qs
+        ]
+        return Response(data)
 
 
 class ActivityListView(APIView):
