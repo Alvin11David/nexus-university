@@ -440,6 +440,7 @@ class Enrollment(models.Model):
     student_id = models.CharField(max_length=255)
     course_id = models.CharField(max_length=64)
     status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="approved")
+    grade = models.FloatField(null=True, blank=True)
     enrolled_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

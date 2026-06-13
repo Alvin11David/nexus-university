@@ -2149,16 +2149,53 @@ class EnrollmentListView(APIView):
         if course_ids_param:
             ids = [c.strip() for c in course_ids_param.split(",") if c.strip()]
             qs = qs.filter(course_id__in=ids)
-        data = [
-            {
+
+        course_unit_cache = {}
+        course_cache = {}
+        def resolve_course(course_id: str):
+            if course_id in course_unit_cache:
+                return course_unit_cache[course_id]
+            if course_id in course_cache:
+                return course_cache[course_id]
+            try:
+                unit = CourseUnit.objects.get(pk=course_id)
+                course_unit_cache[course_id] = unit
+                return unit
+            except (CourseUnit.DoesNotExist, ValueError):
+                pass
+            try:
+                course = Course.objects.get(pk=course_id)
+                course_cache[course_id] = course
+                return course
+            except (Course.DoesNotExist, ValueError):
+                pass
+            return None
+
+        def serialize_course(obj):
+            if obj is None:
+                return None
+            if hasattr(obj, 'code') and hasattr(obj, 'name'):
+                return {
+                    "id": str(obj.id),
+                    "code": obj.code,
+                    "title": obj.name,
+                    "credits": obj.credits if hasattr(obj, 'credits') else 3,
+                    "semester": obj.semester if hasattr(obj, 'semester') else "",
+                }
+            return None
+
+        data = []
+        for e in qs:
+            course_obj = resolve_course(str(e.course_id)) if e.course_id else None
+            data.append({
                 "id": str(e.id),
                 "student_id": e.student_id,
                 "course_id": e.course_id,
                 "status": e.status,
+                "grade": e.grade,
                 "enrolled_at": e.enrolled_at.isoformat(),
-            }
-            for e in qs
-        ]
+                "course": serialize_course(course_obj),
+            })
         return Response(data)
 
 

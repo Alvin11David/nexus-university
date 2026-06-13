@@ -26,16 +26,25 @@ import {
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-  orderBy,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
+
+interface BackendCourse {
+  id: string;
+  code: string;
+  title: string;
+  credits: number;
+  semester: string;
+}
+
+interface BackendEnrollment {
+  id: string;
+  student_id: string;
+  course_id: string;
+  status: "pending" | "approved" | "rejected" | "completed";
+  grade: number | null;
+  enrolled_at: string;
+  course: BackendCourse | null;
+}
 
 interface Enrollment {
   id: string;
@@ -88,44 +97,29 @@ export default function Enrollment() {
   const fetchEnrollments = async () => {
     if (!user?.uid) return;
     try {
-      const q = query(
-        collection(db, "enrollments"),
-        where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc"),
+      const data = await getBackend<BackendEnrollment[]>(
+        `/api/enrollments/?student_id=${user.uid}`,
+        true,
       );
 
-      const querySnapshot = await getDocs(q);
-      const enrollmentData = querySnapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data(),
-      })) as any[];
-
-      // Manual join: Fetch course details for each enrollment
-      const fullEnrollments = await Promise.all(
-        enrollmentData.map(async (e) => {
-          if (e.course_id) {
-            const courseDoc = await getDoc(
-              doc(db, "course_units", e.course_id),
-            );
-            if (courseDoc.exists()) {
-              const c = courseDoc.data();
-              return {
-                ...e,
-                course: {
-                  id: courseDoc.id,
-                  code: c.code,
-                  title: c.name, // Map 'name' to 'title'
-                  credits: Number(c.credits) || 0,
-                  semester: c.semester,
-                },
-              };
+      const mapped: Enrollment[] = (data || []).map((e) => ({
+        id: e.id,
+        course_id: e.course_id,
+        status: e.status,
+        enrolled_at: e.enrolled_at,
+        grade: e.grade,
+        course: e.course
+          ? {
+              id: e.course.id,
+              code: e.course.code,
+              title: e.course.title,
+              credits: e.course.credits,
+              semester: e.course.semester,
             }
-          }
-          return e;
-        }),
-      );
+          : undefined,
+      }));
 
-      setEnrollments(fullEnrollments);
+      setEnrollments(mapped);
     } catch (error) {
       console.error("Error fetching enrollments:", error);
     } finally {
