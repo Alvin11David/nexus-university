@@ -2181,8 +2181,8 @@ class SubmissionListView(APIView):
                 "assignment_id": s.assignment_id,
                 "student_id": s.student_id,
                 "status": s.status,
-                "score": s.score if hasattr(s, 'score') else None,
-                "feedback": s.feedback if hasattr(s, 'feedback') else None,
+                "score": s.score,
+                "feedback": s.feedback,
                 "submitted_at": s.submitted_at.isoformat(),
             }
             for s in qs

@@ -533,6 +533,8 @@ class Submission(models.Model):
     assignment_id = models.CharField(max_length=64)
     student_id = models.CharField(max_length=255)
     status = models.CharField(max_length=32, choices=[("submitted", "Submitted"), ("pending", "Pending"), ("graded", "Graded")], default="pending")
+    score = models.FloatField(null=True, blank=True)
+    feedback = models.TextField(blank=True, default="")
     submitted_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

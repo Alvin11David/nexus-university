@@ -32,17 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Header } from "@/components/layout/Header";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-  orderBy,
-  limit,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 interface ExamResult {
   id: string;
@@ -91,6 +81,63 @@ interface Assignment {
   feedback?: string;
 }
 
+interface BackendAssignment {
+  id: string;
+  title: string;
+  description: string;
+  due_date: string;
+  total_points: number;
+  course_title: string;
+  course_code: string;
+  course_id: string;
+  status: string;
+  instruction_document_url?: string;
+  instruction_document_name?: string;
+}
+
+interface BackendSubmission {
+  id: string;
+  assignment_id: string;
+  student_id: string;
+  status: string;
+  score: number | null;
+  feedback: string;
+  submitted_at: string;
+}
+
+interface BackendExamResult {
+  id: string;
+  course_id: string;
+  course_title: string;
+  course_code: string;
+  credits: number;
+  marks: number;
+  grade: string;
+  grade_point: number;
+  semester: string;
+  academic_year: string;
+}
+
+interface BackendSchedule {
+  id: string;
+  course_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  room: string;
+  building: string;
+}
+
+interface BackendFee {
+  id: string;
+  amount: number;
+  paid_amount: number;
+  due_date: string;
+  semester: string;
+  academic_year: string;
+  description: string;
+}
+
 const DAYS = [
   "Sunday",
   "Monday",
@@ -123,120 +170,128 @@ export default function Portal() {
     try {
       setLoading(true);
 
-      // 1. Fetch Exam Results with course details
-      const resultsQuery = query(
-        collection(db, "exam_results"),
-        where("student_id", "==", user.uid),
-        orderBy("academic_year", "desc"),
+      // 1. Fetch Exam Results
+      const examData = await getBackend<{ exam_results: BackendExamResult[] }>(
+        `/api/students/${user.uid}/results/`,
+        true,
       );
-      const resultsSnap = await getDocs(resultsQuery);
-      const resultsData = await Promise.all(
-        resultsSnap.docs.map(async (d) => {
-          const res = d.data();
-          const courseRef = doc(db, "courses", res.course_id);
-          const courseSnap = await getDoc(courseRef);
-          return {
-            id: d.id,
-            ...res,
-            course: courseSnap.exists() ? courseSnap.data() : null,
-          } as ExamResult;
+
+      const resultsData: ExamResult[] = (examData.exam_results || []).map(
+        (r) => ({
+          id: r.id,
+          course_id: r.course_id,
+          marks: r.marks,
+          grade: r.grade || "",
+          grade_point: r.grade_point,
+          semester: r.semester,
+          academic_year: r.academic_year,
+          course: {
+            code: r.course_code,
+            title: r.course_title,
+            credits: r.credits,
+          },
         }),
       );
       setResults(resultsData);
 
       // 2. Fetch Schedules
-      const schedulesQuery = query(
-        collection(db, "schedules"),
-        orderBy("day_of_week"),
+      const schedulesData = await getBackend<BackendSchedule[]>(
+        "/api/schedules/",
+        true,
       );
-      const schedulesSnap = await getDocs(schedulesQuery);
-      const schedulesData = await Promise.all(
-        schedulesSnap.docs.map(async (d) => {
-          const sch = d.data();
-          const courseRef = doc(db, "courses", sch.course_id);
-          const courseSnap = await getDoc(courseRef);
+      const schedulesWithCourses = await Promise.all(
+        (schedulesData || []).map(async (s) => {
+          let course = null;
+          try {
+            const courseData = await getBackend<{ code: string; name: string }>(
+              `/api/courses/${s.course_id}/`,
+              true,
+            );
+            course = { code: courseData.code, title: courseData.name };
+          } catch {
+            // course lookup failed, use defaults
+          }
           return {
-            id: d.id,
-            ...sch,
-            course: courseSnap.exists() ? courseSnap.data() : null,
+            id: s.id,
+            course_id: s.course_id,
+            day_of_week: s.day_of_week,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            room: s.room,
+            building: s.building,
+            course,
           } as Schedule;
         }),
       );
-      setSchedules(schedulesData);
+      setSchedules(schedulesWithCourses);
 
       // 3. Fetch Fees
-      const feesQuery = query(
-        collection(db, "fees"),
-        where("student_id", "==", user.uid),
-        orderBy("due_date", "desc"),
+      const feesData = await getBackend<BackendFee[]>(
+        `/api/student-fees/?student_id=${user.uid}`,
+        true,
       );
-      const feesSnap = await getDocs(feesQuery);
-      setFees(feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }) as Fee));
+      setFees(
+        (feesData || []).map((f) => ({
+          id: f.id,
+          amount: f.amount,
+          paid_amount: f.paid_amount,
+          due_date: f.due_date,
+          semester: f.semester,
+          academic_year: f.academic_year,
+          description: f.description,
+        })),
+      );
 
       // 4. Fetch Enrollments & Assignments
-      const enrollmentsQuery = query(
-        collection(db, "enrollments"),
-        where("student_id", "==", user.uid),
-        where("status", "in", ["approved", "pending"]),
-      );
-      const enrollmentsSnap = await getDocs(enrollmentsQuery);
-      const courseIds = enrollmentsSnap.docs.map((d) => d.data().course_id);
+      const enrollmentsData = await getBackend<
+        { course_id: string; status: string }[]
+      >(`/api/enrollments/?student_id=${user.uid}`, true);
+      const courseIds: string[] = (enrollmentsData || [])
+        .filter((e) => e.status === "approved" || e.status === "pending")
+        .map((e) => e.course_id)
+        .filter(Boolean);
 
       if (courseIds.length > 0) {
-        // Firestore 'in' queries are limited to 10 elements.
-        // We'll fetch assignments for these course IDs.
-        const assignmentsQuery = query(
-          collection(db, "Assignments"),
-          where("course_id", "in", courseIds.slice(0, 10)),
+        const assignmentsData = await getBackend<BackendAssignment[]>(
+          `/api/assignments/?course_ids=${courseIds.slice(0, 10).join(",")}`,
+          true,
         );
-        const assignmentsSnap = await getDocs(assignmentsQuery);
-        const assignmentsRaw = assignmentsSnap.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
 
-        // 5. Fetch Submissions for these assignments
-        const submissionsQuery = query(
-          collection(db, "submissions"),
-          where("student_id", "==", user.uid),
-          where(
-            "assignment_id",
-            "in",
-            assignmentsRaw.map((a) => a.id).slice(0, 10),
-          ),
-        );
-        const submissionsSnap = await getDocs(submissionsQuery);
-        const submissionsData = submissionsSnap.docs.map((d) => d.data());
+        const assignmentIds = (assignmentsData || []).map((a) => a.id);
+        let submissions: BackendSubmission[] = [];
+        if (assignmentIds.length > 0) {
+          submissions = await getBackend<BackendSubmission[]>(
+            `/api/submissions/?student_id=${user.uid}&assignment_ids=${assignmentIds.slice(0, 10).join(",")}`,
+            true,
+          );
+        }
 
-        const mappedAssignments: Assignment[] = assignmentsRaw.map(
-          (assignment: any) => {
-            const submission = submissionsData.find(
-              (s) => s.assignment_id === assignment.id,
+        const mappedAssignments: Assignment[] = (assignmentsData || []).map(
+          (a) => {
+            const sub = (submissions || []).find(
+              (s) => s.assignment_id === a.id,
             );
             let status: "pending" | "submitted" | "graded" = "pending";
-            if (
-              submission?.status === "submitted" ||
-              submission?.status === "graded"
-            ) {
-              status = submission.score !== undefined ? "graded" : "submitted";
+            if (sub?.status === "submitted" || sub?.status === "graded") {
+              status = sub.score !== undefined && sub.score !== null ? "graded" : "submitted";
             }
-
             return {
-              id: assignment.id,
-              title: assignment.title,
-              description: assignment.description || "",
-              dueDate: assignment.due_date,
-              totalPoints: assignment.total_points ?? 100,
-              courseTitle: assignment.course_title || "Course",
-              courseCode: assignment.course_code || "",
+              id: a.id,
+              title: a.title,
+              description: a.description || "",
+              dueDate: a.due_date,
+              totalPoints: a.total_points ?? 100,
+              courseTitle: a.course_title || "Course",
+              courseCode: a.course_code || "",
               status,
-              instructionDocumentUrl: assignment.instruction_document_url,
-              instructionDocumentName: assignment.instruction_document_name,
-              score: submission?.score,
-              feedback: submission?.feedback,
+              instructionDocumentUrl: a.instruction_document_url,
+              instructionDocumentName: a.instruction_document_name,
+              score: sub?.score ?? undefined,
+              feedback: sub?.feedback || undefined,
             };
           },
         );
+
         setAssignments(
           mappedAssignments.sort(
             (a, b) =>
