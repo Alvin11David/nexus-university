@@ -30,7 +30,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import CourseSerializer, CourseUnitSerializer, AssignmentSerializer, ProfileSerializer, RegistrarSerializer, FeeAssignmentSerializer, StudentGradeSerializer, ActivitySerializer, SignUpSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings, Enrollment, LiveSession, Classroom, ClassroomEnrollment, Submission
 
 
 OTP_TTL_MINUTES = 10
@@ -1798,6 +1798,342 @@ class StudentGradeListView(APIView):
             setattr(grade, attr, value)
         grade.save()
         return Response(StudentGradeSerializer(grade).data)
+
+
+class StudentDashboardView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, student_id):
+        try:
+            enrolled_courses = Enrollment.objects.filter(student_id=student_id)
+            enrolled_course_ids = [e.course_id for e in enrolled_courses if e.course_id]
+            enrolled_count = len(enrolled_courses)
+            completed_count = enrolled_courses.filter(status="completed").count()
+
+            course_map = {}
+            course_ids_for_query = [c for c in enrolled_course_ids if c]
+            if course_ids_for_query:
+                courses = Course.objects.filter(id__in=course_ids_for_query)
+                for c in courses:
+                    course_map[str(c.id)] = c
+
+            pending_assignments_count = 0
+            assignments_list = []
+            if course_ids_for_query:
+                assignments_qs = Assignment.objects.filter(course_id__in=course_ids_for_query).order_by("due_date")
+                now = timezone.now()
+                pending_assignments = [a for a in assignments_qs if a.due_date and a.due_date >= now]
+
+                assignment_ids = [str(a.id) for a in pending_assignments]
+                submissions_qs = Submission.objects.filter(assignment_id__in=assignment_ids, student_id=student_id) if assignment_ids else []
+
+                submitted_ids = set(s.submission_id for s in submissions_qs)
+                pending_assignments_count = len([a for a in pending_assignments if str(a.id) not in submitted_ids])
+
+                for a in pending_assignments[:10]:
+                    course = course_map.get(str(a.course_id))
+                    submission = next((s for s in submissions_qs if s.assignment_id == str(a.id)), None)
+                    assignments_list.append({
+                        "id": str(a.id),
+                        "title": a.title,
+                        "dueDate": a.due_date.isoformat(),
+                        "courseTitle": course.name if course else (a.course_title or "Course"),
+                        "courseCode": course.code if course else (a.course_code or ""),
+                        "totalPoints": a.total_points,
+                        "status": "submitted" if submission and submission.status == "submitted" else "pending",
+                        "rawStatus": a.status,
+                    })
+
+            # Live sessions for enrolled courses
+            live_sessions_list = []
+            if course_ids_for_query:
+                now = timezone.now()
+                sessions_qs = LiveSession.objects.filter(course_id__in=course_ids_for_query).order_by("scheduled_at")
+                for s in sessions_qs:
+                    start = s.scheduled_at
+                    end = start + timedelta(minutes=s.duration_minutes)
+                    is_live = now >= start and now <= end
+                    live_sessions_list.append({
+                        "id": str(s.id),
+                        "title": s.title,
+                        "courseName": s.course_name,
+                        "scheduledAt": s.scheduled_at.isoformat(),
+                        "durationMinutes": s.duration_minutes,
+                        "meetLink": s.meet_link,
+                        "isLive": is_live,
+                    })
+
+            live_count = sum(1 for s in live_sessions_list if s["isLive"])
+
+            # Quizzes for enrolled courses
+            quizzes_list = []
+            if course_ids_for_query:
+                now = timezone.now()
+                quizzes_qs = Quiz.objects.filter(course_id__in=course_ids_for_query, status="active").filter(
+                    models.Q(end_date__isnull=True) | models.Q(end_date__gte=now)
+                )
+                for q in quizzes_qs:
+                    start = q.start_date
+                    end = q.end_date
+                    is_live = (start and now >= start or not start) and (end and now <= end or not end)
+                    is_scheduled = start and now < start
+                    if end and now > end:
+                        continue
+                    quizzes_list.append({
+                        "id": str(q.id),
+                        "title": q.title,
+                        "courseTitle": q.course_title if hasattr(q, 'course_title') else None,
+                        "courseCode": q.course_code if hasattr(q, 'course_code') else None,
+                        "startDate": start.isoformat() if start else None,
+                        "endDate": end.isoformat() if end else None,
+                        "isLive": is_live,
+                        "isScheduled": is_scheduled,
+                    })
+                quizzes_list.sort(key=lambda x: x["startDate"] or "")
+
+            # Results
+            exam_results_qs = ExamResult.objects.filter(student_id=student_id).order_by("-academic_year", "-semester", "course_code")
+            student_grades_qs = StudentGrade.objects.filter(student_id=student_id)
+
+            term_map = {}
+            for row in exam_results_qs:
+                term_key = f"{row.academic_year} -- {row.semester}"
+                if term_key not in term_map:
+                    term_map[term_key] = {"term": term_key, "gpa": 0.0, "totalCredits": 0, "entries": []}
+                credits = row.credits or 3
+                grade_point = float(row.grade_point or 0)
+                term_map[term_key]["entries"].append({
+                    "id": str(row.id),
+                    "course_id": row.course_id,
+                    "courseTitle": row.course_title or "Course",
+                    "courseCode": row.course_code or "",
+                    "credits": credits,
+                    "marks": row.marks or 0,
+                    "grade": row.grade,
+                    "grade_point": grade_point,
+                    "academic_year": row.academic_year,
+                    "semester": row.semester,
+                })
+                term_map[term_key]["totalCredits"] += credits
+                term_map[term_key]["gpa"] += grade_point * credits
+
+            for grade in student_grades_qs:
+                term_key = f"{grade.academic_year} -- {grade.semester}"
+                if term_key not in term_map:
+                    term_map[term_key] = {"term": term_key, "gpa": 0.0, "totalCredits": 0, "entries": []}
+                credits = 3
+                gp = float(grade.gp or 0)
+                term_map[term_key]["entries"].append({
+                    "id": str(grade.id),
+                    "course_id": grade.course_id,
+                    "courseTitle": "Course",
+                    "courseCode": "",
+                    "credits": credits,
+                    "marks": grade.total or 0,
+                    "grade": grade.grade,
+                    "grade_point": gp,
+                    "academic_year": grade.academic_year,
+                    "semester": grade.semester,
+                })
+                term_map[term_key]["totalCredits"] += credits
+                term_map[term_key]["gpa"] += gp * credits
+
+            terms = []
+            for t in term_map.values():
+                if t["totalCredits"]:
+                    t["gpa"] = round(t["gpa"] / t["totalCredits"], 2)
+                terms.append(t)
+
+            total_credits = sum(t["totalCredits"] for t in terms)
+            total_points = sum(t["gpa"] * t["totalCredits"] for t in terms)
+            cgpa = round(total_points / total_credits, 2) if total_credits else 0.0
+
+            return Response({
+                "stats": {
+                    "enrolled": enrolled_count,
+                    "completed": completed_count,
+                    "assignments": pending_assignments_count,
+                    "liveMeets": live_count,
+                },
+                "results": {
+                    "terms": terms,
+                    "cgpa": cgpa,
+                },
+                "live_sessions": live_sessions_list,
+                "quizzes": quizzes_list,
+                "assignments": assignments_list,
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class LiveSessionListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        course_ids = request.query_params.get("course_ids")
+        qs = LiveSession.objects.all()
+        if course_ids:
+            ids = [c.strip() for c in course_ids.split(",") if c.strip()]
+            qs = qs.filter(course_id__in=ids)
+        qs = qs.order_by("scheduled_at")
+        data = [
+            {
+                "id": str(s.id),
+                "course_id": s.course_id,
+                "title": s.title,
+                "course_name": s.course_name,
+                "scheduled_at": s.scheduled_at.isoformat(),
+                "duration_minutes": s.duration_minutes,
+                "meet_link": s.meet_link,
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in qs
+        ]
+        return Response(data)
+
+    def post(self, request):
+        course_id = request.data.get("course_id")
+        title = request.data.get("title", "").strip()
+        course_name = request.data.get("course_name", "").strip() or None
+        scheduled_at = request.data.get("scheduled_at")
+        duration_minutes = request.data.get("duration_minutes", 60)
+        meet_link = request.data.get("meet_link")
+
+        if not course_id or not title or not scheduled_at:
+            return Response({"error": "course_id, title, scheduled_at required"}, status=400)
+
+        session = LiveSession.objects.create(
+            course_id=course_id,
+            title=title,
+            course_name=course_name,
+            scheduled_at=scheduled_at,
+            duration_minutes=int(duration_minutes),
+            meet_link=meet_link,
+        )
+        return Response({
+            "id": str(session.id),
+            "course_id": session.course_id,
+            "title": session.title,
+            "course_name": session.course_name,
+            "scheduled_at": session.scheduled_at.isoformat(),
+            "duration_minutes": session.duration_minutes,
+            "meet_link": session.meet_link,
+        }, status=201)
+
+
+class ClassroomListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        classrooms = Classroom.objects.all()
+        data = [
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "join_code": c.join_code,
+                "instructor_id": c.instructor_id,
+                "created_at": c.created_at.isoformat(),
+            }
+            for c in classrooms
+        ]
+        return Response(data)
+
+    def post(self, request):
+        name = request.data.get("name", "").strip()
+        instructor_id = request.data.get("instructor_id")
+        join_code = request.data.get("join_code", "").strip()
+
+        if not name or not instructor_id:
+            return Response({"error": "name and instructor_id required"}, status=400)
+
+        if not join_code:
+            import secrets
+            join_code = secrets.token_hex(4).upper()
+
+        classroom = Classroom.objects.create(
+            name=name,
+            join_code=join_code,
+            instructor_id=instructor_id,
+        )
+        return Response({
+            "id": str(classroom.id),
+            "name": classroom.name,
+            "join_code": classroom.join_code,
+            "instructor_id": classroom.instructor_id,
+            "created_at": classroom.created_at.isoformat(),
+        }, status=201)
+
+
+class ClassroomEnrollView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        classroom_id = request.data.get("classroom_id")
+        student_id = request.data.get("student_id")
+        role = request.data.get("role", "student")
+
+        if not classroom_id or not student_id:
+            return Response({"error": "classroom_id and student_id required"}, status=400)
+
+        try:
+            classroom = Classroom.objects.get(id=classroom_id)
+        except Classroom.DoesNotExist:
+            return Response({"error": "Classroom not found"}, status=404)
+
+        enrollment, created = ClassroomEnrollment.objects.get_or_create(
+            classroom=classroom,
+            student_id=student_id,
+            defaults={"role": role},
+        )
+        if not created:
+            return Response({"error": "Already enrolled"}, status=409)
+
+        return Response({
+            "id": str(enrollment.id),
+            "classroom_id": str(classroom.id),
+            "classroom_name": classroom.name,
+            "student_id": enrollment.student_id,
+            "role": enrollment.role,
+            "enrolled_at": enrollment.enrolled_at.isoformat(),
+        }, status=201)
+
+
+class ClassroomJoinView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        join_code = request.data.get("join_code", "").strip()
+        student_id = request.data.get("student_id")
+
+        if not join_code or not student_id:
+            return Response({"error": "join_code and student_id required"}, status=400)
+
+        try:
+            classroom = Classroom.objects.get(join_code=join_code.upper())
+        except Classroom.DoesNotExist:
+            return Response({"error": "Invalid join code"}, status=404)
+
+        enrollment, created = ClassroomEnrollment.objects.get_or_create(
+            classroom=classroom,
+            student_id=student_id,
+            defaults={"role": "student"},
+        )
+        if not created:
+            return Response({"error": "Already enrolled in this class"}, status=409)
+
+        return Response({
+            "id": str(enrollment.id),
+            "classroom_id": str(classroom.id),
+            "classroom_name": classroom.name,
+            "student_id": enrollment.student_id,
+            "enrolled_at": enrollment.enrolled_at.isoformat(),
+        }, status=201)
 
 
 class ActivityListView(APIView):

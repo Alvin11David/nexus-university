@@ -29,21 +29,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  setDoc,
-  limit,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -52,6 +37,7 @@ import { UpcomingCard } from "@/components/dashboard/UpcomingCard";
 import { AnnouncementCard } from "@/components/dashboard/AnnouncementCard";
 import { ProgressRing } from "@/components/ui/ProgressRing";
 import { useAuth } from "@/contexts/AuthContext";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 type ResultCourse = {
   title: string;
@@ -109,6 +95,22 @@ interface DashboardQuiz {
   endDate?: string | null;
   isLive: boolean;
   isScheduled: boolean;
+}
+
+interface DashboardData {
+  stats: {
+    enrolled: number;
+    completed: number;
+    assignments: number;
+    liveMeets: number;
+  };
+  results: {
+    terms: TermResult[];
+    cgpa: number;
+  };
+  live_sessions: LiveSession[];
+  quizzes: DashboardQuiz[];
+  assignments: DashboardAssignment[];
 }
 
 export default function Dashboard() {
@@ -185,160 +187,38 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return;
 
-    const loadStats = async () => {
+    const loadDashboard = async () => {
       try {
         setLoadingStats(true);
+        setResultsLoading(true);
+        setAssignmentsLoading(true);
+        setLiveSessionsLoading(true);
+        setQuizzesLoading(true);
 
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
+        const data = await getBackend<DashboardData>(
+          `/api/students/${user.uid}/dashboard/`,
+          true,
         );
-        const enrollSnapshot = await getDocs(qEnroll);
-        const enrollments = enrollSnapshot.docs.map((d) => d.data());
 
-        const enrolledCoursesCount = enrollments.length;
-        const completedCoursesCount = enrollments.filter(
-          (e: any) => e.status === "completed",
-        ).length;
-
-        const courseIds = enrollments
-          .map((e: any) => e.course_id)
-          .filter(Boolean);
-
-        let pendingAssignmentsCount = 0;
-        if (courseIds.length > 0) {
-          // Note: Firestore 'in' queries are limited to 10 items.
-          // For more, we'd need to chunk the request.
-          const assignmentsRef = collection(db, "Assignments");
-          const qAssign = query(
-            assignmentsRef,
-            where("course_id", "in", courseIds.slice(0, 10)),
-            // Note: Cloud Firestore does not support inequality on one field and equality on another easily without index
-          );
-          const assignSnapshot = await getDocs(qAssign);
-          const assignments = assignSnapshot.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter(
-              (a: any) => a.due_date && new Date(a.due_date) >= new Date(),
-            );
-
-          const assignmentIds = assignments.map((a) => a.id);
-          let submissions: any[] = [];
-
-          if (assignmentIds.length > 0) {
-            const subsRef = collection(db, "submissions");
-            const qSubs = query(
-              subsRef,
-              where("student_id", "==", user.uid),
-              where("assignment_id", "in", assignmentIds.slice(0, 10)),
-            );
-            const subsSnapshot = await getDocs(qSubs);
-            submissions = subsSnapshot.docs.map((d) => d.data());
-          }
-
-          pendingAssignmentsCount = assignments.filter((a: any) => {
-            const submission = submissions.find(
-              (s) => s.assignment_id === a.id,
-            );
-            return !submission || submission.status !== "submitted";
-          }).length;
-        }
-
-        setStats((prev) => ({
-          ...prev,
-          enrolled: enrolledCoursesCount,
-          completed: completedCoursesCount,
-          assignments: pendingAssignmentsCount,
-        }));
+        setStats(data.stats);
+        setTermResults(data.results.terms);
+        setCgpa(data.results.cgpa);
+        setLiveSessions(data.live_sessions);
+        setUpcomingQuizzes(data.quizzes);
+        setAssignments(data.assignments);
       } catch (error) {
-        console.error("Error loading dashboard stats", error);
+        console.error("Error loading dashboard data", error);
+        setAssignmentsError("Failed to load dashboard data.");
       } finally {
         setLoadingStats(false);
-      }
-    };
-
-    loadStats();
-  }, [user]);
-
-  useEffect(() => {
-    const loadLiveSessions = async () => {
-      if (!user) {
-        setLiveSessions([]);
-        setStats((prev) => ({ ...prev, liveMeets: 0 }));
-        return;
-      }
-
-      try {
-        setLiveSessionsLoading(true);
-
-        // 1. Fetch student's enrolled course IDs
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
-        );
-        const enrollSnapshot = await getDocs(qEnroll);
-        const enrolledCourseIds = enrollSnapshot.docs
-          .map((d) => (d.data() as any).course_id)
-          .filter(Boolean);
-
-        if (!enrolledCourseIds.length) {
-          setLiveSessions([]);
-          setStats((prev) => ({ ...prev, liveMeets: 0 }));
-          return;
-        }
-
-        // 2. Fetch live sessions only for enrolled courses (chunked for Firestore 'in' limit)
-        const sessions: LiveSession[] = [];
-        const sessionsRef = collection(db, "live_sessions");
-        const now = new Date();
-
-        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
-          const chunk = enrolledCourseIds.slice(i, i + 10);
-          const qSessions = query(sessionsRef, where("course_id", "in", chunk));
-          const snapshot = await getDocs(qSessions);
-
-          snapshot.docs.forEach((d) => {
-            const data = d.data() as any;
-            const scheduledAt: string = data.scheduled_at;
-            if (!scheduledAt) return;
-            const start = new Date(scheduledAt);
-            if (Number.isNaN(start.getTime())) return;
-
-            const duration = data.duration_minutes ?? 60;
-            const end = new Date(start.getTime() + duration * 60000);
-            const isLive = now >= start && now <= end;
-
-            sessions.push({
-              id: d.id,
-              title: data.title || "Online Class",
-              courseName: data.course_name || null,
-              scheduledAt,
-              durationMinutes: data.duration_minutes ?? null,
-              meetLink: data.meet_link || null,
-              isLive,
-            });
-          });
-        }
-
-        sessions.sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-        setLiveSessions(sessions);
-
-        const liveCount = sessions.filter((s) => s.isLive).length;
-        setStats((prev) => ({
-          ...prev,
-          liveMeets: liveCount,
-        }));
-      } catch (error) {
-        console.error("Error loading live sessions", error);
-      } finally {
+        setResultsLoading(false);
+        setAssignmentsLoading(false);
         setLiveSessionsLoading(false);
+        setQuizzesLoading(false);
       }
     };
 
-    loadLiveSessions();
+    loadDashboard();
   }, [user]);
 
   const activeMeetsCount = useMemo(
@@ -374,333 +254,6 @@ export default function Dashboard() {
     [liveSessions],
   );
 
-  useEffect(() => {
-    const loadQuizzes = async () => {
-      if (!user) {
-        setUpcomingQuizzes([]);
-        return;
-      }
-
-      try {
-        setQuizzesLoading(true);
-
-        // 1. Fetch student's enrolled course IDs
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
-        );
-        const enrollSnapshot = await getDocs(qEnroll);
-        const enrolledCourseIds = enrollSnapshot.docs
-          .map((d) => (d.data() as any).course_id)
-          .filter(Boolean);
-
-        if (!enrolledCourseIds.length) {
-          setUpcomingQuizzes([]);
-          return;
-        }
-
-        // 2. Fetch quizzes for those courses
-        const quizzes: DashboardQuiz[] = [];
-        const quizzesRef = collection(db, "quizzes");
-        const now = new Date();
-
-        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
-          const chunk = enrolledCourseIds.slice(i, i + 10);
-          const qQuizzes = query(
-            quizzesRef,
-            where("course_id", "in", chunk),
-            where("status", "==", "active"),
-          );
-          const quizSnapshot = await getDocs(qQuizzes);
-
-          quizSnapshot.docs.forEach((d) => {
-            const data = d.data() as any;
-            const startRaw = data.start_date ?? null;
-            const endRaw = data.end_date ?? null;
-
-            const start = startRaw ? new Date(startRaw) : null;
-            const end = endRaw ? new Date(endRaw) : null;
-
-            const isLive =
-              (!!start ? now >= start : true) && (!!end ? now <= end : true);
-            const isScheduled = !!start && now < start;
-
-            // Hide quizzes that have fully closed
-            if (end && now > end) return;
-
-            quizzes.push({
-              id: d.id,
-              title: data.title || "Quiz",
-              courseTitle: data.course_title || null,
-              courseCode: data.course_code || null,
-              startDate: startRaw,
-              endDate: endRaw,
-              isLive,
-              isScheduled,
-            });
-          });
-        }
-
-        quizzes.sort((a, b) => {
-          const aTime = a.startDate ? new Date(a.startDate).getTime() : 0;
-          const bTime = b.startDate ? new Date(b.startDate).getTime() : 0;
-          return aTime - bTime;
-        });
-
-        setUpcomingQuizzes(quizzes);
-      } catch (error) {
-        console.error("Error loading upcoming quizzes", error);
-      } finally {
-        setQuizzesLoading(false);
-      }
-    };
-
-    loadQuizzes();
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    let isActive = true;
-
-    const loadAssignments = async () => {
-      try {
-        setAssignmentsLoading(true);
-        setAssignmentsError(null);
-
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
-        );
-        const enrollSnapshot = await getDocs(qEnroll);
-        const enrollmentsData = enrollSnapshot.docs.map((d) => d.data());
-
-        const courseIds = enrollmentsData
-          .map((enrollment: any) => enrollment.course_id)
-          .filter(Boolean);
-
-        if (!courseIds.length) {
-          if (isActive) {
-            setAssignments([]);
-            setAssignmentsLoading(false);
-          }
-          return;
-        }
-
-        const assignmentsRef = collection(db, "Assignments");
-        const qAssign = query(
-          assignmentsRef,
-          where("course_id", "in", courseIds.slice(0, 10)),
-          orderBy("due_date", "asc"),
-        );
-        const assignSnapshot = await getDocs(qAssign);
-        const assignmentsData = assignSnapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-
-        const assignmentIds = assignmentsData.map((a) => a.id);
-        let submissions: any[] = [];
-
-        if (assignmentIds.length > 0) {
-          const subsRef = collection(db, "submissions");
-          const qSubs = query(
-            subsRef,
-            where("student_id", "==", user.uid),
-            where("assignment_id", "in", assignmentIds.slice(0, 10)),
-          );
-          const subsSnapshot = await getDocs(qSubs);
-          submissions = subsSnapshot.docs.map((d) => d.data());
-        }
-
-        const mappedAssignments = await Promise.all(
-          assignmentsData.map(async (assignment: any) => {
-            const submission = submissions.find(
-              (s) => s.assignment_id === assignment.id,
-            );
-
-            const courseDoc = await getDoc(
-              doc(db, "courses", assignment.course_id),
-            );
-            const courseInfo = courseDoc.exists()
-              ? courseDoc.data()
-              : { title: "Course", code: "" };
-
-            return {
-              id: assignment.id,
-              title: assignment.title,
-              dueDate: assignment.due_date,
-              courseTitle: courseInfo.title || "Course",
-              courseCode: courseInfo.code || "",
-              totalPoints: assignment.total_points,
-              status:
-                submission?.status === "submitted" ? "submitted" : "pending",
-              rawStatus: assignment.status,
-            } as DashboardAssignment;
-          }),
-        );
-
-        if (isActive) setAssignments(mappedAssignments);
-      } catch (error) {
-        console.error("Error loading dashboard assignments", error);
-        if (isActive) setAssignmentsError("Failed to load assignments.");
-      } finally {
-        if (isActive) setAssignmentsLoading(false);
-      }
-    };
-
-    loadAssignments();
-
-    return () => {
-      isActive = false;
-    };
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const loadResults = async () => {
-      try {
-        setResultsLoading(true);
-
-        const studentId = user.uid;
-        let data: any[] = [];
-        const gradesRef = collection(db, "student_grades");
-
-        try {
-          const qGrades = query(
-            gradesRef,
-            where("student_id", "==", studentId),
-            orderBy("academic_year", "desc"),
-            orderBy("semester", "desc"),
-          );
-          const gradesSnapshot = await getDocs(qGrades);
-          data = gradesSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        } catch (sgError) {
-          const qGradesSimple = query(
-            gradesRef,
-            where("student_id", "==", studentId),
-          );
-          const gradesSnapshotSimple = await getDocs(qGradesSimple);
-          data = gradesSnapshotSimple.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
-        }
-
-        if (data.length === 0) {
-          const resultsRef = collection(db, "exam_results");
-          try {
-            const qResults = query(
-              resultsRef,
-              where("student_id", "==", studentId),
-              orderBy("academic_year", "desc"),
-              orderBy("semester", "desc"),
-            );
-            const resultsSnapshot = await getDocs(qResults);
-            data = resultsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          } catch (erError) {
-            const qResultsSimple = query(
-              resultsRef,
-              where("student_id", "==", studentId),
-            );
-            const resultsSnapshotSimple = await getDocs(qResultsSimple);
-            data = resultsSnapshotSimple.docs.map((d) => ({
-              id: d.id,
-              ...d.data(),
-            }));
-          }
-        }
-
-        const uniqueCourseIds = Array.from(
-          new Set(data.map((r) => r.course_id).filter(Boolean)),
-        );
-        const courseMap = new Map<string, any>();
-
-        for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-          const chunk = uniqueCourseIds.slice(i, i + 10);
-          const qCourseUnits = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const courseUnitsSnap = await getDocs(qCourseUnits);
-          courseUnitsSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
-
-          const missingIds = chunk.filter((id) => !courseMap.has(id));
-          if (missingIds.length > 0) {
-            const qCourses = query(
-              collection(db, "courses"),
-              where("__name__", "in", missingIds),
-            );
-            const coursesSnap = await getDocs(qCourses);
-            coursesSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
-          }
-        }
-
-        const normalized = data.map((row) => {
-          const course = courseMap.get(row.course_id);
-          return {
-            ...row,
-            courseTitle: course?.name || course?.title || "Course",
-            courseCode: course?.code || "",
-            credits: course?.credits || 3,
-            marks: row.total || row.marks || 0,
-            grade_point: row.gp || row.grade_point || 0,
-          };
-        });
-
-        const termMap = new Map<string, TermResult>();
-
-        (normalized || []).forEach((row) => {
-          const term = `${row.academic_year} · ${row.semester}`;
-          const existing = termMap.get(term) || {
-            term,
-            gpa: 0,
-            totalCredits: 0,
-            entries: [],
-          };
-
-          const credits = row.credits || 3;
-          const gradePoint = row.grade_point ?? 0;
-
-          existing.entries.push(row);
-          existing.totalCredits += credits;
-          existing.gpa += gradePoint * credits;
-
-          termMap.set(term, existing);
-        });
-
-        const terms = Array.from(termMap.values()).map((t) => ({
-          ...t,
-          gpa: t.totalCredits ? Number((t.gpa / t.totalCredits).toFixed(2)) : 0,
-        }));
-
-        // Compute CGPA
-        const totalCredits = terms.reduce((sum, t) => sum + t.totalCredits, 0);
-        const totalPoints = terms.reduce(
-          (sum, t) => sum + t.gpa * t.totalCredits,
-          0,
-        );
-        const computedCgpa = totalCredits
-          ? Number((totalPoints / totalCredits).toFixed(2))
-          : 0;
-
-        setTermResults(terms);
-        setCgpa(computedCgpa);
-      } catch (err) {
-        console.error("Error loading exam results", err);
-      } finally {
-        setResultsLoading(false);
-      }
-    };
-
-    loadResults();
-  }, [user]);
-
   const handleJoinClass = async () => {
     if (!joinCode.trim()) {
       alert("Please enter a valid join code");
@@ -714,57 +267,21 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      // First, find the classroom by join code
-      const classroomsRef = collection(db, "classrooms");
-      const q = query(
-        classroomsRef,
-        where("join_code", "==", joinCode.trim()),
-        limit(1),
+      await postBackend(
+        "/api/classrooms/join/",
+        {
+          join_code: joinCode.trim(),
+          student_id: user.uid,
+        },
+        true,
       );
-      const qSnapshot = await getDocs(q);
 
-      if (qSnapshot.empty) {
-        alert("Invalid class code. Please check and try again.");
-        return;
-      }
-
-      const classroomDoc = qSnapshot.docs[0];
-      const classroom = { id: classroomDoc.id, ...classroomDoc.data() } as any;
-
-      // Check if student is already enrolled
-      const enrollmentRef = collection(db, "classroom_enrollments");
-      const qEnroll = query(
-        enrollmentRef,
-        where("classroom_id", "==", classroom.id),
-        where("student_id", "==", user.uid),
-        limit(1),
-      );
-      const enrollSnapshot = await getDocs(qEnroll);
-
-      if (!enrollSnapshot.empty) {
-        alert("You are already enrolled in this class");
-        setShowClassDialog(false);
-        setJoinCode("");
-        return;
-      }
-
-      // Add student to classroom
-      await addDoc(collection(db, "classroom_enrollments"), {
-        classroom_id: classroom.id,
-        student_id: user.uid,
-        role: "student",
-        enrolled_at: new Date().toISOString(),
-      });
-
-      alert(`Successfully joined "${classroom.name}"!`);
+      alert("Successfully joined the class!");
       setShowClassDialog(false);
       setJoinCode("");
-
-      // Refresh the page
       window.location.reload();
-    } catch (error) {
-      console.error("Error joining class:", error);
-      alert("Failed to join class. Please try again.");
+    } catch (error: any) {
+      alert(error.message || "Failed to join class. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -783,44 +300,23 @@ export default function Dashboard() {
 
     setIsSubmitting(true);
     try {
-      // Generate a unique join code
-      const joinCodeGenerated = Math.random()
-        .toString(36)
-        .substring(2, 8)
-        .toUpperCase();
-
-      // Create the classroom
-      const newClassroomData = {
-        name: className.trim(),
-        join_code: joinCodeGenerated,
-        instructor_id: user.uid,
-        created_at: new Date().toISOString(),
-      };
-
-      const classroomRef = await addDoc(
-        collection(db, "classrooms"),
-        newClassroomData,
+      const result = await postBackend<{ join_code: string; name: string }>(
+        "/api/classrooms/",
+        {
+          name: className.trim(),
+          instructor_id: user.uid,
+        },
+        true,
       );
 
-      // Add the creator as instructor
-      await addDoc(collection(db, "classroom_enrollments"), {
-        classroom_id: classroomRef.id,
-        student_id: user.uid,
-        role: "instructor",
-        enrolled_at: new Date().toISOString(),
-      });
-
       alert(
-        `Class "${className}" created successfully!\nClass Code: ${joinCodeGenerated}`,
+        `Class "${result.name}" created successfully!\nClass Code: ${result.join_code}`,
       );
       setShowClassDialog(false);
       setClassName("");
-
-      // Refresh the page
       window.location.reload();
-    } catch (error) {
-      console.error("Error creating class:", error);
-      alert("Failed to create class. Please try again.");
+    } catch (error: any) {
+      alert(error.message || "Failed to create class. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

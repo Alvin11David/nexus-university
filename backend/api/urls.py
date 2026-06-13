@@ -46,6 +46,11 @@ from .views import (
     StudentGradeListView,
     ActivityListView,
     SignUpListView,
+    StudentDashboardView,
+    LiveSessionListView,
+    ClassroomListView,
+    ClassroomEnrollView,
+    ClassroomJoinView,
 )
 
 urlpatterns = [
@@ -95,4 +100,9 @@ urlpatterns = [
     path("student-grades/<int:grade_id>/", StudentGradeListView.as_view()),
     path("activities/", ActivityListView.as_view()),
     path("sign-ups/", SignUpListView.as_view()),
+    path("students/<str:student_id>/dashboard/", StudentDashboardView.as_view()),
+    path("live-sessions/", LiveSessionListView.as_view()),
+    path("classrooms/", ClassroomListView.as_view()),
+    path("classrooms/enroll/", ClassroomEnrollView.as_view()),
+    path("classrooms/join/", ClassroomJoinView.as_view()),
 ]

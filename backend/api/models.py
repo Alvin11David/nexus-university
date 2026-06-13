@@ -430,6 +430,85 @@ class CourseUnit(models.Model):
         return f"{self.code} - {self.name}"
 
 
+class Enrollment(models.Model):
+    STATUS_CHOICES = [
+        ("approved", "Approved"),
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    ]
+    student_id = models.CharField(max_length=255)
+    course_id = models.CharField(max_length=64)
+    status = models.CharField(max_length=32, choices=STATUS_CHOICES, default="approved")
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-enrolled_at"]
+
+    def __str__(self) -> str:
+        return f"Enrollment: {self.student_id} -> {self.course_id} ({self.status})"
+
+
+class LiveSession(models.Model):
+    course_id = models.CharField(max_length=64)
+    title = models.CharField(max_length=255)
+    course_name = models.CharField(max_length=255, blank=True, null=True)
+    scheduled_at = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField(default=60)
+    meet_link = models.CharField(max_length=1024, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["scheduled_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.scheduled_at})"
+
+
+class Classroom(models.Model):
+    name = models.CharField(max_length=255)
+    join_code = models.CharField(max_length=16, unique=True)
+    instructor_id = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.join_code})"
+
+
+class ClassroomEnrollment(models.Model):
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name="enrollments")
+    student_id = models.CharField(max_length=255)
+    role = models.CharField(max_length=32, choices=[("student", "Student"), ("instructor", "Instructor")], default="student")
+    enrolled_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [["classroom", "student_id"]]
+
+    def __str__(self) -> str:
+        return f"{self.student_id} in {self.classroom.name} ({self.role})"
+
+
+class Submission(models.Model):
+    assignment_id = models.CharField(max_length=64)
+    student_id = models.CharField(max_length=255)
+    status = models.CharField(max_length=32, choices=[("submitted", "Submitted"), ("pending", "Pending"), ("graded", "Graded")], default="pending")
+    submitted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        unique_together = [["assignment_id", "student_id"]]
+
+    def __str__(self) -> str:
+        return f"Submission: {self.student_id} on {self.assignment_id}"
+
+
 class UserSettings(models.Model):
     user_id = models.CharField(max_length=255, unique=True)
     theme = models.CharField(max_length=32, default="system", choices=[("light", "Light"), ("dark", "Dark"), ("system", "System")])
