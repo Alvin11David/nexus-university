@@ -197,7 +197,7 @@ export default function RegistrarTranscripts() {
       const recordsRef = collection(db, "student_records");
       const q = query(
         recordsRef,
-        where("enrollment_status", "in", ["active"]), // Firestore 'in' matches Supabase active filter
+        where("enrollment_status", "in", ["active"]),
         orderBy("full_name")
       );
       const querySnapshot = await getDocs(q);
