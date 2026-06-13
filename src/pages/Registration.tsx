@@ -45,40 +45,44 @@ import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  updateDoc,
-  addDoc,
-  serverTimestamp,
-  setDoc,
-  limit,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
-interface Course {
+interface CourseUnit {
   id: string;
   code: string;
-  name: string; // The property is 'name' in course_units
+  name: string;
   credits: number;
-  course_id: string; // From course_units
-  department_id?: string;
-  description?: string | null;
-  instructor_id?: string | null;
+  course: number;
   semester: number;
   year: number;
-  status?: string | null;
+  description?: string | null;
 }
 
-interface Department {
+interface BackendCourseUnit {
   id: string;
-  name: string;
   code: string;
+  name: string;
+  credits: number;
+  course: number;
+  semester: number;
+  year: number;
+}
+
+interface BackendCourse {
+  id: string;
+  code: string;
+  name: string;
+  college: string;
+  department: string;
+  duration_years: number;
+}
+
+interface BackendEnrollment {
+  id: string;
+  course_id: string;
+  status: string;
+  student_id: string;
+  enrolled_at: string;
 }
 
 const YEARS_OF_STUDY = [1, 2, 3, 4, 5];
@@ -91,8 +95,7 @@ export default function Registration() {
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const [courseUnits, setCourseUnits] = useState<CourseUnit[]>([]);
   const [existingEnrollments, setExistingEnrollments] = useState<
     Record<string, string>
   >({});
@@ -100,7 +103,7 @@ export default function Registration() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDept, setSelectedDept] = useState<string>("all");
+  const [selectedDept] = useState<string>("all");
   const [selectedSemester, setSelectedSemester] = useState<number>(1);
   const [selectedYear, setSelectedYear] = useState<number>(1);
   const [step, setStep] = useState<"select" | "review">("select");
@@ -120,90 +123,54 @@ export default function Registration() {
 
   const fetchData = async () => {
     try {
-      if (!profile?.course_id && !profile?.programme) {
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
 
-      let targetCourseId = profile.course_id;
+      let targetCourseId = profile?.course_id;
 
-      // If no direct course_id is set on the profile, derive it from the programme name
-      if (!targetCourseId && profile.programme) {
-        const coursesRef = collection(db, "courses");
-
-        // Try matching by the 'name' field
-        const qName = query(
-          coursesRef,
-          where("name", "==", profile.programme),
-          limit(1),
+      // If no direct course_id, derive it from the programme name
+      if (!targetCourseId && profile?.programme) {
+        const courses = await getBackend<BackendCourse[]>(
+          `/api/courses/?name=${encodeURIComponent(profile.programme)}`,
+          true,
         );
-        const snapName = await getDocs(qName);
-
-        if (!snapName.empty) {
-          targetCourseId = snapName.docs[0].id;
-        } else {
-          // Fallback to matching by the 'title' field
-          const qTitle = query(
-            coursesRef,
-            where("title", "==", profile.programme),
-            limit(1),
-          );
-          const snapTitle = await getDocs(qTitle);
-          if (!snapTitle.empty) {
-            targetCourseId = snapTitle.docs[0].id;
-          }
+        if (courses && courses.length > 0) {
+          targetCourseId = courses[0].id;
         }
       }
 
       if (!targetCourseId) {
-        setCourses([]);
+        setCourseUnits([]);
         setLoading(false);
         return;
       }
 
-      // Fetch course units (for current semester/year and student's program)
-      const unitsRef = collection(db, "course_units");
-      const qUnits = query(
-        unitsRef,
-        where("course_id", "==", targetCourseId),
-        where("semester", "==", selectedSemester),
-        where("year", "==", selectedYear),
+      // Fetch course units for the current semester/year and student's program
+      const units = await getBackend<BackendCourseUnit[]>(
+        `/api/course-units/?course_id=${targetCourseId}&semester=${selectedSemester}&year=${selectedYear}`,
+        true,
       );
-      const unitsSnapshot = await getDocs(qUnits);
 
-      const coursesData = unitsSnapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          code: data.code,
-          name: data.name,
-          credits: data.credits,
-          semester: data.semester,
-          year: data.year,
-          course_id: data.course_id,
-          department_id: data.department_id || "",
-          description: data.description || null,
-          instructor_id: data.instructor_id || null,
-          status: data.status || null,
-        } as Course;
-      });
-
-      setCourses(coursesData);
+      setCourseUnits(
+        (units || []).map((u) => ({
+          id: u.id,
+          code: u.code,
+          name: u.name,
+          credits: u.credits,
+          course: u.course,
+          semester: u.semester,
+          year: u.year,
+        })),
+      );
 
       // Fetch existing enrollments
       if (user) {
-        const enrollmentsRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollmentsRef,
-          where("student_id", "==", user.uid),
+        const enrollments = await getBackend<BackendEnrollment[]>(
+          `/api/enrollments/?student_id=${user.uid}`,
+          true,
         );
-        const enrollSnapshot = await getDocs(qEnroll);
         const enrollmentsMap: Record<string, string> = {};
-        enrollSnapshot.docs.forEach((doc) => {
-          const data = doc.data() as any;
-          enrollmentsMap[data.course_id] = data.status;
+        (enrollments || []).forEach((e) => {
+          enrollmentsMap[e.course_id] = e.status;
         });
         setExistingEnrollments(enrollmentsMap);
       }
@@ -231,7 +198,7 @@ export default function Registration() {
       return;
     }
 
-    const course = courses.find((c) => c.id === courseId);
+    const course = courseUnits.find((c) => c.id === courseId);
     const newCredits = selectedCourses.includes(courseId)
       ? totalCredits - (course?.credits || 0)
       : totalCredits + (course?.credits || 0);
@@ -277,49 +244,55 @@ export default function Registration() {
     setSubmitting(true);
     try {
       // Update profile with registration number and student number
-      await updateDoc(doc(db, "profiles", user.uid), {
-        registration_number: registrationNumber.trim(),
-        student_number: studentNumber.trim(),
-        updated_at: serverTimestamp(),
-      });
+      await postBackend(
+        `/api/profiles/by-user/${user.uid}/`,
+        {
+          registration_number: registrationNumber.trim(),
+          student_number: studentNumber.trim(),
+          email: profile?.email || user.email,
+        },
+        true,
+      );
 
       // Create enrollments
-      const batchPromises = selectedCourses.map(async (courseId) => {
-        const enrollmentData = {
-          course_id: courseId,
+      await postBackend(
+        "/api/enrollments/",
+        {
           student_id: user.uid,
-          status: "pending",
-          enrolled_at: serverTimestamp(),
-        };
-        return addDoc(collection(db, "enrollments"), enrollmentData);
-      });
+          course_ids: selectedCourses,
+        },
+        true,
+      );
 
-      await Promise.all(batchPromises);
-
-      // Notify lecturers (course instructors) to review requests
+      // Notify lecturers
       const notificationPromises = selectedCourses.map(async (courseId) => {
-        const course = courses.find((c) => c.id === courseId);
-        if (!course?.instructor_id) return null;
+        const course = courseUnits.find((c) => c.id === courseId);
+        if (!course) return;
 
         const studentLabel =
           profile?.full_name || profile?.student_number || user.email;
 
-        const notificationData = {
-          user_id: course.instructor_id,
-          type: "enrollment_request",
-          title: "Enrollment Request",
-          message: `${studentLabel} requested to enroll in ${course.name} (${course.code}).`,
-          related_id: courseId,
-          is_read: false,
-          created_at: serverTimestamp(),
-        };
-        return addDoc(collection(db, "notifications"), notificationData);
+        try {
+          await postBackend(
+            "/api/notifications/",
+            {
+              user_id: `lecturer-${course.course}`,
+              type: "enrollment_request",
+              title: "Enrollment Request",
+              message: `${studentLabel} requested to enroll in ${course.name} (${course.code}).`,
+              related_id: courseId,
+            },
+            true,
+          );
+        } catch {
+          // notification send is best-effort
+        }
       });
 
-      await Promise.all(notificationPromises);
+      await Promise.allSettled(notificationPromises);
 
       toast({
-        title: "Registration Submitted! 🎉",
+        title: "Registration Submitted!",
         description: `You've registered for ${selectedCourses.length} course unit(s) with ${totalCredits} credits.`,
       });
       navigate("/enrollment");
@@ -334,7 +307,7 @@ export default function Registration() {
     }
   };
 
-  const filteredCourses = courses.filter((course) => {
+  const filteredCourses = courseUnits.filter((course) => {
     const matchesSearch =
       course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       course.code.toLowerCase().includes(searchQuery.toLowerCase());
@@ -342,18 +315,11 @@ export default function Registration() {
   });
 
   const totalCredits = selectedCourses.reduce((acc, id) => {
-    const course = courses.find((c) => c.id === id);
+    const course = courseUnits.find((c) => c.id === id);
     return acc + (course?.credits || 0);
   }, 0);
 
   const creditProgress = (totalCredits / MAX_CREDITS) * 100;
-
-  const groupedCourses = departments
-    .map((dept) => ({
-      ...dept,
-      courses: filteredCourses.filter((c) => c.department_id === dept.id),
-    }))
-    .filter((dept) => dept.courses.length > 0);
 
   if (loading) {
     return (
@@ -470,30 +436,6 @@ export default function Registration() {
                               className="pl-12 h-12 text-base rounded-xl bg-muted/50 border-0"
                             />
                           </div>
-                          <Select
-                            value={selectedDept}
-                            onValueChange={setSelectedDept}
-                          >
-                            <SelectTrigger className="w-full md:w-[220px] h-12 rounded-xl">
-                              <Filter className="h-4 w-4 mr-2" />
-                              <SelectValue placeholder="All Departments" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">
-                                All Departments
-                              </SelectItem>
-                              {departments.map((dept) => (
-                                <SelectItem key={dept.id} value={dept.id}>
-                                  <span className="flex items-center gap-2">
-                                    <span className="font-mono text-xs text-muted-foreground">
-                                      {dept.code}
-                                    </span>
-                                    {dept.name}
-                                  </span>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
                         </div>
                       </CardContent>
                     </Card>
@@ -507,7 +449,7 @@ export default function Registration() {
                           </div>
                           <div>
                             <p className="text-2xl font-bold">
-                              {courses.length}
+                              {courseUnits.length}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Available
@@ -650,8 +592,7 @@ export default function Registration() {
                                           {course.name}
                                         </h3>
                                         <p className="text-sm text-muted-foreground line-clamp-2">
-                                          {course.description ||
-                                            "No description available"}
+                                          {"No description available"}
                                         </p>
                                       </div>
 
@@ -772,7 +713,7 @@ export default function Registration() {
                               <div className="space-y-2 max-h-[280px] overflow-y-auto custom-scrollbar pr-1">
                                 <AnimatePresence mode="popLayout">
                                   {selectedCourses.map((id) => {
-                                    const course = courses.find(
+                                    const course = courseUnits.find(
                                       (c) => c.id === id,
                                     );
                                     if (!course) return null;
@@ -948,7 +889,7 @@ export default function Registration() {
                       </h3>
                       <div className="space-y-2">
                         {selectedCourses.map((id) => {
-                          const course = courses.find((c) => c.id === id);
+                          const course = courseUnits.find((c) => c.id === id);
                           if (!course) return null;
                           return (
                             <div

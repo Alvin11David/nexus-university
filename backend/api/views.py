@@ -30,7 +30,7 @@ from .models import Program, AcademicEvent
 from .serializers import AnnouncementSerializer
 from .models import Announcement
 from .serializers import CourseSerializer, CourseUnitSerializer, AssignmentSerializer, ProfileSerializer, RegistrarSerializer, FeeAssignmentSerializer, StudentGradeSerializer, ActivitySerializer, SignUpSerializer
-from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings, Enrollment, LiveSession, Classroom, ClassroomEnrollment, Submission, Schedule, StudentFee
+from .models import Assignment, Quiz, QuizQuestion, QuizAttempt, ExamResult, Message, MessageDraft, UserSettings, Enrollment, LiveSession, Classroom, ClassroomEnrollment, Submission, Schedule, StudentFee, Notification
 
 
 OTP_TTL_MINUTES = 10
@@ -1435,6 +1435,9 @@ class CourseListView(APIView):
         college = request.query_params.get("college")
         if college:
             qs = qs.filter(college=college)
+        name = request.query_params.get("name")
+        if name:
+            qs = qs.filter(name__icontains=name)
         serializer = CourseSerializer(qs, many=True)
         return Response(serializer.data)
 
@@ -1491,6 +1494,12 @@ class CourseUnitListView(APIView):
         course_id = request.query_params.get("course_id")
         if course_id:
             qs = qs.filter(course_id=course_id)
+        semester = request.query_params.get("semester")
+        if semester:
+            qs = qs.filter(semester=semester)
+        year = request.query_params.get("year")
+        if year:
+            qs = qs.filter(year=year)
         serializer = CourseUnitSerializer(qs, many=True)
         return Response(serializer.data)
 
@@ -2198,6 +2207,28 @@ class EnrollmentListView(APIView):
             })
         return Response(data)
 
+    def post(self, request):
+        student_id = request.data.get("student_id")
+        course_ids = request.data.get("course_ids", [])
+
+        if not student_id or not course_ids:
+            return Response({"error": "student_id and course_ids required"}, status=400)
+
+        results = []
+        for cid in course_ids:
+            enrollment = Enrollment.objects.create(
+                student_id=student_id,
+                course_id=cid,
+                status="pending",
+            )
+            results.append({
+                "id": str(enrollment.id),
+                "course_id": enrollment.course_id,
+                "status": enrollment.status,
+                "enrolled_at": enrollment.enrolled_at.isoformat(),
+            })
+        return Response(results, status=201)
+
 
 class SubmissionListView(APIView):
     authentication_classes = []
@@ -2274,6 +2305,90 @@ class StudentFeeListView(APIView):
             for f in qs
         ]
         return Response(data)
+
+
+class ProfileUpdateByUserView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def put(self, request, user_id):
+        try:
+            email = request.data.get("email", "")
+            student_record = None
+            if email:
+                student_record = StudentRecord.objects.filter(email__iexact=email).first()
+            if not student_record:
+                student_record = StudentRecord.objects.filter(
+                    registration_number=request.data.get("registration_number", "")
+                ).first()
+            if not student_record:
+                return Response({"error": "Student record not found"}, status=404)
+
+            if "registration_number" in request.data:
+                student_record.registration_number = request.data["registration_number"]
+            if "student_number" in request.data:
+                student_record.student_number = request.data["student_number"]
+            student_record.save()
+            return Response({
+                "success": True,
+                "registration_number": student_record.registration_number,
+                "student_number": student_record.student_number,
+            })
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
+
+class NotificationListView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        user_id = request.query_params.get("user_id")
+        qs = Notification.objects.all()
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        data = [
+            {
+                "id": str(n.id),
+                "user_id": n.user_id,
+                "type": n.type,
+                "title": n.title,
+                "message": n.message,
+                "related_id": n.related_id,
+                "is_read": n.is_read,
+                "created_at": n.created_at.isoformat(),
+            }
+            for n in qs
+        ]
+        return Response(data)
+
+    def post(self, request):
+        user_id = request.data.get("user_id")
+        ntype = request.data.get("type", "")
+        title = request.data.get("title", "")
+        message = request.data.get("message", "")
+        related_id = request.data.get("related_id")
+
+        if not user_id or not title:
+            return Response({"error": "user_id and title required"}, status=400)
+
+        notification = Notification.objects.create(
+            user_id=user_id,
+            type=ntype,
+            title=title,
+            message=message,
+            related_id=related_id,
+        )
+        return Response({
+            "id": str(notification.id),
+            "user_id": notification.user_id,
+            "type": notification.type,
+            "title": notification.title,
+            "message": notification.message,
+            "related_id": notification.related_id,
+            "is_read": notification.is_read,
+            "created_at": notification.created_at.isoformat(),
+        }, status=201)
 
 
 class ActivityListView(APIView):

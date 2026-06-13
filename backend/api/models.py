@@ -530,6 +530,22 @@ class StudentFee(models.Model):
         return f"Fee: {self.student_id} - {self.amount}"
 
 
+class Notification(models.Model):
+    user_id = models.CharField(max_length=255)
+    type = models.CharField(max_length=64, blank=True, default="")
+    title = models.CharField(max_length=255, blank=True, default="")
+    message = models.TextField(blank=True, default="")
+    related_id = models.CharField(max_length=64, blank=True, null=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"Notification for {self.user_id}: {self.title}"
+
+
 class Submission(models.Model):
     assignment_id = models.CharField(max_length=64)
     student_id = models.CharField(max_length=255)

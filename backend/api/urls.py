@@ -53,6 +53,8 @@ from .views import (
     ClassroomJoinView,
     EnrollmentListView,
     SubmissionListView,
+    ProfileUpdateByUserView,
+    NotificationListView,
     ScheduleListView,
     StudentFeeListView,
 )
@@ -111,6 +113,8 @@ urlpatterns = [
     path("classrooms/join/", ClassroomJoinView.as_view()),
     path("enrollments/", EnrollmentListView.as_view()),
     path("submissions/", SubmissionListView.as_view()),
+    path("profiles/by-user/<str:user_id>/", ProfileUpdateByUserView.as_view()),
+    path("notifications/", NotificationListView.as_view()),
     path("schedules/", ScheduleListView.as_view()),
     path("student-fees/", StudentFeeListView.as_view()),
 ]
