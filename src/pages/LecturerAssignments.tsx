@@ -33,22 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { db, storage } from "@/integrations/firebase/client";
-import { getBackend, postBackend } from "@/lib/backendApi";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  doc,
-  serverTimestamp,
-  getDoc,
-  onSnapshot,
-} from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getBackend, postBackend, deleteBackend } from "@/lib/backendApi";
 import { useToast } from "@/components/ui/use-toast";
 
 interface Assignment {
@@ -178,49 +163,30 @@ export default function LecturerAssignments() {
     loadAssignments();
   }, [toast, user]);
 
-  // Load lecturer courses from Firebase
+  // Load lecturer courses from backend
   useEffect(() => {
     const loadCourses = async () => {
       if (!user) return;
       try {
-        // Fetch lecturer's profile to get assigned_course_units
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourseUnits = profileData.assigned_course_units || [];
+        const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+        const lecturerProfile = profiles.find(
+          (p: any) => p.email === user.email,
+        );
+        const assignedCourseUnits: string[] =
+          lecturerProfile?.assigned_course_units || [];
 
-          if (assignedCourseUnits.length > 0) {
-            // Query course_units collection where doc.id is in assignedCourseUnits
-            const chunks = [];
-            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-              chunks.push(assignedCourseUnits.slice(i, i + 30));
-            }
-
-            const mapped: CourseOption[] = [];
-            for (const chunk of chunks) {
-              const courseUnitsQuery = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-              courseUnitsSnapshot.docs.forEach((doc) => {
-                const courseData = doc.data();
-                mapped.push({
-                  id: doc.id,
-                  title:
-                    courseData.name ||
-                    courseData.course_unit_name ||
-                    "Unknown Course",
-                  code:
-                    courseData.code || courseData.course_unit_code || "Unknown",
-                });
-              });
-            }
-            setCourses(mapped);
-            // Do not pre-select, let user choose from dropdown
-          } else {
-            setCourses([]);
-          }
+        if (assignedCourseUnits.length > 0) {
+          const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+          const mapped: CourseOption[] = courseUnitsData
+            .filter((cu: any) => assignedCourseUnits.includes(cu.id) || assignedCourseUnits.includes(cu.course_id))
+            .map((cu: any) => ({
+              id: cu.id || cu.course_id,
+              title:
+                cu.name || cu.course_unit_name || "Unknown Course",
+              code:
+                cu.code || cu.course_unit_code || "Unknown",
+            }));
+          setCourses(mapped);
         } else {
           setCourses([]);
         }
@@ -290,19 +256,6 @@ export default function LecturerAssignments() {
 
     setLoading(true);
     try {
-      let instructionDocUrl: string | null = null;
-      let instructionDocName: string | null = null;
-      // Upload instruction document if provided
-      if (formData.instructionDocument) {
-        setUploadingDocument(true);
-        const fileName = `${user.uid}/${Date.now()}-${formData.instructionDocument.name}`;
-        const fileRef = ref(storage, `assignment-documents/${fileName}`);
-        await uploadBytes(fileRef, formData.instructionDocument);
-        instructionDocUrl = await getDownloadURL(fileRef);
-        instructionDocName = formData.instructionDocument.name;
-        setUploadingDocument(false);
-      }
-
       const course = courses.find((c) => c.id === selectedCourse);
 
       const payload = {
@@ -315,8 +268,6 @@ export default function LecturerAssignments() {
         due_date: new Date(formData.dueDate).toISOString(),
         total_points: formData.totalPoints,
         status: "draft",
-        instruction_document_url: instructionDocUrl,
-        instruction_document_name: instructionDocName,
       };
 
       const created = await postBackend<any>("/api/assignments/", payload);
@@ -347,7 +298,7 @@ export default function LecturerAssignments() {
       setShowCreateModal(false);
       toast({
         title: "Success",
-        description: `Assignment created and notifications sent to ${enrolledStudents.length} students`,
+        description: "Assignment created successfully.",
       });
     } catch (error: any) {
       console.error("Error creating assignment:", error);
@@ -368,10 +319,10 @@ export default function LecturerAssignments() {
     if (!confirmed) return;
 
     try {
-      await deleteDoc(doc(db, "Assignments", assignmentId));
+      await deleteBackend(`/api/assignments/${assignmentId}/`);
       setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
       toast({ title: "Assignment deleted" });
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Delete failed",
         description: error.message,
@@ -383,34 +334,30 @@ export default function LecturerAssignments() {
   const loadSubmissions = async (assignmentId: string) => {
     setLoadingSubmissions(true);
     try {
-      // Get submissions for this assignment
-      const submissionsQuery = query(
-        collection(db, "submissions"),
-        where("assignment_id", "==", assignmentId),
+      const submissionsData = await getBackend<any[]>(
+        `/api/submissions/?assignment_ids=${encodeURIComponent(assignmentId)}`,
       );
-      const submissionsSnapshot = await getDocs(submissionsQuery);
 
-      // Get student details for each submission
-      const submissionsWithStudents = await Promise.all(
-        submissionsSnapshot.docs.map(async (docSnap) => {
-          const submission = docSnap.data();
+      // Get student profiles
+      const allProfiles = await getBackend<any[]>("/api/profiles/");
+      const profileMap = new Map<string, any>();
+      allProfiles.forEach((p: any) => profileMap.set(p.id, p));
 
-          // Get student profile
-          const studentDoc = await getDoc(
-            doc(db, "profiles", submission.student_id),
-          );
-          const studentData = studentDoc.data();
-
-          return {
-            id: docSnap.id,
-            ...submission,
-            student_name: studentData
-              ? `${studentData.first_name} ${studentData.last_name}`
-              : "Unknown Student",
-            student_email: studentData?.email || "No email",
-          } as Submission;
-        }),
-      );
+      const submissionsWithStudents: Submission[] = submissionsData.map((s: any) => {
+        const studentData = profileMap.get(s.student_id) || {};
+        return {
+          id: s.id,
+          student_id: s.student_id,
+          assignment_id: s.assignment_id,
+          content: s.content || "",
+          status: s.status || "submitted",
+          submitted_at: s.submitted_at,
+          score: s.score,
+          feedback: s.feedback,
+          student_name: studentData.full_name || "Unknown Student",
+          student_email: studentData.email || "No email",
+        };
+      });
 
       setViewingSubmissions(submissionsWithStudents);
     } catch (error: any) {
@@ -429,10 +376,7 @@ export default function LecturerAssignments() {
     updates: { status?: string; score?: number; feedback?: string },
   ) => {
     try {
-      await updateDoc(doc(db, "submissions", submissionId), {
-        ...updates,
-        graded_at: serverTimestamp(),
-      });
+      await postBackend(`/api/submissions/${submissionId}/update/`, updates);
 
       // Update local state
       setViewingSubmissions((prev) =>
@@ -485,40 +429,19 @@ export default function LecturerAssignments() {
 
     setLoading(true);
     try {
-      let instructionDocUrl = editing.instructionDocumentUrl;
-      let instructionDocName = editing.instructionDocumentName;
+      const course = courses.find((c) => c.id === editFormData.courseId);
 
-      // Upload new instruction document if provided
-      if (editFormData.instructionDocument) {
-        setUploadingDocument(true);
-        const fileName = `${user.uid}/${Date.now()}-${
-          editFormData.instructionDocument.name
-        }`;
-        const fileRef = ref(storage, `assignment-documents/${fileName}`);
-        await uploadBytes(fileRef, editFormData.instructionDocument);
-        instructionDocUrl = await getDownloadURL(fileRef);
-        instructionDocName = editFormData.instructionDocument.name;
-        setUploadingDocument(false);
-      }
-
-      const assignmentUpdate: any = {
+      const payload = {
         title: editFormData.title,
         description: editFormData.description,
         due_date: new Date(editFormData.dueDate).toISOString(),
         total_points: editFormData.totalPoints,
         course_id: editFormData.courseId,
-        updated_at: serverTimestamp(),
+        course_title: course?.title || "",
+        course_code: course?.code || "",
       };
 
-      // Only include instruction document fields if they are defined
-      if (instructionDocUrl !== undefined) {
-        assignmentUpdate.instruction_document_url = instructionDocUrl;
-      }
-      if (instructionDocName !== undefined) {
-        assignmentUpdate.instruction_document_name = instructionDocName;
-      }
-
-      await updateDoc(doc(db, "Assignments", editing.id), assignmentUpdate);
+      await postBackend(`/api/assignments/${editing.id}/update/`, payload);
 
       const course = courses.find((c) => c.id === editFormData.courseId);
       const updated: Assignment = {
@@ -531,8 +454,6 @@ export default function LecturerAssignments() {
         totalStudents: editing.totalStudents,
         status: editing.status,
         courseTitle: course?.title,
-        instructionDocumentUrl: instructionDocUrl || undefined,
-        instructionDocumentName: instructionDocName || undefined,
       };
 
       setAssignments((prev) =>
@@ -1389,10 +1310,8 @@ export default function LecturerAssignments() {
                               {submission.status}
                             </Badge>
                             <p className="text-xs text-gray-500 mt-1">
-                              {submission.submitted_at?.toDate
-                                ? submission.submitted_at
-                                    .toDate()
-                                    .toLocaleDateString()
+                              {submission.submitted_at
+                                ? new Date(submission.submitted_at).toLocaleDateString()
                                 : "Unknown date"}
                             </p>
                           </div>
@@ -1406,27 +1325,18 @@ export default function LecturerAssignments() {
                           </div>
                         )}
 
-                        {submission.file_url && (
+                          {submission.file_url && (
                           <div className="flex items-center gap-2">
                             <UploadIcon className="h-4 w-4 text-gray-500" />
-                            {submission.file_url.startsWith(
-                              "https://firebasestorage.googleapis.com/",
-                            ) ? (
-                              <a
-                                href={submission.file_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-sm text-blue-600 hover:text-blue-800 underline"
-                              >
-                                {submission.file_name ||
-                                  "Download submission file"}
-                              </a>
-                            ) : (
-                              <span className="text-sm text-gray-500 italic">
-                                File not available (uploaded before storage was
-                                implemented)
-                              </span>
-                            )}
+                            <a
+                              href={submission.file_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-blue-600 hover:text-blue-800 underline"
+                            >
+                              {submission.file_name ||
+                                "Download submission file"}
+                            </a>
                           </div>
                         )}
 

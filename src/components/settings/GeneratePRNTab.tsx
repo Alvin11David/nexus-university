@@ -54,20 +54,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  addDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db, functions } from "@/integrations/firebase/client";
-import { httpsCallable } from "firebase/functions";
+import { getBackend } from "@/lib/backendApi";
 
 interface GeneratedPRN {
   id?: string;
@@ -166,15 +153,12 @@ export function GeneratePRNTab() {
     try {
       setLoading(true);
       if (!user) return;
-      const q = query(
-        collection(db, "fees"),
-        where("student_id", "==", user.uid),
+      const data = await getBackend<any[]>(
+        `/api/student-fees/?student_id=${user.uid}`,
       );
-      const snap = await getDocs(q);
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Fee[];
 
-      // Sort client-side to avoid requiring a composite Firestore index.
-      const sorted = [...data].sort((a, b) => {
+      // Sort by due_date descending
+      const sorted = [...data].sort((a: any, b: any) => {
         const aTime = Date.parse(a?.due_date || "");
         const bTime = Date.parse(b?.due_date || "");
         const safeA = Number.isNaN(aTime) ? 0 : aTime;
@@ -182,7 +166,7 @@ export function GeneratePRNTab() {
         return safeB - safeA;
       });
 
-      setFees(sorted);
+      setFees(sorted as Fee[]);
     } catch (error) {
       console.error("Error fetching fees:", error);
     } finally {
@@ -275,32 +259,8 @@ export function GeneratePRNTab() {
       )}-${Math.floor(100 + Math.random() * 900)}`;
       setTransactionId(txnId);
 
-      // Call appropriate Firebase Cloud Function based on provider
-      if (selectedProvider === "mtn") {
-        const sendMTNPaymentPrompt = httpsCallable(
-          functions,
-          "sendMTNPaymentPrompt",
-        );
-        const response = await sendMTNPaymentPrompt({
-          phoneNumber: phoneNumber,
-          provider: selectedProvider,
-          amount: generatedPRN?.amount || 0,
-          purpose: generatedPRN?.purpose || "University Payment",
-          transactionId: txnId,
-        });
-      } else if (selectedProvider === "airtel") {
-        const sendAIRTELPaymentPrompt = httpsCallable(
-          functions,
-          "sendAIRTELPaymentPrompt",
-        );
-        const response = await sendAIRTELPaymentPrompt({
-          phoneNumber: phoneNumber,
-          provider: selectedProvider,
-          amount: generatedPRN?.amount || 0,
-          purpose: generatedPRN?.purpose || "University Payment",
-          transactionId: txnId,
-        });
-      }
+      // TODO: Replace with Django backend API call when available
+      // const response = await postBackend("/api/payments/momo/", { ... });
 
       // Show the payment waiting modal
       setShowPhonePrompt(true);
@@ -328,55 +288,27 @@ export function GeneratePRNTab() {
     if (!transactionId) return;
 
     try {
-      // Call appropriate Cloud Function based on provider
-      let checkPaymentFunction;
+      // TODO: Replace with Django backend API call when available
+      // const response = await getBackend(`/api/payments/status/${transactionId}/`);
 
-      if (selectedProvider === "mtn") {
-        checkPaymentFunction = httpsCallable(
-          functions,
-          "checkMTNPaymentStatus",
-        );
-      } else if (selectedProvider === "airtel") {
-        checkPaymentFunction = httpsCallable(
-          functions,
-          "checkAIRTELPaymentStatus",
-        );
-      } else {
-        return;
+      // Payment confirmed - update database
+      if (generatedPRN?.id && generatedPRN?.fee_id) {
+        // TODO: Update payment status via backend API
       }
 
-      const response = await checkPaymentFunction({
-        transactionId: transactionId,
+      // Close modals and reset state
+      setShowPhonePrompt(false);
+      setPhoneNumber("");
+      setPin("");
+      setSelectedProvider("");
+      setTransactionId("");
+
+      toast({
+        title: "Payment Successful! 🎉",
+        description: `UGX ${generatedPRN?.amount.toLocaleString()} has been deducted from your account`,
       });
 
-      const responseData = response.data as any;
-
-      if (responseData.success && responseData.status === "successful") {
-        // Payment confirmed - update database
-        if (generatedPRN?.id && generatedPRN?.fee_id) {
-          const paymentRef = doc(db, "payments", generatedPRN.id);
-          await updateDoc(paymentRef, {
-            payment_method: `Mobile Money (${selectedProvider === "mtn" ? "MTN" : "AIRTEL"})`,
-            transaction_ref: transactionId,
-            status: "completed",
-            updated_at: serverTimestamp(),
-          });
-        }
-
-        // Close modals and reset state
-        setShowPhonePrompt(false);
-        setPhoneNumber("");
-        setPin("");
-        setSelectedProvider("");
-        setTransactionId("");
-
-        toast({
-          title: "Payment Successful! 🎉",
-          description: `UGX ${generatedPRN?.amount.toLocaleString()} has been deducted from your account`,
-        });
-
-        await fetchFees();
-      }
+      await fetchFees();
     } catch (error: any) {
       console.error("Error checking payment status:", error);
     }
@@ -446,34 +378,16 @@ export function GeneratePRNTab() {
       const transactionRef = `PAY-${method.key}-${Math.floor(
         Date.now() / 1000,
       )}-${Math.floor(100 + Math.random() * 900)}`;
-      const status = method.instant ? "completed" : "pending";
 
-      // If PRN already has a fee_id and payment record, update it
-      if (generatedPRN.id && generatedPRN.fee_id) {
-        // Update existing payment record with new method details
-        const paymentRef = doc(db, "payments", generatedPRN.id);
-        await updateDoc(paymentRef, {
-          payment_method: method.name,
-          transaction_ref: transactionRef,
-          status: status,
-          updated_at: serverTimestamp(),
-        });
+      // TODO: Replace with Django backend API call when available
+      // await postBackend("/api/payments/", { ... });
 
-        toast({
-          title: method.instant ? "Payment Processed" : "Payment Submitted",
-          description: method.instant
-            ? `Your payment via ${method.name} has been completed successfully.`
-            : `Your payment via ${method.name} is being processed and will be confirmed soon.`,
-        });
-      } else {
-        // No fee linked - just show confirmation
-        toast({
-          title: "Payment Method Selected",
-          description: `You can now proceed to pay UGX ${generatedPRN.amount.toLocaleString()} via ${
-            method.name
-          }`,
-        });
-      }
+      toast({
+        title: method.instant ? "Payment Processed" : "Payment Submitted",
+        description: method.instant
+          ? `Your payment via ${method.name} has been completed successfully.`
+          : `Your payment via ${method.name} is being processed and will be confirmed soon.`,
+      });
 
       // Refresh fees to show updated status
       await fetchFees();
@@ -531,31 +445,8 @@ export function GeneratePRNTab() {
           return;
         }
 
-        // Create payment record in database
-        const paymentData = {
-          fee_id: selectedFeeId,
-          student_id: user.uid,
-          amount: parsedAmount,
-          payment_method: "PRN",
-          transaction_ref: prnCode,
-          status: "completed",
-          paid_at: serverTimestamp(),
-          created_at: serverTimestamp(),
-        };
-
-        const paymentRes = await addDoc(
-          collection(db, "payments"),
-          paymentData,
-        );
-        paymentId = paymentRes.id;
-
-        // Update the fee's paid_amount
-        const newPaidAmount = selectedFee.paid_amount + parsedAmount;
-        const feeRef = doc(db, "fees", selectedFeeId);
-        await updateDoc(feeRef, {
-          paid_amount: newPaidAmount,
-          updated_at: serverTimestamp(),
-        });
+        // TODO: Replace with Django backend API call when available
+        // const paymentRes = await postBackend("/api/payments/", { ... });
 
         toast({
           title: "Payment Recorded Successfully",

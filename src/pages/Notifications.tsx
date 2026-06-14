@@ -28,18 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-  updateDoc,
-  doc,
-  writeBatch,
-  serverTimestamp,
-} from "firebase/firestore";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { formatDistanceToNow } from "date-fns";
 
 interface Notification {
@@ -139,22 +128,9 @@ export default function Notifications() {
 
     try {
       setLoading(true);
-      const q = query(
-        collection(db, "notifications"),
-        where("user_id", "==", user.uid),
-        orderBy("created_at", "desc"),
+      const data: any[] = await getBackend(
+        `/api/notifications/?user_id=${user.uid}`,
       );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((d) => {
-        const docData = d.data();
-        return {
-          id: d.id,
-          ...docData,
-          created_at:
-            docData.created_at?.toDate?.()?.toISOString() || docData.created_at,
-        } as Notification;
-      });
-
       setNotifications(data || []);
     } catch (error) {
       console.error("Error fetching notifications:", error);
@@ -165,14 +141,12 @@ export default function Notifications() {
 
   const markAsRead = async (id: string) => {
     try {
-      const notificationRef = doc(db, "notifications", id);
-      await updateDoc(notificationRef, { is_read: true });
+      await postBackend(`/api/notifications/${id}/read/`, {});
 
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
 
-      // Notify header to refresh badge immediately
       window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
       console.error("Error marking notification as read:", error);
@@ -183,24 +157,12 @@ export default function Notifications() {
     if (!user?.uid) return;
 
     try {
-      const q = query(
-        collection(db, "notifications"),
-        where("user_id", "==", user.uid),
-        where("is_read", "==", false),
-      );
-      const querySnapshot = await getDocs(q);
-
-      if (querySnapshot.empty) return;
-
-      const batch = writeBatch(db);
-      querySnapshot.docs.forEach((d) => {
-        batch.update(d.ref, { is_read: true });
+      await postBackend("/api/notifications/mark-all-read/", {
+        user_id: user.uid,
       });
-      await batch.commit();
 
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
 
-      // Notify header to refresh badge immediately
       window.dispatchEvent(new Event("notifications-updated"));
     } catch (error) {
       console.error("Error marking all as read:", error);

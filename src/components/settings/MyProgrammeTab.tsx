@@ -22,16 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 export function MyProgrammeTab() {
   const { user, profile } = useAuth();
@@ -73,57 +64,36 @@ export function MyProgrammeTab() {
 
         // Find course ID if missing
         if (!targetCourseId && profile.programme) {
-          const coursesRef = collection(db, "courses");
-          const qName = query(
-            coursesRef,
-            where("name", "==", profile.programme),
-            limit(1),
+          const courses = await getBackend<any[]>(
+            `/api/courses/?name=${encodeURIComponent(profile.programme)}`,
           );
-          const snapName = await getDocs(qName);
-
-          if (!snapName.empty) {
-            targetCourseId = snapName.docs[0].id;
-          } else {
-            const qTitle = query(
-              coursesRef,
-              where("title", "==", profile.programme),
-              limit(1),
-            );
-            const snapTitle = await getDocs(qTitle);
-            if (!snapTitle.empty) {
-              targetCourseId = snapTitle.docs[0].id;
-            }
+          if (courses.length > 0) {
+            targetCourseId = courses[0].id;
           }
         }
 
         // Fetch course details
         if (targetCourseId) {
-          const courseDoc = await getDoc(doc(db, "courses", targetCourseId));
-          if (courseDoc.exists()) {
-            const data = courseDoc.data();
-            const durationYears = data.duration_years || 3;
-            resolvedTotalYears = durationYears;
-            setProgrammeData((prev) => ({
-              ...prev,
-              totalYears: durationYears,
-            }));
+          const courseData = await getBackend<any>(
+            `/api/courses/${targetCourseId}/`,
+          );
+          const durationYears = courseData.duration_years || 3;
+          resolvedTotalYears = durationYears;
+          setProgrammeData((prev) => ({
+            ...prev,
+            totalYears: durationYears,
+          }));
 
-            setProgrammeInfo((prev) => ({
-              ...prev,
-              name: data.name || profile.programme || prev.name,
-              code: data.code || prev.code,
-              department:
-                data.department || profile.department || prev.department,
-              college: data.college || profile.college || prev.college,
-              duration: `${durationYears} Years`,
-              duration_years: durationYears,
-            }));
-          } else if (profile.programme) {
-            setProgrammeInfo((prev) => ({
-              ...prev,
-              name: profile.programme || prev.name,
-            }));
-          }
+          setProgrammeInfo((prev) => ({
+            ...prev,
+            name: courseData.name || profile.programme || prev.name,
+            code: courseData.code || prev.code,
+            department:
+              courseData.department || profile.department || prev.department,
+            college: courseData.college || profile.college || prev.college,
+            duration: `${durationYears} Years`,
+            duration_years: durationYears,
+          }));
         } else if (profile.programme) {
           setProgrammeInfo((prev) => ({
             ...prev,
@@ -136,79 +106,53 @@ export function MyProgrammeTab() {
         // Determine required credits from the selected course where available.
         let requiredCredits = 120;
         if (targetCourseId) {
-          const courseDoc = await getDoc(doc(db, "courses", targetCourseId));
-          if (courseDoc.exists()) {
-            const courseData = courseDoc.data() as any;
-            requiredCredits =
-              Number(courseData.required_credits) ||
-              Number(courseData.total_credits) ||
-              requiredCredits;
-          }
+          const courseData = await getBackend<any>(
+            `/api/courses/${targetCourseId}/`,
+          );
+          requiredCredits =
+            Number(courseData.required_credits) ||
+            Number(courseData.total_credits) ||
+            requiredCredits;
         }
 
-        // Pull results from student_grades first, then fallback to exam_results.
+        // Pull results from student_grades
         let resultRows: any[] = [];
-        const studentGradesRef = collection(db, "student_grades");
-        const qStudentGrades = query(
-          studentGradesRef,
-          where("student_id", "==", user.uid),
-        );
-        const studentGradesSnap = await getDocs(qStudentGrades);
-        if (!studentGradesSnap.empty) {
-          resultRows = studentGradesSnap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
-        } else {
-          const examResultsRef = collection(db, "exam_results");
-          const qExamResults = query(
-            examResultsRef,
-            where("student_id", "==", user.uid),
+        try {
+          resultRows = await getBackend<any[]>(
+            `/api/student-grades/?student_id=${user.uid}`,
           );
-          const examResultsSnap = await getDocs(qExamResults);
-          resultRows = examResultsSnap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
+        } catch {
+          resultRows = [];
         }
 
         // Build a map of course credits for weighted GPA and credit completion.
         const courseIds = Array.from(
-          new Set(resultRows.map((r) => r.course_id).filter(Boolean)),
+          new Set(resultRows.map((r: any) => r.course_id).filter(Boolean)),
         );
         const creditMap = new Map<string, number>();
 
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-          const qUnits = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const unitSnap = await getDocs(qUnits);
-          unitSnap.docs.forEach((d) => {
-            const data = d.data() as any;
-            creditMap.set(d.id, Number(data.credits) || 3);
+        if (courseIds.length > 0) {
+          const courseUnits = await getBackend<any[]>("/api/course-units/");
+          courseUnits.forEach((cu: any) => {
+            if (courseIds.includes(cu.id)) {
+              creditMap.set(cu.id, Number(cu.credits) || 3);
+            }
           });
 
-          const missing = chunk.filter((id) => !creditMap.has(id));
-          if (missing.length > 0) {
-            const qCourses = query(
-              collection(db, "courses"),
-              where("__name__", "in", missing),
-            );
-            const courseSnap = await getDocs(qCourses);
-            courseSnap.docs.forEach((d) => {
-              const data = d.data() as any;
-              creditMap.set(d.id, Number(data.credits) || 3);
-            });
-          }
+          // Try courses for any remaining
+          const courses = await getBackend<any[]>("/api/courses/");
+          courses.forEach((c: any) => {
+            if (courseIds.includes(c.id) && !creditMap.has(c.id)) {
+              creditMap.set(c.id, Number(c.credits) || 3);
+            }
+          });
         }
 
         let totalWeightedPoints = 0;
         let totalWeightedCredits = 0;
         let completedCredits = 0;
 
-        resultRows.forEach((row) => {
+        resultRows.forEach((row: any) => {
           const credits = creditMap.get(row.course_id) || 3;
           const gp = Number(row.gp ?? row.grade_point ?? 0);
           totalWeightedPoints += gp * credits;
@@ -225,7 +169,7 @@ export function MyProgrammeTab() {
             : 0;
 
         const coursesCompleted = resultRows.filter(
-          (row) => Number(row.gp ?? row.grade_point ?? 0) > 0,
+          (row: any) => Number(row.gp ?? row.grade_point ?? 0) > 0,
         ).length;
         const approxTotalCourses = Math.max(
           coursesCompleted,

@@ -20,9 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
-import { db, storage } from "@/integrations/firebase/client";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import {
   Dialog,
   DialogContent,
@@ -94,23 +92,18 @@ export default function LecturerClasses() {
     const loadSessions = async () => {
       try {
         setIsLoading(true);
-        const sessionsRef = collection(db, "live_sessions");
-        const q = query(sessionsRef, where("instructor_id", "==", user.uid));
-        const snapshot = await getDocs(q);
+        const data = await getBackend<any[]>("/api/live-sessions/");
 
-        const docs: LiveSessionDoc[] = snapshot.docs.map((d) => {
-          const data = d.data() as any;
-          return {
-            id: d.id,
-            title: data.title,
-            course_name: data.course_name,
-            scheduled_at: data.scheduled_at,
-            duration_minutes: data.duration_minutes,
-            meet_link: data.meet_link,
-            attendees: data.attendees,
-            status: data.status,
-          };
-        });
+        const docs: LiveSessionDoc[] = data.map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          course_name: d.course_name,
+          scheduled_at: d.scheduled_at,
+          duration_minutes: d.duration_minutes,
+          meet_link: d.meet_link,
+          attendees: d.attendees,
+          status: d.status,
+        }));
 
         docs.sort((a, b) =>
           (a.scheduled_at || "").localeCompare(b.scheduled_at || ""),
@@ -263,38 +256,22 @@ export default function LecturerClasses() {
 
     try {
       setIsSaving(true);
-      const sessionsRef = collection(db, "live_sessions");
-      let resourceUrl: string | null = null;
 
-      if (resourceFile) {
-        setIsUploadingResource(true);
-        const storageRef = ref(
-          storage,
-          `class-resources/${user.uid}/${Date.now()}-${resourceFile.name}`,
-        );
-        const snapshot = await uploadBytes(storageRef, resourceFile);
-        resourceUrl = await getDownloadURL(snapshot.ref);
-      }
-
-      await addDoc(sessionsRef, {
+      const payload: any = {
+        course_id: newCourseName.trim() || "general",
         title: newTitle.trim(),
-        course_id: newCourseName.trim() || null,
         course_name: newCourseName.trim() || null,
-        description: newDescription.trim() || null,
-        meet_link: newMeetLink.trim() || null,
-        resource_url: resourceUrl,
-        resource_name: resourceFile?.name || null,
         scheduled_at: scheduledAt.toISOString(),
         duration_minutes: durationMinutes,
-        instructor_id: user.uid,
-        created_at: new Date().toISOString(),
-        status: "scheduled",
-      });
+        meet_link: newMeetLink.trim() || null,
+      };
+
+      const created = await postBackend<any>("/api/live-sessions/", payload);
 
       toast({
         title: "Live class scheduled",
         description:
-          "Your Google Meet session and resources are now scheduled for students.",
+          "Your Google Meet session is now scheduled for students.",
       });
 
       setShowNewSessionDialog(false);
@@ -302,24 +279,17 @@ export default function LecturerClasses() {
       setResourceFile(null);
 
       // Refresh list
-      const q = query(
-        collection(db, "live_sessions"),
-        where("instructor_id", "==", user.uid),
-      );
-      const snapshot = await getDocs(q);
-      const docs: LiveSessionDoc[] = snapshot.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          title: data.title,
-          course_name: data.course_name,
-          scheduled_at: data.scheduled_at,
-          duration_minutes: data.duration_minutes,
-          meet_link: data.meet_link,
-          attendees: data.attendees,
-          status: data.status,
-        };
-      });
+      const data = await getBackend<any[]>("/api/live-sessions/");
+      const docs: LiveSessionDoc[] = data.map((d: any) => ({
+        id: d.id,
+        title: d.title,
+        course_name: d.course_name,
+        scheduled_at: d.scheduled_at,
+        duration_minutes: d.duration_minutes,
+        meet_link: d.meet_link,
+        attendees: d.attendees,
+        status: d.status,
+      }));
       docs.sort((a, b) =>
         (a.scheduled_at || "").localeCompare(b.scheduled_at || ""),
       );
@@ -360,7 +330,6 @@ export default function LecturerClasses() {
       });
     } finally {
       setIsSaving(false);
-      setIsUploadingResource(false);
     }
   };
 

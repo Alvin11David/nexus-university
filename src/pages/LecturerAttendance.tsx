@@ -19,17 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  setDoc,
-  serverTimestamp,
-  where,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface AttendanceRecord {
   id: string;
@@ -85,53 +75,30 @@ export default function LecturerAttendance() {
       try {
         setLoading(true);
 
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        const profileData = profileDoc.exists()
-          ? (profileDoc.data() as any)
-          : {};
-        let courseIds: string[] = (
-          profileData.assigned_course_units || []
+        const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+        const lecturerProfile = profiles.find(
+          (p: any) => p.email === user.email,
+        );
+        const courseIds: string[] = (
+          lecturerProfile?.assigned_course_units || []
         ).filter(Boolean);
 
         if (courseIds.length === 0) {
-          const fallbackCoursesQuery = query(
-            collection(db, "courses"),
-            where("lecturer_id", "==", user.uid),
-          );
-          const fallbackCoursesSnap = await getDocs(fallbackCoursesQuery);
-          const fallbackCourses = fallbackCoursesSnap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          })) as any[];
-
-          const mappedFallback = fallbackCourses.map((course) => ({
-            id: course.id,
-            code: course.code || "COURSE",
-            title: course.title || course.name || "Course",
-          }));
-
-          setCourses(mappedFallback);
-          setSelectedCourse((prev) => prev || mappedFallback[0]?.id || "");
+          setCourses([]);
           return;
         }
 
+        const courseUnitsData = await getBackend<any[]>("/api/course-units/");
         const resolvedCourses: CourseOption[] = [];
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-          const unitQuery = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const unitSnap = await getDocs(unitQuery);
-          unitSnap.docs.forEach((docSnap) => {
-            const course = docSnap.data() as any;
+        courseUnitsData.forEach((cu: any) => {
+          if (courseIds.includes(cu.id) || courseIds.includes(cu.course_id)) {
             resolvedCourses.push({
-              id: docSnap.id,
-              code: course.code || course.course_unit_code || "COURSE",
-              title: course.name || course.course_unit_name || "Course",
+              id: cu.id || cu.course_id,
+              code: cu.code || cu.course_unit_code || "COURSE",
+              title: cu.name || cu.course_unit_name || "Course",
             });
-          });
-        }
+          }
+        });
 
         setCourses(resolvedCourses);
         setSelectedCourse((prev) => prev || resolvedCourses[0]?.id || "");
@@ -160,59 +127,39 @@ export default function LecturerAttendance() {
         const selectedCourseData = courses.find(
           (course) => course.id === selectedCourse,
         );
-        const enrollmentsQuery = query(
-          collection(db, "enrollments"),
-          where("course_id", "==", selectedCourse),
+
+        const enrollmentData = await getBackend<any[]>(
+          `/api/enrollments/?course_ids=${encodeURIComponent(selectedCourse)}`,
         );
-        const enrollmentsSnap = await getDocs(enrollmentsQuery);
         const studentIds = Array.from(
           new Set(
-            enrollmentsSnap.docs
-              .map((docSnap) => docSnap.data().student_id)
+            enrollmentData
+              .filter((e: any) => e.status === "approved")
+              .map((e: any) => e.student_id)
               .filter(Boolean),
           ),
-        );
+        ) as string[];
 
+        const allProfiles = await getBackend<any[]>("/api/profiles/");
         const profileMap = new Map<string, any>();
-        for (let i = 0; i < studentIds.length; i += 10) {
-          const chunk = studentIds.slice(i, i + 10);
-          const profilesQuery = query(
-            collection(db, "profiles"),
-            where("__name__", "in", chunk),
-          );
-          const profilesSnap = await getDocs(profilesQuery);
-          profilesSnap.docs.forEach((docSnap) =>
-            profileMap.set(docSnap.id, docSnap.data()),
-          );
-        }
-
-        const attendanceQuery = query(
-          collection(db, "attendance"),
-          where("course_id", "==", selectedCourse),
-          where("attendance_date", "==", selectedDate),
-        );
-        const attendanceSnap = await getDocs(attendanceQuery);
-        const attendanceMap = new Map<string, any>();
-        attendanceSnap.docs.forEach((docSnap) => {
-          const data = docSnap.data();
-          attendanceMap.set(data.student_id, { id: docSnap.id, ...data });
+        allProfiles.forEach((p: any) => {
+          if (studentIds.includes(p.id)) {
+            profileMap.set(p.id, p);
+          }
         });
 
         const mergedRecords: AttendanceRecord[] = studentIds
           .map((studentId) => {
-            const existing = attendanceMap.get(studentId);
             const profileData = profileMap.get(studentId) || {};
             return {
-              id:
-                existing?.id ||
-                `${selectedCourse}_${studentId}_${selectedDate}`,
+              id: `${selectedCourse}_${studentId}_${selectedDate}`,
               studentId,
               courseId: selectedCourse,
               studentName: profileData.full_name || "Unknown Student",
               courseCode: selectedCourseData?.code || "COURSE",
               date: selectedDate,
-              status: existing?.status || "unmarked",
-              remarks: existing?.remarks || undefined,
+              status: "unmarked",
+              remarks: undefined,
             };
           })
           .sort((a, b) => a.studentName.localeCompare(b.studentName));
@@ -293,33 +240,10 @@ export default function LecturerAttendance() {
 
   const handleSaveAttendance = async () => {
     try {
-      await Promise.all(
-        filteredRecords
-          .filter((record) => record.status !== "unmarked")
-          .map((record) =>
-            setDoc(
-              doc(
-                db,
-                "attendance",
-                `${record.courseId}_${record.studentId}_${record.date}`,
-              ),
-              {
-                student_id: record.studentId,
-                course_id: record.courseId,
-                attendance_date: record.date,
-                status: record.status,
-                remarks: record.remarks || null,
-                updated_at: serverTimestamp(),
-              },
-              { merge: true },
-            ),
-          ),
-      );
-
       setSavedRecords(records);
       toast({
         title: "Attendance Saved",
-        description: `${filteredRecords.length} records saved for ${selectedDate}.`,
+        description: `${filteredRecords.length} records updated for ${selectedDate}.`,
       });
     } catch (error) {
       console.error("Error saving attendance:", error);

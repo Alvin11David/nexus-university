@@ -16,19 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
-import { db } from "@/firebase";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  updateDoc,
-  addDoc,
-  getDoc,
-  orderBy,
-  Timestamp,
-} from "firebase/firestore";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
@@ -72,48 +60,33 @@ export default function LecturerEnrollments() {
       if (!user?.uid) return;
 
       // Get lecturer's profile to get assigned_course_units
-      const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-      if (!profileDoc.exists()) {
-        setEnrollments([]);
-        return;
-      }
-
-      const profileData = profileDoc.data();
-      const assignedCourseUnits = profileData.assigned_course_units || [];
+      const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+      const lecturerProfile = profiles.find(
+        (p: any) => p.email === user.email,
+      );
+      const assignedCourseUnits: string[] =
+        lecturerProfile?.assigned_course_units || [];
 
       if (assignedCourseUnits.length === 0) {
         setEnrollments([]);
         return;
       }
 
-      // Fetch course details from course_units collection
+      // Fetch course units
+      const courseUnitsData = await getBackend<any[]>("/api/course-units/");
       const courseMap = new Map<string, EnrollmentRow["course"]>();
-      const chunks = [];
-      for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-        chunks.push(assignedCourseUnits.slice(i, i + 30));
-      }
-
-      for (const chunk of chunks) {
-        const courseUnitsQuery = query(
-          collection(db, "course_units"),
-          where("__name__", "in", chunk),
-        );
-        const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-        courseUnitsSnapshot.docs.forEach((doc) => {
-          const courseData = doc.data();
-          courseMap.set(doc.id, {
-            id: doc.id,
-            title:
-              courseData.name ||
-              courseData.course_unit_name ||
-              "Unknown Course",
-            code: courseData.code || courseData.course_unit_code || "Unknown",
-            credits: courseData.credits || 3,
-            semester: null, // Not available in course_units
-            year: null, // Not available in course_units
+      courseUnitsData.forEach((cu: any) => {
+        if (assignedCourseUnits.includes(cu.id) || assignedCourseUnits.includes(cu.course_id)) {
+          courseMap.set(cu.id || cu.course_id, {
+            id: cu.id || cu.course_id,
+            title: cu.name || cu.course_unit_name || "Unknown Course",
+            code: cu.code || cu.course_unit_code || "Unknown",
+            credits: cu.credits || 3,
+            semester: cu.semester || null,
+            year: cu.year || null,
           });
-        });
-      }
+        }
+      });
 
       const courseIds = Array.from(courseMap.keys());
 
@@ -122,40 +95,31 @@ export default function LecturerEnrollments() {
         return;
       }
 
-      const enrollmentsRef = collection(db, "enrollments");
-      // Firestore 'in' matches can handle up to 30 values
-      const eQuery = query(
-        enrollmentsRef,
-        where("course_id", "in", courseIds.slice(0, 30)),
-        orderBy("enrolled_at", "desc"),
+      // Fetch enrollments by course_ids
+      const enrollmentData = await getBackend<any[]>(
+        `/api/enrollments/?course_ids=${encodeURIComponent(courseIds.join(","))}`,
       );
-
-      const eSnapshot = await getDocs(eQuery);
-      const enrollmentData = eSnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
 
       const studentIds = Array.from(
-        new Set(enrollmentData.map((e) => e.student_id).filter(Boolean)),
+        new Set(enrollmentData.map((e: any) => e.student_id).filter(Boolean)),
       );
 
-      let profileMap = new Map<string, EnrollmentRow["student"]>();
-      if (studentIds.length > 0) {
-        await Promise.all(
-          studentIds.map(async (sid) => {
-            const pDoc = await getDoc(doc(db, "profiles", sid as string));
-            if (pDoc.exists()) {
-              profileMap.set(
-                sid as string,
-                { id: pDoc.id, ...pDoc.data() } as any,
-              );
-            }
-          }),
-        );
-      }
+      // Fetch student profiles
+      const allProfiles = await getBackend<any[]>("/api/profiles/");
+      const profileMap = new Map<string, EnrollmentRow["student"]>();
+      allProfiles.forEach((p: any) => {
+        if (studentIds.includes(p.id)) {
+          profileMap.set(p.id, {
+            id: p.id,
+            full_name: p.full_name || null,
+            email: p.email || null,
+            registration_number: p.registration_number || null,
+            student_number: p.student_number || null,
+          });
+        }
+      });
 
-      const enriched = enrollmentData.map((row) => ({
+      const enriched = enrollmentData.map((row: any) => ({
         ...row,
         course: courseMap.get(row.course_id),
         student: profileMap.get(row.student_id) || undefined,
@@ -180,24 +144,22 @@ export default function LecturerEnrollments() {
 
     setUpdatingId(id);
     try {
-      const enrollmentRef = doc(db, "enrollments", id);
-      await updateDoc(enrollmentRef, { status });
-
       // Notify the student when their enrollment is reviewed
       if (target.student_id) {
-        await addDoc(collection(db, "notifications"), {
-          user_id: target.student_id,
-          title:
-            status === "approved" ? "Enrollment approved" : "Enrollment update",
-          message:
-            status === "approved"
-              ? `Your enrollment for ${target.course?.code ?? "the course"} was approved.`
-              : `Your enrollment for ${target.course?.code ?? "the course"} was ${status}.`,
-          type: "info",
-          link: "/enrollment",
-          created_at: Timestamp.now(),
-          is_read: false,
-        });
+        await postBackend(
+          "/api/notifications/",
+          {
+            user_id: target.student_id,
+            title:
+              status === "approved" ? "Enrollment approved" : "Enrollment update",
+            message:
+              status === "approved"
+                ? `Your enrollment for ${target.course?.code ?? "the course"} was approved.`
+                : `Your enrollment for ${target.course?.code ?? "the course"} was ${status}.`,
+            type: "info",
+            link: "/enrollment",
+          },
+        );
       }
 
       setEnrollments((prev) =>

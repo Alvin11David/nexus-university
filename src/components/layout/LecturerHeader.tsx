@@ -31,8 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { LecturerSidebar } from "./LecturerSidebar";
-import { db } from "@/firebase";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 export function LecturerHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

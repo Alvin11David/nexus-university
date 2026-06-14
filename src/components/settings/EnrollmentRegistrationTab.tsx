@@ -29,17 +29,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { Link } from "react-router-dom";
 
 interface Enrollment {
@@ -94,33 +84,32 @@ export function EnrollmentRegistrationTab() {
     try {
       setLoadingUnits(true);
       // First, find the course (program) ID by its title
-      const courseQ = query(
-        collection(db, "courses"),
-        where("title", "==", programTitle),
-        limit(1),
+      const courses = await getBackend<any[]>(
+        `/api/courses/?name=${encodeURIComponent(programTitle)}`,
       );
-      const courseSnap = await getDocs(courseQ);
 
-      if (courseSnap.empty) {
+      if (courses.length === 0) {
         console.warn("No course found matching program title:", programTitle);
         setCourseUnits([]);
         return;
       }
 
-      const courseId = courseSnap.docs[0].id;
+      const courseId = courses[0].id;
 
       // Now fetch course units for this course_id
-      const unitsQ = query(
-        collection(db, "course_units"),
-        where("course_id", "==", courseId),
+      const unitsData = await getBackend<any[]>(
+        `/api/course-units/?course_id=${courseId}`,
       );
-      const unitsSnap = await getDocs(unitsQ);
-      const unitsData = unitsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as CourseUnit[];
-
-      setCourseUnits(unitsData);
+      const mapped: CourseUnit[] = unitsData.map((u: any) => ({
+        id: u.id,
+        code: u.code,
+        name: u.name,
+        credits: u.credits,
+        semester: u.semester,
+        year: u.year,
+        title: u.name,
+      }));
+      setCourseUnits(mapped);
     } catch (error) {
       console.error("Error fetching course units:", error);
     } finally {
@@ -131,25 +120,9 @@ export function EnrollmentRegistrationTab() {
   const fetchPaymentData = async () => {
     try {
       if (!user) return;
-      const feesQ = query(
-        collection(db, "fees"),
-        where("student_id", "==", user.uid),
+      const feesData = await getBackend<any[]>(
+        `/api/student-fees/?student_id=${user.uid}`,
       );
-      const paymentsQ = query(
-        collection(db, "payments"),
-        where("student_id", "==", user.uid),
-      );
-
-      const [feesSnap, paymentsSnap] = await Promise.all([
-        getDocs(feesQ),
-        getDocs(paymentsQ),
-      ]);
-
-      const feesData = feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const paymentsData = paymentsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
 
       if (feesData.length > 0) {
         setFees(feesData);
@@ -164,7 +137,6 @@ export function EnrollmentRegistrationTab() {
         const percentage = totalFees > 0 ? (totalPaid / totalFees) * 100 : 0;
         setPaymentPercentage(percentage);
       }
-      if (paymentsData.length > 0) setPayments(paymentsData);
     } catch (error) {
       console.error("Error fetching payment data:", error);
     }
@@ -174,13 +146,9 @@ export function EnrollmentRegistrationTab() {
     try {
       if (!user) return;
       setLoading(true);
-      const q = query(
-        collection(db, "enrollments"),
-        where("student_id", "==", user.uid),
+      const enrollmentDocs = await getBackend<any[]>(
+        `/api/enrollments/?student_id=${user.uid}`,
       );
-
-      const snap = await getDocs(q);
-      const enrollmentDocs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       console.log("Enrollment data:", enrollmentDocs);
 
       if (enrollmentDocs.length === 0) {
@@ -188,45 +156,25 @@ export function EnrollmentRegistrationTab() {
         return;
       }
 
-      const courseIds = [
-        ...new Set(enrollmentDocs.map((e: any) => e.course_id)),
-      ];
-      const courseMap: Record<string, any> = {};
-
-      // Fetch courses in chunks of 10
-      for (let i = 0; i < courseIds.length; i += 10) {
-        const chunk = courseIds.slice(i, i + 10);
-        const courseQ = query(
-          collection(db, "course_units"),
-          where("__name__", "in", chunk),
-        );
-        const courseSnap = await getDocs(courseQ);
-        courseSnap.docs.forEach((d) => {
-          courseMap[d.id] = d.data();
-        });
-      }
-
-      const enrollmentData = enrollmentDocs.map((e: any) => {
-        const courseData = courseMap[e.course_id];
-        return {
-          ...e,
-          course: courseData
-            ? {
-                code: courseData.code,
-                title: courseData.name, // Map 'name' to 'title'
-                credits: courseData.credits,
-                semester: courseData.semester,
-                year: courseData.year,
-              }
-            : {
-                code: "N/A",
-                title: "N/A",
-                credits: 0,
-                semester: "N/A",
-                year: 0,
-              },
-        };
-      });
+      // The enrollments endpoint already includes course data
+      const enrollmentData = enrollmentDocs.map((e: any) => ({
+        ...e,
+        course: e.course
+          ? {
+              code: e.course.code,
+              title: e.course.title,
+              credits: e.course.credits,
+              semester: e.course.semester,
+              year: e.course.year || 0,
+            }
+          : {
+              code: "N/A",
+              title: "N/A",
+              credits: 0,
+              semester: "N/A",
+              year: 0,
+            },
+      }));
 
       setEnrollments(enrollmentData as Enrollment[]);
     } catch (error) {

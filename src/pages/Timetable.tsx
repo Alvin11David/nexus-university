@@ -25,17 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getTimetableShareUrl } from "@/lib/config";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend } from "@/lib/backendApi";
 import { QRCodeSVG } from "qrcode.react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -346,7 +336,7 @@ export default function Timetable() {
     return palettes[index % palettes.length];
   };
 
-  // Fetch all data from Firestore
+  // Fetch all data from Django backend
   useEffect(() => {
     if (!user) return;
 
@@ -355,95 +345,72 @@ export default function Timetable() {
         setLoadingAssignments(true);
 
         // 1. Get enrolled courses
-        const enrollRef = collection(db, "enrollments");
-        const qEnroll = query(
-          enrollRef,
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
+        const enrollments: any[] = await getBackend(
+          `/api/enrollments/?student_id=${user.uid}`,
         );
-        const enrollSnap = await getDocs(qEnroll);
+        const approvedEnrollments = enrollments.filter(
+          (e: any) => e.status === "approved" || e.status === "pending",
+        );
+        const enrolledCourseIds = approvedEnrollments
+          .map((e: any) => e.course_id)
+          .filter(Boolean);
 
-        if (enrollSnap.empty) {
+        if (enrolledCourseIds.length === 0) {
           setAssignments([]);
           setDynamicCourses([]);
           setLoadingAssignments(false);
           return;
         }
 
-        const enrolledCourseIds = enrollSnap.docs
-          .map((d) => d.data().course_id)
-          .filter(Boolean);
-
-        // 2. Fetch course details
-        const courseMap = new Map();
+        // Build course list from enrollment inline data
         const coursesList: any[] = [];
-        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
-          const chunk = enrolledCourseIds.slice(i, i + 10);
-          const qCourse = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const courseSnap = await getDocs(qCourse);
-          courseSnap.docs.forEach((d, idx) => {
-            const data = d.data();
+        const courseMap = new Map();
+        approvedEnrollments.forEach((e: any) => {
+          if (e.course) {
             const colors = getCourseColors(coursesList.length);
-            const courseInfo = { id: d.id, ...data, ...colors };
-            courseMap.set(d.id, courseInfo);
+            const courseInfo = { ...e.course, ...colors };
+            courseMap.set(e.course_id, courseInfo);
             coursesList.push(courseInfo);
-          });
-        }
+          }
+        });
         setDynamicCourses(coursesList);
 
-        // 3. Fetch assignments for enrolled courses
-        const assignmentsRef = collection(db, "Assignments");
-        const assignmentsData: any[] = [];
+        // 2. Fetch assignments for enrolled courses
+        const courseIdsStr = enrolledCourseIds.join(",");
         const now = new Date().toISOString();
+        const allAssignments: any[] = await getBackend(
+          `/api/assignments/?course_ids=${courseIdsStr}`,
+        );
+        const upcomingAssignments = allAssignments.filter(
+          (a: any) => a.due_date >= now,
+        );
 
-        for (let i = 0; i < enrolledCourseIds.length; i += 10) {
-          const chunk = enrolledCourseIds.slice(i, i + 10);
-          const qAssign = query(
-            assignmentsRef,
-            where("course_id", "in", chunk),
-            where("due_date", ">=", now),
-            orderBy("due_date", "asc"),
-          );
-          const assignSnap = await getDocs(qAssign);
-          assignmentsData.push(
-            ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-          );
-        }
-
-        // 4. Fetch submission statuses
-        const assignmentIds = assignmentsData.map((a) => a.id);
+        // 3. Fetch submission statuses
+        const assignmentIds = upcomingAssignments.map((a: any) => a.id);
         const statusMap = new Map<string, string>();
         if (assignmentIds.length > 0) {
-          const submissionsRef = collection(db, "submissions");
-          for (let i = 0; i < assignmentIds.length; i += 10) {
-            const chunk = assignmentIds.slice(i, i + 10);
-            const qSubs = query(
-              submissionsRef,
-              where("student_id", "==", user.uid),
-              where("assignment_id", "in", chunk),
-            );
-            const subSnap = await getDocs(qSubs);
-            subSnap.docs.forEach((d) => {
-              const data = d.data();
-              statusMap.set(data.assignment_id, data.status || "submitted");
-            });
-          }
+          const assignmentIdsStr = assignmentIds.join(",");
+          const submissions: any[] = await getBackend(
+            `/api/submissions/?student_id=${user.uid}&assignment_ids=${assignmentIdsStr}`,
+          );
+          submissions.forEach((s: any) => {
+            statusMap.set(s.assignment_id, s.status || "submitted");
+          });
         }
-        setSubmissionStatuses(statusMap);
 
         // Map assignments with course and status
-        const mapped: Assignment[] = assignmentsData.map((a) => ({
-          ...a,
+        const mapped: Assignment[] = upcomingAssignments.map((a: any) => ({
+          id: a.id,
+          title: a.title,
+          description: a.description,
+          due_date: a.due_date,
+          course_id: a.course_id,
+          total_points: a.total_points,
           status: statusMap.get(a.id) || "pending",
-          course: courseMap.get(a.course_id)
-            ? {
-                code: courseMap.get(a.course_id).code,
-                title: courseMap.get(a.course_id).title,
-              }
-            : undefined,
+          course:
+            a.course_code || a.course_title
+              ? { code: a.course_code, title: a.course_title }
+              : undefined,
         }));
 
         setAssignments(mapped);

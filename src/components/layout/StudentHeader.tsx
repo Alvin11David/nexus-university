@@ -29,19 +29,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
 import { StudentSidebar } from "./StudentSidebar";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-  onSnapshot,
-  getCountFromServer,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend } from "@/lib/backendApi";
 
 export function StudentHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -60,40 +48,33 @@ export function StudentHeader() {
       .slice(0, 2);
   };
 
+  const fetchUnreadCount = async () => {
+    if (!user?.uid) return;
+    try {
+      const data = await getBackend<any[]>(
+        `/api/notifications/?user_id=${encodeURIComponent(user.uid)}&is_read=false`,
+      );
+      setUnreadCount(data.length);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
     fetchUnreadCount();
 
-    const q = query(
-      collection(db, "notifications"),
-      where("user_id", "==", user.uid),
-      where("is_read", "==", false),
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUnreadCount(snapshot.size);
-    });
+    const interval = setInterval(fetchUnreadCount, 30000);
 
     const handlePing = () => fetchUnreadCount();
     window.addEventListener("notifications-updated", handlePing);
 
     return () => {
-      unsubscribe();
+      clearInterval(interval);
       window.removeEventListener("notifications-updated", handlePing);
     };
   }, [user]);
-
-  const fetchUnreadCount = async () => {
-    if (!user) return;
-    const q = query(
-      collection(db, "notifications"),
-      where("user_id", "==", user.uid),
-      where("is_read", "==", false),
-    );
-    const snapshot = await getCountFromServer(q);
-    setUnreadCount(snapshot.data().count);
-  };
 
   const studentNavItems = [
     { label: "Dashboard", href: "/dashboard", icon: Zap },

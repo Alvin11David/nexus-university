@@ -30,8 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { useToast } from "@/hooks/use-toast";
 
 export function BioDataTab() {
@@ -68,19 +67,16 @@ export function BioDataTab() {
 
     setIsSaving(true);
     try {
-      const profileRef = doc(db, "profiles", user.uid);
-      await updateDoc(profileRef, {
+      await postBackend(`/api/profiles/by-user/${user.uid}/`, {
         full_name: formData.full_name,
         phone: formData.phone,
         bio: formData.bio,
         department: formData.department,
         college: formData.college,
-        updated_at: serverTimestamp(),
       });
 
       // Refetch profile to update global state
-      const snap = await getDoc(profileRef);
-      const updatedProfile = snap.data();
+      const updatedProfile = await getBackend<any>(`/api/profiles/by-user/${user.uid}/`);
 
       if (updatedProfile) {
         setFormData({

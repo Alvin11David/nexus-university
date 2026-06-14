@@ -48,19 +48,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-  addDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface Fee {
   id: string;
@@ -149,142 +137,82 @@ export function PaymentsTab() {
       if (!user) return;
       setLoading(true);
 
-      const feesQ = query(
-        collection(db, "fees"),
-        where("student_id", "==", user.uid),
-        orderBy("due_date", "desc"),
-      );
-      const paymentsQ = query(
-        collection(db, "payments"),
-        where("student_id", "==", user.uid),
-        orderBy("paid_at", "desc"),
-      );
-      const enrollmentsQ = query(
-        collection(db, "enrollments"),
-        where("student_id", "==", user.uid),
-        orderBy("enrolled_at", "desc"),
-      );
-
-      const [feesSnap, paymentsSnap, enrollmentsSnap] = await Promise.all([
-        getDocs(feesQ),
-        getDocs(paymentsQ),
-        getDocs(enrollmentsQ),
+      const [feesData, enrollmentsData] = await Promise.all([
+        getBackend<any[]>(`/api/student-fees/?student_id=${user.uid}`),
+        getBackend<any[]>(`/api/enrollments/?student_id=${user.uid}`),
       ]);
 
-      const feesData = feesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const paymentsData = paymentsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-      const enrollmentDocs = enrollmentsSnap.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      }));
-
       setFees(feesData as Fee[]);
-      setPayments(paymentsData as Payment[]);
+      setPayments([]);
 
-      if (enrollmentDocs.length > 0) {
+      if (enrollmentsData.length > 0) {
         const courseIds = [
-          ...new Set(enrollmentDocs.map((e: any) => e.course_id)),
+          ...new Set(enrollmentsData.map((e: any) => e.course_id)),
         ];
-        const courseMap: Record<string, any> = {};
 
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-          const courseQ = query(
-            collection(db, "course_units"),
-            where("__name__", "in", chunk),
-          );
-          const courseSnap = await getDocs(courseQ);
-          courseSnap.docs.forEach((d) => {
-            courseMap[d.id] = d.data();
-          });
+        // Fetch course units for enrolled courses
+        let courseUnits: any[] = [];
+        if (courseIds.length > 0) {
+          courseUnits = await getBackend<any[]>("/api/course-units/");
         }
 
-        const transformedEnrollments = enrollmentDocs.map((e: any) => ({
+        const courseMap: Record<string, any> = {};
+        courseUnits.forEach((cu: any) => {
+          courseMap[cu.id] = cu;
+        });
+
+        const transformedEnrollments = enrollmentsData.map((e: any) => ({
           ...e,
           course: courseMap[e.course_id],
         }));
         setEnrollments(transformedEnrollments as Enrollment[]);
 
-        // Fetch fee assignments for enrolled courses
+        // Fetch fee assignments via fee-assignments endpoint
         if (courseIds.length > 0) {
-          const currentFeeAssignmentsData: FeeAssignment[] = [];
-          const allFeeAssignmentsData: FeeAssignment[] = [];
+          try {
+            const feeAssignmentsData = await getBackend<any[]>("/api/fee-assignments/");
+            // Filter to current semester/year using college from first enrollment
+            const college = transformedEnrollments[0]?.course?.college;
+            const currentDate = new Date();
+            const currentYear = currentDate.getFullYear();
+            const currentMonth = currentDate.getMonth() + 1;
+            const currentSemester = currentMonth <= 6 ? 2 : 1;
+            const academicYear =
+              currentMonth <= 6
+                ? `${currentYear - 1}/${currentYear}`
+                : `${currentYear}/${currentYear + 1}`;
 
-          // Get college from the first enrollment (assuming all courses are from the same college)
-          const college = transformedEnrollments[0]?.course?.college;
-          const currentDate = new Date();
-          const currentYear = currentDate.getFullYear();
-          const currentMonth = currentDate.getMonth() + 1; // 1-12
-
-          // Determine semester based on month (Jan-Jun = Semester 2, Jul-Dec = Semester 1)
-          const currentSemester = currentMonth <= 6 ? 2 : 1;
-          const academicYear =
-            currentMonth <= 6
-              ? `${currentYear - 1}/${currentYear}`
-              : `${currentYear}/${currentYear + 1}`;
-
-          if (college) {
-            const feeAssignmentsQ = query(
-              collection(db, "fee_assignments"),
-              where("semester", "==", currentSemester),
-              where("academic_year", "==", academicYear),
-              where("college", "==", college),
+            const currentFeeAssignmentsData = feeAssignmentsData.filter(
+              (fa: any) =>
+                fa.semester === currentSemester &&
+                fa.academic_year === academicYear &&
+                (!college || fa.college === college),
             );
-            const feeAssignmentsSnap = await getDocs(feeAssignmentsQ);
-            feeAssignmentsSnap.docs.forEach((d) => {
-              currentFeeAssignmentsData.push({
-                id: d.id,
-                ...d.data(),
-              } as FeeAssignment);
-            });
 
-            const allFeeAssignmentsQ = query(
-              collection(db, "fee_assignments"),
-              where("college", "==", college),
-            );
-            const allFeeAssignmentsSnap = await getDocs(allFeeAssignmentsQ);
-            allFeeAssignmentsSnap.docs.forEach((d) => {
-              allFeeAssignmentsData.push({
-                id: d.id,
-                ...d.data(),
-              } as FeeAssignment);
-            });
+            if (currentFeeAssignmentsData.length === 0) {
+              const fallback = feeAssignmentsData.filter(
+                (fa: any) =>
+                  fa.semester === currentSemester &&
+                  fa.academic_year === academicYear,
+              );
+              setFeeAssignments(fallback as FeeAssignment[]);
+            } else {
+              setFeeAssignments(currentFeeAssignmentsData as FeeAssignment[]);
+            }
+
+            // If college filter failed, try broader
+            let allFiltered = feeAssignmentsData;
+            if (college) {
+              const byCollege = feeAssignmentsData.filter(
+                (fa: any) => fa.college === college,
+              );
+              if (byCollege.length > 0) allFiltered = byCollege;
+            }
+            setAllFeeAssignments(allFiltered as FeeAssignment[]);
+          } catch {
+            setFeeAssignments([]);
+            setAllFeeAssignments([]);
           }
-
-          // Fallback: if college is missing or college filter returned no rows,
-          // fetch by academic period so current fees still show.
-          if (currentFeeAssignmentsData.length === 0) {
-            const fallbackCurrentQ = query(
-              collection(db, "fee_assignments"),
-              where("semester", "==", currentSemester),
-              where("academic_year", "==", academicYear),
-            );
-            const fallbackCurrentSnap = await getDocs(fallbackCurrentQ);
-            fallbackCurrentSnap.docs.forEach((d) => {
-              currentFeeAssignmentsData.push({
-                id: d.id,
-                ...d.data(),
-              } as FeeAssignment);
-            });
-          }
-
-          if (allFeeAssignmentsData.length === 0) {
-            const fallbackAllSnap = await getDocs(
-              collection(db, "fee_assignments"),
-            );
-            fallbackAllSnap.docs.forEach((d) => {
-              allFeeAssignmentsData.push({
-                id: d.id,
-                ...d.data(),
-              } as FeeAssignment);
-            });
-          }
-
-          setFeeAssignments(currentFeeAssignmentsData);
-          setAllFeeAssignments(allFeeAssignmentsData);
         } else {
           setFeeAssignments([]);
           setAllFeeAssignments([]);
@@ -434,7 +362,10 @@ export function PaymentsTab() {
     const status = method.instant ? "completed" : "pending";
 
     try {
-      const paymentData = {
+      // TODO: Replace with backend API call when payments endpoint is available
+      // await postBackend("/api/payments/", { ... });
+      const newPayment = {
+        id: transactionRef,
         fee_id: targetFee.id,
         student_id: user.uid,
         amount,
@@ -442,11 +373,7 @@ export function PaymentsTab() {
         transaction_ref: transactionRef,
         status,
         paid_at: new Date().toISOString(),
-        created_at: serverTimestamp(),
       };
-
-      const docRef = await addDoc(collection(db, "payments"), paymentData);
-      const newPayment = { id: docRef.id, ...paymentData };
 
       setPayments((prev) => [newPayment as Payment, ...prev]);
       toast({

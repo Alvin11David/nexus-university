@@ -19,18 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  addDoc,
-  setDoc,
-  doc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface StudentGrade {
   id: string;
@@ -124,49 +113,28 @@ export default function LecturerGradeBook() {
     try {
       if (!user?.uid) return;
 
-      // Fetch lecturer's profile to get assigned_course_units
+      const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+      const lecturerProfile = profiles.find(
+        (p: any) => p.email === user.email,
+      );
+      const assignedCourseUnits: string[] =
+        lecturerProfile?.assigned_course_units || [];
+
       const assignedRawCourses: any[] = [];
-      try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourseUnits = profileData.assigned_course_units || [];
-
-          if (assignedCourseUnits.length > 0) {
-            // Query course_units collection where doc.id is in assignedCourseUnits
-            // Firestore 'in' supports up to 30 values
-            const chunks = [];
-            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-              chunks.push(assignedCourseUnits.slice(i, i + 30));
-            }
-
-            for (const chunk of chunks) {
-              const courseUnitsQuery = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-              courseUnitsSnapshot.docs.forEach((doc) => {
-                const courseData = doc.data();
-                assignedRawCourses.push({
-                  id: doc.id,
-                  code:
-                    courseData.code || courseData.course_unit_code || "Unknown",
-                  title:
-                    courseData.name ||
-                    courseData.course_unit_name ||
-                    "Unknown Course",
-                  credits: courseData.credits || 3,
-                });
-              });
-            }
+      if (assignedCourseUnits.length > 0) {
+        const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+        courseUnitsData.forEach((cu: any) => {
+          if (assignedCourseUnits.includes(cu.id) || assignedCourseUnits.includes(cu.course_id)) {
+            assignedRawCourses.push({
+              id: cu.id || cu.course_id,
+              code: cu.code || cu.course_unit_code || "Unknown",
+              title: cu.name || cu.course_unit_name || "Unknown Course",
+              credits: cu.credits || 3,
+            });
           }
-        }
-      } catch (err) {
-        console.error("Failed to fetch lecturer profile or course units:", err);
+        });
       }
 
-      // Set available courses to the assigned course units
       const coursesData: any[] = assignedRawCourses.map((raw) => ({
         id: raw.id || `temp-${Date.now()}`,
         code: raw.code || "Unknown",
@@ -196,44 +164,36 @@ export default function LecturerGradeBook() {
     try {
       setLoading(true);
 
-      // Fetch enrolled students
-      const enrollQuery = query(
-        collection(db, "enrollments"),
-        where("course_id", "==", selectedCourse),
-        where("status", "==", "approved"),
+      // Fetch approved enrollments for this course
+      const enrollmentData = await getBackend<any[]>(
+        `/api/enrollments/?course_ids=${encodeURIComponent(selectedCourse)}`,
       );
-      const enrollSnap = await getDocs(enrollQuery);
+      const approvedEnrollments = enrollmentData.filter(
+        (e: any) => e.status === "approved",
+      );
+      const studentIds = approvedEnrollments.map((e: any) => e.student_id);
 
-      if (enrollSnap.empty) {
+      if (studentIds.length === 0) {
         setStudents([]);
         return;
       }
 
-      const studentIds = enrollSnap.docs.map((doc) => doc.data().student_id);
-
-      // Fetch student profiles chunked
+      // Fetch student profiles
+      const allProfiles = await getBackend<any[]>("/api/profiles/");
       const profilesMap: Record<string, any> = {};
-      for (let i = 0; i < studentIds.length; i += 30) {
-        const chunk = studentIds.slice(i, i + 30);
-        const profilesQuery = query(
-          collection(db, "profiles"),
-          where("__name__", "in", chunk),
-        );
-        const profilesSnap = await getDocs(profilesQuery);
-        profilesSnap.forEach((doc) => {
-          profilesMap[doc.id] = doc.data();
-        });
-      }
+      allProfiles.forEach((p: any) => {
+        if (studentIds.includes(p.id)) {
+          profilesMap[p.id] = p;
+        }
+      });
 
       // Fetch existing grades for this course
-      const gradesQuery = query(
-        collection(db, "student_grades"),
-        where("course_id", "==", selectedCourse),
-      );
-      const gradesSnap = await getDocs(gradesQuery);
+      const gradesData = await getBackend<any[]>("/api/student-grades/");
       const gradesMap: Record<string, any> = {};
-      gradesSnap.forEach((doc) => {
-        gradesMap[doc.data().student_id] = { ...doc.data(), id: doc.id };
+      gradesData.forEach((g: any) => {
+        if (g.course_id === selectedCourse) {
+          gradesMap[g.student_id] = g;
+        }
       });
 
       // Merge data
@@ -329,27 +289,6 @@ export default function LecturerGradeBook() {
     if (!student || !selectedCourse || !user) return;
 
     try {
-      // Determine current semester and academic year
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1; // getMonth() returns 0-11
-      const currentYear = now.getFullYear();
-
-      let semester: string;
-      let academicYear: string;
-
-      if (currentMonth >= 9 || currentMonth <= 2) {
-        // Fall semester (Sep-Feb)
-        semester = currentMonth >= 9 ? "Fall" : "Fall";
-        academicYear =
-          currentMonth >= 9
-            ? `${currentYear}-${currentYear + 1}`
-            : `${currentYear - 1}-${currentYear}`;
-      } else {
-        // Spring semester (Mar-Aug)
-        semester = "Spring";
-        academicYear = `${currentYear - 1}-${currentYear}`;
-      }
-
       const gradeData = {
         student_id: student.student_id,
         course_id: selectedCourse,
@@ -362,19 +301,9 @@ export default function LecturerGradeBook() {
         total: student.total,
         grade: student.grade,
         gp: student.gp,
-        semester,
-        academic_year: academicYear,
-        saved_at: new Date().toISOString(),
-        updated_at: serverTimestamp(),
       };
 
-      // Use sid_cid as the doc ID for upsert behavior
-      const gradeRef = doc(
-        db,
-        "student_grades",
-        `${student.student_id}_${selectedCourse}`,
-      );
-      await setDoc(gradeRef, gradeData, { merge: true });
+      await postBackend("/api/student-grades/", gradeData);
 
       await sendGradeUpdateNotification(student);
 
@@ -397,7 +326,7 @@ export default function LecturerGradeBook() {
       const courseData = courses.find((c) => c.id === selectedCourse);
       const courseName = courseData?.title || courseData?.code || "Course";
 
-      await addDoc(collection(db, "notifications"), {
+      await postBackend("/api/notifications/", {
         user_id: student.student_id,
         type: "grade_update",
         title: "Grade Updated",
@@ -405,8 +334,6 @@ export default function LecturerGradeBook() {
           1,
         )}%, Grade: ${student.grade}`,
         related_id: selectedCourse,
-        is_read: false,
-        created_at: serverTimestamp(),
       });
       console.log(`Notification sent to ${student.name}`);
     } catch (error) {

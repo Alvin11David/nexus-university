@@ -9,18 +9,8 @@ import {
   X,
   AlertCircle,
 } from "lucide-react";
-import { db } from "@/integrations/firebase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -44,7 +34,7 @@ interface LecturerCourse {
 }
 
 export default function LecturerCourseSelection() {
-  const { user } = useAuth(); // Firebase user
+  const { user } = useAuth();
   const { toast } = useToast();
   const [courses, setCourses] = useState<Course[]>([]);
   const [lecturerCourses, setLecturerCourses] = useState<LecturerCourse[]>([]);
@@ -79,133 +69,39 @@ export default function LecturerCourseSelection() {
         return;
       }
 
-      // Fetch lecturer's profile to get assigned_course_units
-      const assignedRawCourses: Partial<Course>[] = [];
-      try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourseUnits = profileData.assigned_course_units || [];
+      // Fetch all course units from backend
+      const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+      const allCourses: Course[] = courseUnitsData.map((cu: any) => ({
+        id: cu.id || cu.course_id || String(cu.id),
+        code: cu.code || cu.course_unit_code || "Unknown",
+        title: cu.name || cu.course_unit_name || "Unknown Course",
+        credits: cu.credits || 3,
+      }));
+      setCourses(allCourses);
 
-          if (assignedCourseUnits.length > 0) {
-            // Query course_units collection where doc.id is in assignedCourseUnits
-            // Firestore 'in' supports up to 30 values
-            const chunks = [];
-            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-              chunks.push(assignedCourseUnits.slice(i, i + 30));
-            }
-
-            for (const chunk of chunks) {
-              const courseUnitsQuery = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-              courseUnitsSnapshot.docs.forEach((doc) => {
-                const courseData = doc.data();
-                assignedRawCourses.push({
-                  id: doc.id,
-                  code:
-                    courseData.code || courseData.course_unit_code || "Unknown",
-                  title:
-                    courseData.name ||
-                    courseData.course_unit_name ||
-                    "Unknown Course",
-                  credits: courseData.credits || 3,
-                });
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch lecturer profile or course units:", err);
-      }
-
-      // Set available courses to the assigned course units
-      const coursesData: Course[] = assignedRawCourses.map((raw) => ({
-        id: raw.id || `temp-${Date.now()}`,
-        code: raw.code || "Unknown",
-        title: raw.title || "Unknown Course",
-        credits: raw.credits || 3,
-      })) as Course[];
-      setCourses(coursesData);
-
-      // Auto-assign courses based on assigned course units
-      const autoAssignedCourses: Course[] = assignedRawCourses.map((raw) => ({
-        id: raw.id || `temp-${Date.now()}`,
-        code: raw.code || "Unknown",
-        title: raw.title || "Unknown Course",
-        credits: raw.credits || 3,
-      })) as Course[];
-
-      // Load lecturer's CURRENT selected courses for this semester from lecturer_courses
-      const lecturerCoursesQuery = query(
-        collection(db, "lecturer_courses"),
-        where("lecturer_id", "==", user.uid),
-        where("academic_year", "==", currentAcademicYear),
-        where("semester", "==", currentSemester),
+      // Fetch lecturer profiles to find assigned_course_units
+      const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+      const lecturerProfile = profiles.find(
+        (p: any) => p.email === user.email,
       );
-      const lecturerCoursesSnapshot = await getDocs(lecturerCoursesQuery);
+      const assignedCourseUnits: string[] =
+        lecturerProfile?.assigned_course_units || [];
 
-      const existingCourseIds = new Set<string>();
-
-      const lecturerCoursesData: LecturerCourse[] =
-        lecturerCoursesSnapshot.docs.map((doc) => {
-          const data = doc.data();
-          existingCourseIds.add(data.course_id);
-
-          let course = coursesData.find((c) => c.id === data.course_id);
-          if (!course) {
-            // Check if it's one of our auto-assigned fallbacks
-            course = autoAssignedCourses.find((c) => c.id === data.course_id);
-          }
-
-          if (!course) {
-            course = {
-              id: data.course_id,
-              code: "Unknown",
-              title: "Course",
-              credits: 0,
-            };
-          }
-
-          return {
-            id: doc.id,
-            course_id: data.course_id,
-            course,
-            semester: data.semester,
-            academic_year: data.academic_year,
-          };
-        });
-
-      // Save any newly assigned courses from the registrar that aren't yet in lecturer_courses
-      const coursesToAdd = autoAssignedCourses.filter(
-        (c) => !existingCourseIds.has(c.id),
+      // Map assigned course unit IDs to course data
+      const assignedCourses = allCourses.filter((c) =>
+        assignedCourseUnits.includes(c.id),
       );
 
-      for (const course of coursesToAdd) {
-        try {
-          const docRef = await addDoc(collection(db, "lecturer_courses"), {
-            lecturer_id: user.uid,
-            course_id: course.id,
-            semester: currentSemester,
-            academic_year: currentAcademicYear,
-          });
-
-          lecturerCoursesData.unshift({
-            id: docRef.id,
-            course_id: course.id,
-            course,
-            semester: currentSemester,
-            academic_year: currentAcademicYear,
-          });
-        } catch (addErr) {
-          console.error(
-            "Failed to auto-assign course to lecturer_courses",
-            addErr,
-          );
-        }
-      }
+      // Build lecturer courses from assigned course units
+      const lecturerCoursesData: LecturerCourse[] = assignedCourses.map(
+        (course) => ({
+          id: `assigned-${course.id}`,
+          course_id: course.id,
+          course,
+          semester: currentSemester,
+          academic_year: currentAcademicYear,
+        }),
+      );
 
       setLecturerCourses(lecturerCoursesData);
       setSelectedCourses(lecturerCoursesData.map((lc) => lc.course_id));
@@ -252,16 +148,6 @@ export default function LecturerCourseSelection() {
     const exists = selectedCourses.includes(courseId);
     try {
       if (exists) {
-        // Find the lecturer_course document to delete
-        const lecturerCourse = lecturerCourses.find(
-          (lc) =>
-            lc.course_id === courseId &&
-            lc.academic_year === currentAcademicYear &&
-            lc.semester === currentSemester,
-        );
-        if (lecturerCourse) {
-          await deleteDoc(doc(db, "lecturer_courses", lecturerCourse.id));
-        }
         setSelectedCourses((prev) => prev.filter((id) => id !== courseId));
         setLecturerCourses((prev) =>
           prev.filter((lc) => lc.course_id !== courseId),
@@ -274,14 +160,8 @@ export default function LecturerCourseSelection() {
         if (!course) {
           throw new Error("Course details missing");
         }
-        const docRef = await addDoc(collection(db, "lecturer_courses"), {
-          lecturer_id: user.uid,
-          course_id: courseId,
-          semester: currentSemester,
-          academic_year: currentAcademicYear,
-        });
         const newCourse: LecturerCourse = {
-          id: docRef.id,
+          id: `assigned-${courseId}`,
           course_id: courseId,
           course,
           semester: currentSemester,

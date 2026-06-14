@@ -16,16 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { db } from "@/integrations/firebase/client";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-  Timestamp,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 interface CourseAnalytics {
   id: string;
@@ -90,35 +81,6 @@ export default function LecturerAnalytics() {
     return "stable";
   };
 
-  const getDateRange = () => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date = now;
-
-    switch (timeRange) {
-      case "week":
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case "month":
-        startDate = new Date(
-          now.getFullYear(),
-          now.getMonth() - 1,
-          now.getDate(),
-        );
-        break;
-      case "semester":
-      default:
-        // Assuming semester is 6 months
-        startDate = new Date(now.getTime() - 6 * 30 * 24 * 60 * 60 * 1000);
-        break;
-    }
-
-    return {
-      startDate,
-      endDate,
-    };
-  };
-
   const fetchAnalyticsData = async () => {
     try {
       setLoading(true);
@@ -165,40 +127,26 @@ export default function LecturerAnalytics() {
     if (!user?.uid) return [];
 
     try {
-      const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-      if (!profileDoc.exists()) return [];
-
-      const profileData = profileDoc.data();
-      const assignedCourseUnits = profileData.assigned_course_units || [];
+      const profiles = await getBackend<any[]>("/api/profiles/?role=lecturer");
+      const lecturerProfile = profiles.find(
+        (p: any) => p.email === user.email,
+      );
+      const assignedCourseUnits: string[] =
+        lecturerProfile?.assigned_course_units || [];
 
       if (assignedCourseUnits.length === 0) return [];
 
+      const courseUnitsData = await getBackend<any[]>("/api/course-units/");
       const courses: any[] = [];
-
-      // Query course_units in chunks (Firestore 'in' supports up to 30 values)
-      const chunks = [];
-      for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-        chunks.push(assignedCourseUnits.slice(i, i + 30));
-      }
-
-      for (const chunk of chunks) {
-        const courseUnitsQuery = query(
-          collection(db, "course_units"),
-          where("__name__", "in", chunk),
-        );
-        const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-        courseUnitsSnapshot.docs.forEach((doc) => {
-          const courseData = doc.data();
+      courseUnitsData.forEach((cu: any) => {
+        if (assignedCourseUnits.includes(cu.id) || assignedCourseUnits.includes(cu.course_id)) {
           courses.push({
-            id: doc.id,
-            code: courseData.code || courseData.course_unit_code || "Unknown",
-            title:
-              courseData.name ||
-              courseData.course_unit_name ||
-              "Unknown Course",
+            id: cu.id || cu.course_id,
+            code: cu.code || cu.course_unit_code || "Unknown",
+            title: cu.name || cu.course_unit_name || "Unknown Course",
           });
-        });
-      }
+        }
+      });
 
       return courses;
     } catch (error) {
@@ -209,13 +157,10 @@ export default function LecturerAnalytics() {
 
   const fetchEnrollmentCount = async (courseId: string): Promise<number> => {
     try {
-      const enrollQuery = query(
-        collection(db, "enrollments"),
-        where("course_id", "==", courseId),
-        where("status", "==", "approved"),
-      );
-      const enrollSnap = await getDocs(enrollQuery);
-      return enrollSnap.size;
+      const enrollments = await getBackend<any[]>("/api/enrollments/");
+      return enrollments.filter(
+        (e: any) => e.course_id === courseId && e.status === "approved",
+      ).length;
     } catch (error) {
       console.error("Error fetching enrollment count:", error);
       return 0;
@@ -224,25 +169,16 @@ export default function LecturerAnalytics() {
 
   const fetchAverageGPA = async (courseId: string): Promise<number> => {
     try {
-      const { startDate, endDate } = getDateRange();
-      const gradesQuery = query(
-        collection(db, "student_grades"),
-        where("course_id", "==", courseId),
-        where("created_at", ">=", Timestamp.fromDate(startDate)),
-        where("created_at", "<=", Timestamp.fromDate(endDate)),
+      const grades = await getBackend<any[]>("/api/student-grades/");
+      const courseGrades = grades.filter(
+        (g: any) => g.course_id === courseId && g.gp != null,
       );
-      const gradesSnap = await getDocs(gradesQuery);
 
-      if (gradesSnap.empty) return 0;
+      if (courseGrades.length === 0) return 0;
 
-      const gpas = gradesSnap.docs
-        .map((doc) => doc.data().gp)
-        .filter((gp) => gp != null) as number[];
-
-      if (gpas.length === 0) return 0;
-
-      const avgGPA = gpas.reduce((sum, gp) => sum + gp, 0) / gpas.length;
-      return Math.round(avgGPA * 100) / 100; // Round to 2 decimal places
+      const gpas = courseGrades.map((g: any) => g.gp);
+      const avgGPA = gpas.reduce((sum: number, gp: number) => sum + gp, 0) / gpas.length;
+      return Math.round(avgGPA * 100) / 100;
     } catch (error) {
       console.error("Error fetching average GPA:", error);
       return 0;
@@ -250,64 +186,25 @@ export default function LecturerAnalytics() {
   };
 
   const fetchAttendanceRate = async (courseId: string): Promise<number> => {
-    try {
-      const { startDate, endDate } = getDateRange();
-
-      const attendanceQuery = query(
-        collection(db, "attendance"),
-        where("course_id", "==", courseId),
-        where("attendance_date", ">=", startDate),
-        where("attendance_date", "<=", endDate),
-      );
-      const attendanceSnap = await getDocs(attendanceQuery);
-
-      if (attendanceSnap.empty) return 0;
-
-      const presentCount = attendanceSnap.docs.filter(
-        (doc) => doc.data().status === "present",
-      ).length;
-      const totalRecords = attendanceSnap.size;
-
-      return Math.round((presentCount / totalRecords) * 100);
-    } catch (error) {
-      console.error("Error fetching attendance rate:", error);
-      return 0;
-    }
+    // No backend attendance endpoint available; returns 0
+    return 0;
   };
 
   const fetchAssignmentCompletion = async (
     courseId: string,
   ): Promise<number> => {
     try {
-      const { startDate, endDate } = getDateRange();
-      const startTimestamp = Timestamp.fromDate(new Date(startDate));
-      const endTimestamp = Timestamp.fromDate(new Date(endDate + "T23:59:59"));
-
-      const gradesQuery = query(
-        collection(db, "student_grades"),
-        where("course_id", "==", courseId),
-        where("created_at", ">=", startTimestamp),
-        where("created_at", "<=", endTimestamp),
+      const grades = await getBackend<any[]>("/api/student-grades/");
+      const courseGrades = grades.filter(
+        (g: any) => g.course_id === courseId,
       );
-      const gradesSnap = await getDocs(gradesQuery);
 
-      if (gradesSnap.empty) return 0;
+      if (courseGrades.length === 0) return 0;
 
-      // Calculate completion based on non-null assignment grades
-      const assignments = gradesSnap.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          assignment1: data.assignment1 != null,
-          assignment2: data.assignment2 != null,
-        };
-      });
-
-      if (assignments.length === 0) return 0;
-
-      const totalAssignments = assignments.length * 2; // 2 assignments per student
-      const completedAssignments = assignments.reduce(
-        (sum, student) =>
-          sum + (student.assignment1 ? 1 : 0) + (student.assignment2 ? 1 : 0),
+      const totalAssignments = courseGrades.length * 2;
+      const completedAssignments = courseGrades.reduce(
+        (sum: number, g: any) =>
+          sum + (g.assignment1 != null ? 1 : 0) + (g.assignment2 != null ? 1 : 0),
         0,
       );
 
@@ -324,89 +221,52 @@ export default function LecturerAnalytics() {
     try {
       const allInsights: StudentInsight[] = [];
 
+      const allEnrollments = await getBackend<any[]>("/api/enrollments/");
+      const allProfiles = await getBackend<any[]>("/api/profiles/");
+      const allGrades = await getBackend<any[]>("/api/student-grades/");
+
+      const profileMap = new Map<string, any>();
+      allProfiles.forEach((p: any) => profileMap.set(p.id, p));
+
       for (const course of courses) {
-        // Get enrolled students
-        const enrollQuery = query(
-          collection(db, "enrollments"),
-          where("course_id", "==", course.id),
-          where("status", "==", "approved"),
+        const approvedEnrollments = allEnrollments.filter(
+          (e: any) => e.course_id === course.id && e.status === "approved",
         );
-        const enrollSnap = await getDocs(enrollQuery);
 
-        for (const enrollDoc of enrollSnap.docs) {
-          const studentId = enrollDoc.data().student_id;
+        for (const enrollment of approvedEnrollments) {
+          const studentId = enrollment.student_id;
+          const profileData = profileMap.get(studentId);
+          if (!profileData) continue;
 
-          // Get student profile
-          const studentDoc = await getDoc(doc(db, "profiles", studentId));
-          if (!studentDoc.exists()) continue;
-
-          const studentData = studentDoc.data();
-
-          // Get student grades for this course
-          const { startDate, endDate } = getDateRange();
-          const startTimestamp = Timestamp.fromDate(new Date(startDate));
-          const endTimestamp = Timestamp.fromDate(
-            new Date(endDate + "T23:59:59"),
+          const studentGrade = allGrades.find(
+            (g: any) =>
+              g.course_id === course.id && g.student_id === studentId,
           );
 
-          const gradesQuery = query(
-            collection(db, "student_grades"),
-            where("course_id", "==", course.id),
-            where("student_id", "==", studentId),
-            where("created_at", ">=", startTimestamp),
-            where("created_at", "<=", endTimestamp),
-          );
-          const gradesSnap = await getDocs(gradesQuery);
+          const score = studentGrade?.total || 0;
+          const attendance = 0; // No backend attendance endpoint
 
-          let score = 0;
-          let attendance = 0;
-
-          if (!gradesSnap.empty) {
-            const gradeData = gradesSnap.docs[0].data();
-            score = gradeData.total || 0;
-          }
-
-          // Get attendance for this course
-          const attendanceQuery = query(
-            collection(db, "attendance"),
-            where("course_id", "==", course.id),
-            where("student_id", "==", studentId),
-            where("attendance_date", ">=", startDate),
-            where("attendance_date", "<=", endDate),
-          );
-          const attendanceSnap = await getDocs(attendanceQuery);
-
-          if (!attendanceSnap.empty) {
-            const presentCount = attendanceSnap.docs.filter(
-              (doc) => doc.data().status === "present",
-            ).length;
-            attendance = Math.round((presentCount / attendanceSnap.size) * 100);
-          }
-
-          // Determine status based on score
           let status: "excellent" | "good" | "warning" | "at-risk";
           if (score >= 85) status = "excellent";
           else if (score >= 70) status = "good";
           else if (score >= 60) status = "warning";
           else status = "at-risk";
 
-          // Check if student already exists in insights (avoid duplicates)
           const existingIndex = allInsights.findIndex(
-            (insight) => insight.name === studentData.full_name,
+            (insight) => insight.name === profileData.full_name,
           );
           if (existingIndex === -1) {
             allInsights.push({
-              name: studentData.full_name || "Unknown Student",
+              name: profileData.full_name || "Unknown Student",
               status,
               score,
               attendance,
-              trend: score >= 70 ? "up" : "down", // Simple trend calculation
+              trend: score >= 70 ? "up" : "down",
             });
           }
         }
       }
 
-      // Prioritize at-risk students, then show top performers
       const atRiskStudents = allInsights.filter(
         (student) => student.status === "at-risk",
       );
@@ -414,19 +274,15 @@ export default function LecturerAnalytics() {
         (student) => student.status !== "at-risk",
       );
 
-      // Sort at-risk students by score (lowest first to show most concerning)
       const sortedAtRisk = atRiskStudents.sort((a, b) => a.score - b.score);
-
-      // Sort other students by score (highest first)
       const sortedOthers = otherStudents.sort((a, b) => b.score - a.score);
 
-      // Combine: show up to 4 at-risk students, then fill with top performers
       const prioritizedInsights = [
         ...sortedAtRisk.slice(0, 4),
         ...sortedOthers.slice(0, 4),
       ];
 
-      return prioritizedInsights.slice(0, 8); // Ensure max 8 students
+      return prioritizedInsights.slice(0, 8);
     } catch (error) {
       console.error("Error fetching student insights:", error);
       return [];

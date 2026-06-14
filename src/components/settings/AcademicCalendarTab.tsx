@@ -33,18 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  doc,
-  getDoc,
-  limit,
-  orderBy,
-  onSnapshot,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface CalendarEvent {
   id: string;
@@ -149,24 +138,16 @@ export function AcademicCalendarTab() {
   useEffect(() => {
     const fetchCalendarEvents = async () => {
       try {
-        const eventsQ = query(
-          collection(db, "academic_calendar_events"),
-          orderBy("start_date", "asc"),
-          limit(200),
-        );
-        const eventsSnap = await getDocs(eventsQ);
-        const mappedEvents: CalendarEvent[] = eventsSnap.docs.map((docSnap) => {
-          const data = docSnap.data() as any;
-          return {
-            id: docSnap.id,
-            title: data.title || "Academic Event",
-            date: data.start_date || "",
-            endDate: data.end_date || undefined,
-            type: normalizeEventType(data.category),
-            description: data.description || "",
-            important: data.status === "current" || data.status === "open",
-          };
-        });
+        const events = await getBackend<any[]>("/api/academic-events/");
+        const mappedEvents: CalendarEvent[] = events.map((data: any) => ({
+          id: data.id,
+          title: data.title || "Academic Event",
+          date: data.date || "",
+          endDate: data.dueDate || undefined,
+          type: normalizeEventType(data.type),
+          description: data.description || "",
+          important: data.isActive === true,
+        }));
         setCalendarEvents(mappedEvents);
       } catch (error) {
         console.error("Error loading academic calendar events:", error);
@@ -177,7 +158,7 @@ export function AcademicCalendarTab() {
     fetchCalendarEvents();
   }, []);
 
-  // Fetch assignments from Firestore and convert to calendar events
+  // Fetch assignments from backend API and convert to calendar events
   useEffect(() => {
     if (!user) {
       setAssignmentsLoading(false);
@@ -189,47 +170,41 @@ export function AcademicCalendarTab() {
     const fetchAssignments = async () => {
       try {
         // Get student's enrolled courses
-        const enrollQ = query(
-          collection(db, "enrollments"),
-          where("student_id", "==", user.uid),
-          where("status", "in", ["approved", "pending"]),
+        const enrollments = await getBackend<any[]>(
+          `/api/enrollments/?student_id=${user.uid}`,
         );
-        const enrollSnap = await getDocs(enrollQ);
-        const enrollments = enrollSnap.docs.map((d) => d.data());
 
-        if (enrollments && enrollments.length > 0) {
-          const courseIds = enrollments.map((e: any) => e.course_id);
+        const activeEnrollments = enrollments.filter(
+          (e: any) => e.status === "approved" || e.status === "pending",
+        );
+
+        if (activeEnrollments.length > 0) {
+          const courseIds = activeEnrollments.map((e: any) => e.course_id);
 
           // Fetch assignments for enrolled courses
-          const assignmentsQ = query(
-            collection(db, "Assignments"),
-            where("course_id", "in", courseIds.slice(0, 10)), // Firestore limitation: in supports up to 10
-          );
-
-          const assignmentsSnap = await getDocs(assignmentsQ);
-          const assignmentsResult = assignmentsSnap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }));
+          let assignmentsResult: any[] = [];
+          try {
+            assignmentsResult = await getBackend<any[]>("/api/assignments/");
+            // Filter by course_ids that student is enrolled in
+            assignmentsResult = assignmentsResult.filter((a: any) =>
+              courseIds.includes(a.course_id),
+            );
+          } catch {
+            assignmentsResult = [];
+          }
 
           if (assignmentsResult.length > 0) {
             // Fetch courses info
             const uniqueCourseIds = [
               ...new Set(assignmentsResult.map((a: any) => a.course_id)),
             ];
+            const courseUnits = await getBackend<any[]>("/api/course-units/");
             const courseMap: Record<string, any> = {};
-
-            for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-              const chunk = uniqueCourseIds.slice(i, i + 10);
-              const courseQ = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseSnap = await getDocs(courseQ);
-              courseSnap.docs.forEach((d) => {
-                courseMap[d.id] = d.data();
-              });
-            }
+            courseUnits.forEach((cu: any) => {
+              if (uniqueCourseIds.includes(cu.id)) {
+                courseMap[cu.id] = cu;
+              }
+            });
 
             const assignmentsWithInfo = assignmentsResult.map((a: any) => ({
               ...a,
@@ -239,20 +214,18 @@ export function AcademicCalendarTab() {
             setFirestoreAssignments(assignmentsWithInfo as any);
 
             // Fetch submission statuses
-            const assignmentIds = assignmentsResult.map((a) => a.id);
-            const submissionsQ = query(
-              collection(db, "submissions"),
-              where("student_id", "==", user.uid),
-              where("assignment_id", "in", assignmentIds.slice(0, 10)),
-            );
-            const submissionsSnap = await getDocs(submissionsQ);
-
-            const statusMap = new Map<string, string>();
-            submissionsSnap.docs.forEach((d) => {
-              const data = d.data();
-              statusMap.set(data.assignment_id, data.status || "pending");
-            });
-            setSubmissionStatuses(statusMap);
+            try {
+              const submissions = await getBackend<any[]>(
+                `/api/submissions/?student_id=${user.uid}`,
+              );
+              const statusMap = new Map<string, string>();
+              submissions.forEach((s: any) => {
+                statusMap.set(s.assignment_id, s.status || "pending");
+              });
+              setSubmissionStatuses(statusMap);
+            } catch {
+              setSubmissionStatuses(new Map());
+            }
 
             // Convert to calendar events
             const assignmentEvents: CalendarEvent[] = assignmentsResult.map(
@@ -282,14 +255,6 @@ export function AcademicCalendarTab() {
     };
 
     fetchAssignments();
-
-    // Set up real-time listener
-    const assignmentsRef = collection(db, "Assignments");
-    const unsub = onSnapshot(assignmentsRef, () => {
-      fetchAssignments();
-    });
-
-    return () => unsub();
   }, [user]);
 
   // Convert Firestore assignments to assignment-card format for display

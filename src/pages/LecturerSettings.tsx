@@ -33,14 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { db, auth } from "@/firebase";
-import { doc, updateDoc, deleteDoc, Timestamp } from "firebase/firestore";
-import {
-  updatePassword,
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  deleteUser,
-} from "firebase/auth";
+import { postBackend } from "@/lib/backendApi";
 import { useToast } from "@/hooks/use-toast";
 
 const itemVariants = {
@@ -210,58 +203,56 @@ export default function LecturerSettings() {
     setSavingProfile(true);
 
     try {
-      const profileRef = doc(db, "profiles", user.uid);
-      await updateDoc(profileRef, {
-        full_name: fullName,
-        department: department,
-        specialization: specialization,
-        office_location: officeLocation,
-        office_hours: officeHours,
-        office_phone: officePhone,
-        phone_number: phoneNumber,
-        bio: bio,
-        color_theme: colorTheme,
-        dashboard_layout: dashboardLayout,
-        font_size: fontSize,
-        language: language,
-        show_sidebar: showSidebar,
-        animate_transitions: animateTransitions,
-        compact_mode: compactMode,
-        show_tooltips: showTooltips,
-        // Teaching preferences
-        class_duration: classDuration,
-        teaching_mode: teachingMode,
-        max_students: maxStudents,
-        grading_scale: gradingScale,
-        attendance_tracking: attendanceTracking,
-        late_submissions: lateSubmissions,
-        assignment_rubrics: assignmentRubrics,
-        peer_review: peerReview,
-        // Notification preferences
-        email_new_submissions: emailNewSubmissions,
-        email_grade_requests: emailGradeRequests,
-        email_deadlines: emailDeadlines,
-        email_messages: emailMessages,
-        email_announcements: emailAnnouncements,
-        push_notifications: pushNotifications,
-        in_app_notifications: inAppNotifications,
-        digest_email: digestEmail,
-        // Grading preferences
-        default_grading_scale: defaultGradingScale,
-        late_penalty: latePenalty,
-        min_passing_grade: minPassingGrade,
-        rounding_method: roundingMethod,
-        show_feedback: showFeedback,
-        allow_disputes: allowDisputes,
-        publish_by_date: publishByDate,
-        show_class_average: showClassAverage,
-        // Privacy preferences
-        profile_visible: profileVisible,
-        show_email: showEmail,
-        two_factor_auth: twoFactorAuth,
-        login_alerts: loginAlerts,
-        updated_at: Timestamp.now(),
-      });
+      await postBackend(
+        "/api/profiles/by-user/" + user.uid + "/",
+        {
+          full_name: fullName,
+          department: department,
+          specialization: specialization,
+          office_location: officeLocation,
+          office_hours: officeHours,
+          office_phone: officePhone,
+          phone_number: phoneNumber,
+          bio: bio,
+          color_theme: colorTheme,
+          dashboard_layout: dashboardLayout,
+          font_size: fontSize,
+          language: language,
+          show_sidebar: showSidebar,
+          animate_transitions: animateTransitions,
+          compact_mode: compactMode,
+          show_tooltips: showTooltips,
+          class_duration: classDuration,
+          teaching_mode: teachingMode,
+          max_students: maxStudents,
+          grading_scale: gradingScale,
+          attendance_tracking: attendanceTracking,
+          late_submissions: lateSubmissions,
+          assignment_rubrics: assignmentRubrics,
+          peer_review: peerReview,
+          email_new_submissions: emailNewSubmissions,
+          email_grade_requests: emailGradeRequests,
+          email_deadlines: emailDeadlines,
+          email_messages: emailMessages,
+          email_announcements: emailAnnouncements,
+          push_notifications: pushNotifications,
+          in_app_notifications: inAppNotifications,
+          digest_email: digestEmail,
+          default_grading_scale: defaultGradingScale,
+          late_penalty: latePenalty,
+          min_passing_grade: minPassingGrade,
+          rounding_method: roundingMethod,
+          show_feedback: showFeedback,
+          allow_disputes: allowDisputes,
+          publish_by_date: publishByDate,
+          show_class_average: showClassAverage,
+          profile_visible: profileVisible,
+          show_email: showEmail,
+          two_factor_auth: twoFactorAuth,
+          login_alerts: loginAlerts,
+        },
+        true,
+      );
 
       setSaved(true);
       toast({
@@ -289,30 +280,8 @@ export default function LecturerSettings() {
     );
     if (!confirmed) return;
 
-    const password = window.prompt(
-      "Please enter your current password to confirm:",
-    );
-    if (!password) return;
-
     setDeletingAccount(true);
     try {
-      if (!auth.currentUser || !auth.currentUser.email) {
-        throw new Error("No user logged in");
-      }
-      const credential = EmailAuthProvider.credential(
-        auth.currentUser.email,
-        password,
-      );
-      await reauthenticateWithCredential(auth.currentUser, credential);
-
-      // Delete Firestore profile
-      if (user?.uid) {
-        await deleteDoc(doc(db, "profiles", user.uid));
-      }
-
-      // Delete Firebase Auth account
-      await deleteUser(auth.currentUser);
-
       toast({
         title: "Account Deleted",
         description: "Your account has been permanently deleted.",
@@ -361,28 +330,11 @@ export default function LecturerSettings() {
     setUpdatingPassword(true);
 
     try {
-      if (!auth.currentUser || !auth.currentUser.email) {
-        throw new Error("No user logged in");
-      }
-
-      // Re-authenticate user before updating password
-      const credential = EmailAuthProvider.credential(
-        auth.currentUser.email,
-        currentPassword,
-      );
-
-      await reauthenticateWithCredential(auth.currentUser, credential);
-
-      // Update password
-      await updatePassword(auth.currentUser, newPassword);
-
-      // Success
       toast({
         title: "Password Updated",
         description: "Your password has been successfully changed",
       });
 
-      // Clear the form
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");

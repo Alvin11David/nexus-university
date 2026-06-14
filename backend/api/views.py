@@ -725,6 +725,126 @@ class AssignmentListView(APIView):
         )
 
 
+class AssignmentDetailView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request, assignment_id):
+        try:
+            assignment = Assignment.objects.get(id=assignment_id)
+        except Assignment.DoesNotExist:
+            return Response({"error": "Assignment not found"}, status=404)
+        return Response({
+            "id": str(assignment.id),
+            "lecturer_id": assignment.lecturer_id,
+            "course_id": assignment.course_id,
+            "course_title": assignment.course_title or "",
+            "course_code": assignment.course_code or "",
+            "title": assignment.title,
+            "description": assignment.description,
+            "due_date": assignment.due_date.isoformat(),
+            "total_points": assignment.total_points,
+            "instruction_document_url": assignment.instruction_document_url,
+            "instruction_document_name": assignment.instruction_document_name,
+            "status": assignment.status,
+            "created_at": assignment.created_at,
+        })
+
+    def delete(self, request, assignment_id):
+        try:
+            assignment = Assignment.objects.get(id=assignment_id)
+        except Assignment.DoesNotExist:
+            return Response({"error": "Assignment not found"}, status=404)
+        assignment.delete()
+        return Response({"success": True}, status=200)
+
+
+class AssignmentUpdateView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, assignment_id):
+        try:
+            assignment = Assignment.objects.get(id=assignment_id)
+        except Assignment.DoesNotExist:
+            return Response({"error": "Assignment not found"}, status=404)
+
+        if "title" in request.data:
+            assignment.title = request.data["title"]
+        if "description" in request.data:
+            assignment.description = request.data["description"]
+        if "due_date" in request.data:
+            assignment.due_date = request.data["due_date"]
+        if "total_points" in request.data:
+            assignment.total_points = int(request.data["total_points"])
+        if "course_id" in request.data:
+            assignment.course_id = request.data["course_id"]
+        if "course_title" in request.data:
+            assignment.course_title = request.data["course_title"]
+        if "course_code" in request.data:
+            assignment.course_code = request.data["course_code"]
+        if "status" in request.data:
+            assignment.status = request.data["status"]
+        if "instruction_document_url" in request.data:
+            assignment.instruction_document_url = request.data["instruction_document_url"]
+        if "instruction_document_name" in request.data:
+            assignment.instruction_document_name = request.data["instruction_document_name"]
+
+        try:
+            assignment.save()
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response({
+            "id": str(assignment.id),
+            "lecturer_id": assignment.lecturer_id,
+            "course_id": assignment.course_id,
+            "course_title": assignment.course_title or "",
+            "course_code": assignment.course_code or "",
+            "title": assignment.title,
+            "description": assignment.description,
+            "due_date": assignment.due_date.isoformat(),
+            "total_points": assignment.total_points,
+            "instruction_document_url": assignment.instruction_document_url,
+            "instruction_document_name": assignment.instruction_document_name,
+            "status": assignment.status,
+            "created_at": assignment.created_at,
+        })
+
+
+class SubmissionUpdateView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, submission_id):
+        try:
+            submission = Submission.objects.get(id=submission_id)
+        except Submission.DoesNotExist:
+            return Response({"error": "Submission not found"}, status=404)
+
+        if "status" in request.data:
+            submission.status = request.data["status"]
+        if "score" in request.data:
+            submission.score = request.data["score"]
+        if "feedback" in request.data:
+            submission.feedback = request.data["feedback"]
+
+        try:
+            submission.save()
+        except Exception as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response({
+            "id": str(submission.id),
+            "assignment_id": submission.assignment_id,
+            "student_id": submission.student_id,
+            "status": submission.status,
+            "score": submission.score,
+            "feedback": submission.feedback,
+            "submitted_at": submission.submitted_at.isoformat(),
+        })
+
+
 class QuizListView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -2311,6 +2431,9 @@ class ProfileUpdateByUserView(APIView):
     authentication_classes = []
     permission_classes = []
 
+    def post(self, request, user_id):
+        return self.put(request, user_id)
+
     def put(self, request, user_id):
         try:
             email = request.data.get("email", "")
@@ -2355,6 +2478,7 @@ class NotificationListView(APIView):
                 "title": n.title,
                 "message": n.message,
                 "related_id": n.related_id,
+                "link": n.link,
                 "is_read": n.is_read,
                 "created_at": n.created_at.isoformat(),
             }
@@ -2368,6 +2492,7 @@ class NotificationListView(APIView):
         title = request.data.get("title", "")
         message = request.data.get("message", "")
         related_id = request.data.get("related_id")
+        link = request.data.get("link", "")
 
         if not user_id or not title:
             return Response({"error": "user_id and title required"}, status=400)
@@ -2378,6 +2503,7 @@ class NotificationListView(APIView):
             title=title,
             message=message,
             related_id=related_id,
+            link=link,
         )
         return Response({
             "id": str(notification.id),
@@ -2386,9 +2512,36 @@ class NotificationListView(APIView):
             "title": notification.title,
             "message": notification.message,
             "related_id": notification.related_id,
+            "link": notification.link,
             "is_read": notification.is_read,
             "created_at": notification.created_at.isoformat(),
         }, status=201)
+
+
+class NotificationMarkReadView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, notification_id):
+        try:
+            notification = Notification.objects.get(pk=notification_id)
+            notification.is_read = True
+            notification.save(update_fields=["is_read"])
+            return Response({"status": "ok"})
+        except Notification.DoesNotExist:
+            return Response({"error": "Notification not found"}, status=404)
+
+
+class NotificationMarkAllReadView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"error": "user_id required"}, status=400)
+        updated = Notification.objects.filter(user_id=user_id, is_read=False).update(is_read=True)
+        return Response({"status": "ok", "updated": updated})
 
 
 class ActivityListView(APIView):

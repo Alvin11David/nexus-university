@@ -24,14 +24,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
-import { db } from "@/firebase";
-import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  getDocs,
-} from "firebase/firestore";
+import { getBackend } from "@/lib/backendApi";
 
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -41,26 +34,30 @@ export function Header() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user?.uid) {
-      // Set up real-time listener for notifications
-      const q = query(
-        collection(db, "notifications"),
-        where("user_id", "==", user.uid),
-        where("is_read", "==", false),
-      );
+    if (!user?.uid) return;
 
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          setUnreadCount(snapshot.size);
-        },
-        (error) => {
-          console.error("Error with notifications snapshot:", error);
-        },
-      );
+    const fetchUnreadCount = async () => {
+      try {
+        const data = await getBackend<any[]>(
+          `/api/notifications/?user_id=${encodeURIComponent(user.uid)}&is_read=false`,
+        );
+        setUnreadCount(data.length);
+      } catch (error) {
+        console.error("Error fetching notifications:", error);
+      }
+    };
 
-      return () => unsubscribe();
-    }
+    fetchUnreadCount();
+
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    const handlePing = () => fetchUnreadCount();
+    window.addEventListener("notifications-updated", handlePing);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("notifications-updated", handlePing);
+    };
   }, [user]);
 
   const handleSignOut = async () => {
