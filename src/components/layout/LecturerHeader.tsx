@@ -52,24 +52,17 @@ export function LecturerHeader() {
 
   useEffect(() => {
     if (user?.uid) {
-      // Set up real-time listener for notifications
-      const q = query(
-        collection(db, "notifications"),
-        where("user_id", "==", user.uid),
-        where("is_read", "==", false),
-      );
-
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          setUnreadCount(snapshot.size);
-        },
-        (error) => {
-          console.error("Error with notifications snapshot:", error);
-        },
-      );
-
-      return () => unsubscribe();
+      const fetchUnreadCount = async () => {
+        try {
+          const data = await getBackend<any[]>("/api/notifications/?user_id=" + user.uid);
+          setUnreadCount(data.filter((n) => !n.is_read).length);
+        } catch {
+          // Silently fail
+        }
+      };
+      fetchUnreadCount();
+      const interval = setInterval(fetchUnreadCount, 30000);
+      return () => clearInterval(interval);
     }
   }, [user]);
 

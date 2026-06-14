@@ -8,9 +8,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
-import { useAuth } from "@/contexts/AuthContext";
 
 export interface SiteSettings {
   siteName: string;
@@ -43,70 +40,10 @@ const SiteSettingsContext = createContext<SiteSettingsContextType | undefined>(
   undefined,
 );
 
-const SITE_SETTINGS_COLLECTION = "site_settings";
-const SITE_SETTINGS_DOC = "branding";
-
-function isHexColor(value: string) {
-  return /^#([0-9A-F]{3}|[0-9A-F]{6})$/i.test(value.trim());
-}
-
-function sanitizeSettings(
-  input: Partial<SiteSettings> | undefined,
-): SiteSettings {
-  const merged: SiteSettings = {
-    ...DEFAULT_SITE_SETTINGS,
-    ...(input || {}),
-  };
-
-  return {
-    siteName: String(merged.siteName || DEFAULT_SITE_SETTINGS.siteName).trim(),
-    shortName: String(
-      merged.shortName || DEFAULT_SITE_SETTINGS.shortName,
-    ).trim(),
-    tagline: String(merged.tagline || DEFAULT_SITE_SETTINGS.tagline).trim(),
-    logoUrl: String(merged.logoUrl || "").trim(),
-    supportEmail: String(
-      merged.supportEmail || DEFAULT_SITE_SETTINGS.supportEmail,
-    ).trim(),
-    primaryColor: isHexColor(merged.primaryColor)
-      ? merged.primaryColor
-      : DEFAULT_SITE_SETTINGS.primaryColor,
-    secondaryColor: isHexColor(merged.secondaryColor)
-      ? merged.secondaryColor
-      : DEFAULT_SITE_SETTINGS.secondaryColor,
-  };
-}
-
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
-  const { profile } = useAuth();
   const [settings, setSettings] = useState<SiteSettings>(DEFAULT_SITE_SETTINGS);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const faviconOriginalHrefRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const settingsRef = doc(db, SITE_SETTINGS_COLLECTION, SITE_SETTINGS_DOC);
-
-    const unsubscribe = onSnapshot(
-      settingsRef,
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setSettings(
-            sanitizeSettings(snapshot.data() as Partial<SiteSettings>),
-          );
-        } else {
-          setSettings(DEFAULT_SITE_SETTINGS);
-        }
-
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Failed to subscribe to site settings:", error);
-        setLoading(false);
-      },
-    );
-
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     document.title = settings.siteName;
@@ -155,23 +92,11 @@ export function SiteSettingsProvider({ children }: { children: ReactNode }) {
     }
   }, [settings]);
 
-  const saveSettings = useCallback(async (nextSettings: SiteSettings) => {
-    const payload = sanitizeSettings(nextSettings);
-    const settingsRef = doc(db, SITE_SETTINGS_COLLECTION, SITE_SETTINGS_DOC);
-
-    await setDoc(
-      settingsRef,
-      {
-        ...payload,
-        updated_at: serverTimestamp(),
-      },
-      { merge: true },
-    );
+  const saveSettings = useCallback(async (_nextSettings: SiteSettings) => {
+    // TODO: implement via Django API when backend endpoint is available
   }, []);
 
-  const canEdit = useMemo(() => {
-    return profile?.role === "admin" || profile?.role === "registrar";
-  }, [profile?.role]);
+  const canEdit = false;
 
   const value = useMemo(
     () => ({

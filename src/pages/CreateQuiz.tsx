@@ -19,17 +19,7 @@ import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/firebase";
-import {
-  addDoc,
-  collection,
-  Timestamp,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  doc,
-} from "firebase/firestore";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { useToast } from "@/components/ui/use-toast";
 import { DocumentUpload } from "@/components/DocumentUpload";
 import { QuestionReview } from "@/components/QuestionReview";
@@ -184,57 +174,15 @@ export default function CreateQuiz() {
     return dateTime.toISOString();
   };
 
-  // Fetch lecturer's assigned courses
   const fetchLecturerCourses = async () => {
     try {
       if (!user?.uid) return;
 
-      // Fetch lecturer's profile to get assigned_course_units
-      const assignedRawCourses: any[] = [];
-      try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourseUnits = profileData.assigned_course_units || [];
-
-          if (assignedCourseUnits.length > 0) {
-            // Query course_units collection where doc.id is in assignedCourseUnits
-            // Firestore 'in' supports up to 30 values
-            const chunks = [];
-            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-              chunks.push(assignedCourseUnits.slice(i, i + 30));
-            }
-
-            for (const chunk of chunks) {
-              const courseUnitsQuery = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-              courseUnitsSnapshot.docs.forEach((doc) => {
-                const courseData = doc.data();
-                assignedRawCourses.push({
-                  id: doc.id,
-                  code:
-                    courseData.code || courseData.course_unit_code || "Unknown",
-                  title:
-                    courseData.name ||
-                    courseData.course_unit_name ||
-                    "Unknown Course",
-                });
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to fetch lecturer profile or course units:", err);
-      }
-
-      // Set available courses to the assigned course units
-      const coursesData: CourseOption[] = assignedRawCourses.map((raw) => ({
-        id: raw.id,
-        code: raw.code,
-        title: raw.title,
+      const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+      const coursesData: CourseOption[] = (courseUnitsData || []).map((course: any) => ({
+        id: course.id,
+        code: course.code || course.course_unit_code || "Unknown",
+        title: course.name || course.course_unit_name || "Unknown Course",
       }));
 
       setCourses(coursesData);
@@ -493,7 +441,6 @@ export default function CreateQuiz() {
 
       const selectedCourse = courses.find((c) => c.id === formData.courseId);
 
-      // Combine date and time for storage
       const startDateTime = combineDateTime(
         formData.startDate,
         formData.startTime,
@@ -505,8 +452,7 @@ export default function CreateQuiz() {
         formData.endTimePeriod,
       );
 
-      // Save quiz to Firestore 'quizzes' collection
-      const quizRef = await addDoc(collection(db, "quizzes"), {
+      const quizPayload = {
         title: formData.title,
         description: formData.description,
         course_id: formData.courseId,
@@ -524,40 +470,29 @@ export default function CreateQuiz() {
         show_answers: formData.showAnswers,
         auto_deactivate: formData.autoDeactivate,
         lecturer_id: user.uid,
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now(),
-        total_attempts: 0,
-        average_score: 0,
-        completion_rate: 0,
-        highest_score: 0,
-        lowest_score: 0,
-        question_count: extractedQuestions.length,
-      });
+        questions: extractedQuestions.map((question) => {
+          let correctAnswerValue: string | number = question.correct_answer;
+          if (
+            typeof correctAnswerValue === "string" &&
+            /^\d+$/.test(correctAnswerValue)
+          ) {
+            correctAnswerValue = parseInt(correctAnswerValue, 10);
+          }
+          return {
+            question: question.question,
+            type: question.type,
+            options: question.options || [],
+            correct_answer: correctAnswerValue,
+            explanation: question.explanation || "",
+            points: 1,
+            difficulty: question.difficulty,
+            confidence: question.confidence,
+            original_text: question.originalText,
+          };
+        }),
+      };
 
-      // Save questions to a subcollection
-      for (const question of extractedQuestions) {
-        // Ensure correct_answer is a number
-        let correctAnswerValue: string | number = question.correct_answer;
-        if (
-          typeof correctAnswerValue === "string" &&
-          /^\d+$/.test(correctAnswerValue)
-        ) {
-          correctAnswerValue = parseInt(correctAnswerValue, 10);
-        }
-
-        await addDoc(collection(db, "quizzes", quizRef.id, "questions"), {
-          question: question.question,
-          type: question.type,
-          options: question.options || [],
-          correct_answer: correctAnswerValue,
-          explanation: question.explanation || "",
-          points: 1,
-          difficulty: question.difficulty,
-          confidence: question.confidence,
-          original_text: question.originalText,
-          created_at: Timestamp.now(),
-        });
-      }
+      await postBackend("/api/quizzes/", quizPayload);
 
       toast({
         title: "Success",

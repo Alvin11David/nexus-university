@@ -26,21 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/firebase";
 import { getBackend, postBackend } from "@/lib/backendApi";
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  getDoc,
-  orderBy,
-  updateDoc,
-  doc,
-  deleteDoc,
-  Timestamp,
-  addDoc,
-} from "firebase/firestore";
 import { useToast } from "@/components/ui/use-toast";
 import { autoCloseExpiredQuizzes } from "@/lib/quizUtils";
 
@@ -190,45 +176,21 @@ export default function LecturerQuiz() {
     try {
       if (!user?.uid) return;
 
-      // Fetch lecturer's profile to get assigned_course_units
+      // Fetch lecturer's course units via API
       const assignedRawCourses: any[] = [];
       try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        if (profileDoc.exists()) {
-          const profileData = profileDoc.data();
-          const assignedCourseUnits = profileData.assigned_course_units || [];
-
-          if (assignedCourseUnits.length > 0) {
-            // Query course_units collection where doc.id is in assignedCourseUnits
-            // Firestore 'in' supports up to 30 values
-            const chunks = [];
-            for (let i = 0; i < assignedCourseUnits.length; i += 30) {
-              chunks.push(assignedCourseUnits.slice(i, i + 30));
-            }
-
-            for (const chunk of chunks) {
-              const courseUnitsQuery = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseUnitsSnapshot = await getDocs(courseUnitsQuery);
-              courseUnitsSnapshot.docs.forEach((doc) => {
-                const courseData = doc.data();
-                assignedRawCourses.push({
-                  id: doc.id,
-                  course_code:
-                    courseData.code || courseData.course_unit_code || "Unknown",
-                  course_title:
-                    courseData.name ||
-                    courseData.course_unit_name ||
-                    "Unknown Course",
-                });
-              });
-            }
-          }
+        const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+        if (courseUnitsData && courseUnitsData.length > 0) {
+          courseUnitsData.forEach((course: any) => {
+            assignedRawCourses.push({
+              id: course.id,
+              course_code: course.code || course.course_unit_code || "Unknown",
+              course_title: course.name || course.course_unit_name || "Unknown Course",
+            });
+          });
         }
       } catch (err) {
-        console.error("Failed to fetch lecturer profile or course units:", err);
+        console.error("Failed to fetch course units:", err);
       }
 
       // Set available courses to the assigned course units
@@ -285,7 +247,7 @@ export default function LecturerQuiz() {
   const handleDeleteQuiz = async (quizId: string) => {
     if (confirm("Are you sure you want to delete this quiz?")) {
       try {
-        await deleteDoc(doc(db, "quizzes", quizId));
+        await postBackend(`/api/quizzes/${quizId}/action/`, { action: "delete" });
 
         toast({
           title: "Success",
@@ -305,7 +267,6 @@ export default function LecturerQuiz() {
 
   const handleDuplicateQuiz = async (quiz: Quiz) => {
     try {
-      // Create duplicate quiz
       const newQuizData = {
         title: `${quiz.title} (Copy)`,
         description: quiz.description,
@@ -320,8 +281,6 @@ export default function LecturerQuiz() {
         attempts_allowed: quiz.attemptsAllowed,
         shuffle_questions: quiz.shuffleQuestions,
         show_answers: quiz.showAnswers,
-        created_at: Timestamp.now(),
-        updated_at: Timestamp.now(),
         total_attempts: 0,
         average_score: 0,
         completion_rate: 0,
@@ -329,38 +288,14 @@ export default function LecturerQuiz() {
         lowest_score: 0,
       };
 
-      const newQuizRef = await addDoc(collection(db, "quizzes"), newQuizData);
-      const newQuizId = newQuizRef.id;
-
-      // Load and duplicate questions if they exist
-      try {
-        const questionsRef = collection(db, "quiz_questions");
-        const q = query(questionsRef, where("quiz_id", "==", quiz.id));
-        const questionsSnapshot = await getDocs(q);
-
-        if (!questionsSnapshot.empty) {
-          const writeBatchPromises = questionsSnapshot.docs.map(
-            async (qDoc) => {
-              const qData = qDoc.data();
-              return addDoc(collection(db, "quiz_questions"), {
-                ...qData,
-                quiz_id: newQuizId,
-                created_at: Timestamp.now(),
-              });
-            },
-          );
-
-          await Promise.all(writeBatchPromises);
-        }
-      } catch (questionsError) {
-        console.log("Question duplication failed:", questionsError);
-      }
+      const newQuiz = await postBackend<any>("/api/quizzes/", newQuizData);
+      const newQuizId = newQuiz.id;
 
       toast({
         title: "Success",
         description: `Quiz "${quiz.title}" duplicated successfully`,
       });
-      loadQuizzes(); // Refresh the list
+      loadQuizzes();
     } catch (error) {
       console.error("Error duplicating quiz:", error);
       toast({

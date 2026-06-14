@@ -30,20 +30,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/firebase";
-import {
-  doc,
-  getDoc,
-  getDocs,
-  collection,
-  query,
-  where,
-  updateDoc,
-  writeBatch,
-  Timestamp,
-  addDoc,
-  deleteDoc,
-} from "firebase/firestore";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CourseOption {
@@ -163,11 +150,8 @@ export default function EditQuiz() {
       setLoading(true);
       if (!id) return;
 
-      // Load quiz data
-      const quizRef = doc(db, "quizzes", id);
-      const quizSnap = await getDoc(quizRef);
-
-      if (!quizSnap.exists()) {
+      const qData = await getBackend<any>(`/api/quizzes/${id}/`);
+      if (!qData) {
         toast({
           title: "Error",
           description: "Quiz not found",
@@ -177,9 +161,6 @@ export default function EditQuiz() {
         return;
       }
 
-      const qData = quizSnap.data();
-
-      // Parse start and end dates
       const startDateTime = qData.start_date
         ? parseDateTime(qData.start_date)
         : { date: "", time: "", period: "AM" as "AM" | "PM" };
@@ -205,20 +186,11 @@ export default function EditQuiz() {
         attemptsAllowed: qData.attempts_allowed || 1,
         shuffleQuestions: qData.shuffle_questions || false,
         showAnswers: qData.show_answers || false,
-        autoDeactivate: qData.auto_deactivate !== false, // Default to true if not set
+        autoDeactivate: qData.auto_deactivate !== false,
       });
 
-      // Load questions
-      const questionsRef = collection(db, "quiz_questions");
-      const q = query(questionsRef, where("quiz_id", "==", id));
-      const questionsSnap = await getDocs(q);
-
-      const formattedQuestions = questionsSnap.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as any[];
-
-      setQuestions(formattedQuestions);
+      const questionsData = await getBackend<any[]>(`/api/questions/?quiz_id=${id}`);
+      setQuestions(questionsData || []);
     } catch (error: any) {
       console.error("Error loading quiz:", error);
       toast({
@@ -239,7 +211,6 @@ export default function EditQuiz() {
       setSaving(true);
       if (!id) return;
 
-      // Combine date and time for storage
       const startDateTime = combineDateTime(
         quizData.startDate,
         quizData.startTime,
@@ -251,9 +222,7 @@ export default function EditQuiz() {
         quizData.endTimePeriod,
       );
 
-      // Update quiz data
-      const quizRef = doc(db, "quizzes", id);
-      await updateDoc(quizRef, {
+      await postBackend(`/api/quizzes/${id}/update/`, {
         title: quizData.title,
         description: quizData.description,
         course_id: quizData.courseId,
@@ -268,37 +237,15 @@ export default function EditQuiz() {
         shuffle_questions: quizData.shuffleQuestions,
         show_answers: quizData.showAnswers,
         auto_deactivate: quizData.autoDeactivate,
-        updated_at: Timestamp.now(),
-      });
-
-      // Handle questions
-      const questionsRef = collection(db, "quiz_questions");
-      const existingQsQuery = query(questionsRef, where("quiz_id", "==", id));
-      const existingQsSnap = await getDocs(existingQsQuery);
-
-      const batch = writeBatch(db);
-
-      // Delete existing
-      existingQsSnap.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-
-      // Add new ones
-      questions.forEach((q) => {
-        const newQRef = doc(collection(db, "quiz_questions"));
-        batch.set(newQRef, {
-          quiz_id: id,
+        questions: questions.map((q) => ({
           question: q.question,
           type: q.type,
           options: q.options || [],
           correct_answer: q.correct_answer,
           points: q.points,
           explanation: q.explanation || "",
-          created_at: Timestamp.now(),
-        });
+        })),
       });
-
-      await batch.commit();
 
       toast({
         title: "Success",

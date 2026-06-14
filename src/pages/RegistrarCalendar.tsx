@@ -14,17 +14,7 @@ import {
   MapPin,
   Shield,
 } from "lucide-react";
-import {
-  collection,
-  query,
-  getDocs,
-  addDoc,
-  doc,
-  updateDoc,
-  orderBy,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -123,14 +113,7 @@ export default function RegistrarCalendar() {
   const fetchEvents = async () => {
     try {
       setLoading(true);
-      const eventsRef = collection(db, "academic_calendar_events");
-      // Ordering by start_date ascending as original code did
-      const q = query(eventsRef, orderBy("start_date", "asc"));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as CalendarEvent[];
+      const data = await getBackend<CalendarEvent[]>("/api/academic-events/");
       setEvents(data || []);
     } catch (error: any) {
       console.error("Error fetching calendar events:", error);
@@ -179,7 +162,7 @@ export default function RegistrarCalendar() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "academic_calendar_events"), {
+      await postBackend("/api/academic-events/", {
         title: formData.title,
         description: formData.description || null,
         category: formData.category,
@@ -190,7 +173,6 @@ export default function RegistrarCalendar() {
         start_date: formData.start_date,
         end_date: formData.end_date,
         location: formData.location || null,
-        created_at: serverTimestamp(),
       });
 
       toast({ title: "Created", description: "Event added to calendar" });
@@ -222,10 +204,7 @@ export default function RegistrarCalendar() {
 
   const updateStatus = async (id: string, status: CalendarEvent["status"]) => {
     try {
-      await updateDoc(doc(db, "academic_calendar_events", id), {
-        status,
-        updated_at: new Date().toISOString(),
-      });
+      await postBackend(`/api/academic-events/${id}/update/`, { status });
       toast({ title: "Updated", description: `Marked ${status}` });
       fetchEvents();
     } catch (error: any) {

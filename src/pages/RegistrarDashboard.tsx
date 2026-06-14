@@ -17,13 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  collection,
-  query,
-  where,
-  getCountFromServer,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend } from "@/lib/backendApi";
 
 export default function RegistrarDashboard() {
   const navigate = useNavigate();
@@ -46,30 +40,12 @@ export default function RegistrarDashboard() {
 
   const fetchCounts = async () => {
     try {
-      const studentsQuery = query(collection(db, "student_records"));
-      const programsQuery = query(collection(db, "programs"));
-      const transcriptsQuery = query(
-        collection(db, "transcript_requests"),
-        where("status", "==", "issued")
-      );
-      const pendingQuery = query(
-        collection(db, "enrollments"),
-        where("status", "==", "pending")
-      );
-
-      const [studentsSnap, programsSnap, transcriptsSnap, pendingSnap] =
-        await Promise.all([
-          getCountFromServer(studentsQuery),
-          getCountFromServer(programsQuery),
-          getCountFromServer(transcriptsQuery),
-          getCountFromServer(pendingQuery),
-        ]);
-
+      const data = await getBackend<any>("/api/registrar/summary/");
       setCounts({
-        students: studentsSnap.data().count.toLocaleString(),
-        programs: programsSnap.data().count.toLocaleString(),
-        transcripts: transcriptsSnap.data().count.toLocaleString(),
-        pending: pendingSnap.data().count.toLocaleString(),
+        students: (data?.students ?? "...").toLocaleString(),
+        programs: (data?.programs ?? "...").toLocaleString(),
+        transcripts: (data?.transcripts_issued ?? "...").toLocaleString(),
+        pending: (data?.pending_enrollments ?? "...").toLocaleString(),
       });
     } catch (error) {
       console.error("Error fetching dashboard counts:", error);

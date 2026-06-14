@@ -45,19 +45,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  query,
-  getDocs,
-  addDoc,
-  doc,
-  orderBy,
-  where,
-  serverTimestamp,
-  limit,
-  getDoc,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface TranscriptRequest {
   id: string;
@@ -170,15 +158,7 @@ export default function RegistrarTranscripts() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const requestsRef = collection(db, "transcript_requests");
-      const q = query(requestsRef, orderBy("requested_date", "desc"));
-      const querySnapshot = await getDocs(q);
-
-      const data = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as TranscriptRequest[];
-
+      const data = await getBackend<TranscriptRequest[]>("/api/transcript-requests/");
       setRequests(data || []);
     } catch (error: any) {
       console.error("Error fetching requests:", error);
@@ -194,18 +174,7 @@ export default function RegistrarTranscripts() {
 
   const fetchStudents = async () => {
     try {
-      const recordsRef = collection(db, "student_records");
-      const q = query(
-        recordsRef,
-        where("enrollment_status", "in", ["active"]),
-        orderBy("full_name")
-      );
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as StudentRecord[];
-
+      const data = await getBackend<StudentRecord[]>("/api/students/");
       setStudents(data || []);
     } catch (error: any) {
       console.error("Failed to fetch students:", error);
@@ -254,49 +223,12 @@ export default function RegistrarTranscripts() {
 
     setIsSubmitting(true);
     try {
-      // Get student details
       const student = students.find((s) => s.id === formData.student_id);
       if (!student) throw new Error("Student not found");
 
-      // Get student academic info - process in Firestore equivalent
-      const enrollmentsRef = collection(db, "enrollments");
-      const qEnroll = query(
-        enrollmentsRef,
-        where("student_id", "==", formData.student_id),
-        where("status", "==", "completed")
-      );
-      const enrollSnap = await getDocs(qEnroll);
-      const enrollments = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      let totalCredits = 0;
-      let totalGradePoints = 0;
-      let cumulativeGpa = 0;
-
-      for (const e of enrollments) {
-        // Fetch course details manually if not present (Firestore doesn't have joins)
-        const courseId = (e as any).course_id;
-        if (courseId) {
-          const courseDoc = await getDoc(doc(db, "courses", courseId));
-          if (courseDoc.exists()) {
-            const courseData = courseDoc.data();
-            const credits = courseData.credits || 0;
-            totalCredits += credits;
-            const grade = (e as any).grade;
-            if (grade !== null && grade !== undefined && credits) {
-              const gradePoints = getGradePoints(grade);
-              totalGradePoints += gradePoints * credits;
-            }
-          }
-        }
-      }
-
-      if (totalCredits > 0) {
-        cumulativeGpa = totalGradePoints / totalCredits;
-      }
-
       const verificationCode = Math.random().toString(36).substring(2, 10).toUpperCase();
 
-      await addDoc(collection(db, "transcript_requests"), {
+      await postBackend("/api/transcript-requests/", {
         student_id: formData.student_id,
         student_number: student.student_number,
         student_name: student.full_name,
@@ -306,14 +238,10 @@ export default function RegistrarTranscripts() {
         delivery_method: formData.delivery_method,
         delivery_address: formData.delivery_address,
         program: (student as any).program || "",
-        cumulative_gpa: cumulativeGpa,
-        total_credits: totalCredits,
         fee_amount: formData.fee_amount,
         fees_paid: false,
         status: "pending",
-        requested_date: new Date().toISOString(),
         verification_code: verificationCode,
-        created_at: serverTimestamp(),
       });
 
       toast({

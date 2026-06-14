@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMemo } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface StudentAssignment {
   id: string;
@@ -168,47 +169,23 @@ export default function StudentAssignments() {
     try {
       setSubmitting(true);
 
-      // Create submission data
+      // TODO: file upload not yet implemented
+      if (submissionFile) {
+        console.log("File upload not yet implemented - filename:", submissionFile.name);
+      }
+
+      // Save submission to database
       const submissionData = {
         student_id: user.uid,
         assignment_id: selectedAssignment.id,
         content: submissionText.trim(),
-        file_url: null, // Will be updated if file is uploaded
+        file_url: null,
         file_name: submissionFile?.name || null,
         status: "submitted",
-        submitted_at: serverTimestamp(),
         score: null,
         feedback: null,
       };
-
-      // If there's a file, upload it to Firebase Storage
-      if (submissionFile) {
-        try {
-          // Create a unique filename to avoid conflicts
-          const timestamp = Date.now();
-          const fileExtension = submissionFile.name.split(".").pop();
-          const uniqueFileName = `${user.uid}_${timestamp}_${selectedAssignment.id}.${fileExtension}`;
-
-          // Upload file to Firebase Storage
-          const storageRef = ref(storage, `submissions/${uniqueFileName}`);
-          await uploadBytes(storageRef, submissionFile);
-
-          // Get the download URL
-          const downloadURL = await getDownloadURL(storageRef);
-          submissionData.file_url = downloadURL;
-        } catch (error) {
-          console.error("Error uploading file:", error);
-          toast({
-            title: "Upload failed",
-            description: "Failed to upload file. Please try again.",
-            variant: "destructive",
-          });
-          return;
-        }
-      }
-
-      // Save submission to database
-      await addDoc(collection(db, "submissions"), submissionData);
+      await postBackend("/api/submissions/", submissionData);
 
       toast({
         title: "Assignment submitted! 🎉",
@@ -228,16 +205,9 @@ export default function StudentAssignments() {
             setLoading(true);
 
             // Get all courses the student is enrolled in
-            const enrollmentsRef = collection(db, "enrollments");
-            const qEnroll = query(
-              enrollmentsRef,
-              where("student_id", "==", user.uid),
-              where("status", "in", ["approved", "pending"]),
-            );
-            const enrollSnap = await getDocs(qEnroll);
-
-            const courseIds = enrollSnap.docs
-              .map((d) => d.data().course_id)
+            const enrollmentsData = await getBackend<any[]>("/api/enrollments/");
+            const courseIds = enrollmentsData
+              .map((d: any) => d.course_id)
               .filter(Boolean);
 
             if (courseIds.length === 0) {
@@ -247,19 +217,7 @@ export default function StudentAssignments() {
             }
 
             // Get all assignments for these courses
-            const assignmentsRef = collection(db, "Assignments");
-            const assignmentsData: any[] = [];
-            for (let i = 0; i < courseIds.length; i += 10) {
-              const chunk = courseIds.slice(i, i + 10);
-              const qAssign = query(
-                assignmentsRef,
-                where("course_id", "in", chunk),
-              );
-              const assignSnap = await getDocs(qAssign);
-              assignmentsData.push(
-                ...assignSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
-              );
-            }
+            const assignmentsData = await getBackend<any[]>("/api/assignments/");
 
             if (assignmentsData.length === 0) {
               setAssignments([]);
@@ -267,36 +225,18 @@ export default function StudentAssignments() {
               return;
             }
 
-            const assignmentIds = assignmentsData.map((a) => a.id);
+            const assignmentIds = assignmentsData.map((a: any) => a.id);
 
             // Get student's submissions for these assignments
-            const submissionsRef = collection(db, "submissions");
-            const submissionsData: any[] = [];
-            for (let i = 0; i < assignmentIds.length; i += 10) {
-              const chunk = assignmentIds.slice(i, i + 10);
-              const qSubs = query(
-                submissionsRef,
-                where("student_id", "==", user.uid),
-                where("assignment_id", "in", chunk),
-              );
-              const subSnap = await getDocs(qSubs);
-              submissionsData.push(...subSnap.docs.map((d) => d.data()));
-            }
+            const submissionsData = await getBackend<any[]>("/api/submissions/");
 
             // Fetch course details for these assignments
             const uniqueCourseIds = Array.from(
-              new Set(assignmentsData.map((a) => a.course_id)),
+              new Set(assignmentsData.map((a: any) => a.course_id)),
             );
+            const courseUnitsData = await getBackend<any[]>("/api/course-units/");
             const courseMap = new Map();
-            for (let i = 0; i < uniqueCourseIds.length; i += 10) {
-              const chunk = uniqueCourseIds.slice(i, i + 10);
-              const qCourse = query(
-                collection(db, "course_units"),
-                where("__name__", "in", chunk),
-              );
-              const courseSnap = await getDocs(qCourse);
-              courseSnap.docs.forEach((d) => courseMap.set(d.id, d.data()));
-            }
+            courseUnitsData.forEach((d: any) => courseMap.set(d.id, d));
 
             // Filter to show assignments that are visible to students (not closed or graded)
             const publishedAssignments = assignmentsData

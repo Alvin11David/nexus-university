@@ -46,18 +46,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  query,
-  getDocs,
-  addDoc,
-  deleteDoc,
-  doc,
-  orderBy,
-  where,
-  serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface StudentRecord {
   id: string;
@@ -146,35 +135,8 @@ export default function RegistrarStudents() {
   const fetchStudents = async () => {
     try {
       setLoading(true);
-      const studentRecordsRef = collection(db, "student_records");
-      const q = query(studentRecordsRef, orderBy("created_at", "desc"));
-      const querySnapshot = await getDocs(q);
-
-      const studentData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as StudentRecord[];
-
-      // Fetch profiles for avatar URLs
-      const studentIds = studentData.map((s) => s.id);
-      const profilesRef = collection(db, "profiles");
-
-      // Firestore 'in' query supports up to 10 items. If there are more, we need to batch or fetch all and filter.
-      // For simplicity and to handle more than 10 students, let's fetch profiles that have student_record_id
-      // but if the list is huge, we might need a different approach.
-      // Given it's a dashboard, we'll fetch profiles and merge.
-      const profilesSnapshot = await getDocs(profilesRef);
-      const profiles = profilesSnapshot.docs.map(doc => doc.data());
-
-      // Merge avatar URLs into student data
-      const studentsWithAvatars = studentData.map((student) => ({
-        ...student,
-        avatar_url: profiles.find(
-          (p) => p.student_record_id === student.id
-        )?.avatar_url,
-      }));
-
-      setStudents(studentsWithAvatars);
+      const studentData = await getBackend<StudentRecord[]>("/api/students/");
+      setStudents(studentData || []);
     } catch (error: any) {
       console.error("Error fetching students:", error);
       toast({
@@ -233,11 +195,10 @@ export default function RegistrarStudents() {
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, "student_records"), {
+      await postBackend("/api/students/", {
         ...formData,
         enrollment_status: "active",
         year_of_study: parseInt(formData.year_of_study.toString()),
-        created_at: serverTimestamp(),
         is_registered: false,
       });
 
@@ -274,7 +235,7 @@ export default function RegistrarStudents() {
 
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "student_records", studentToDelete.id));
+      await postBackend(`/api/students/${studentToDelete.id}/action/`, { action: "delete" });
 
       toast({
         title: "Success",

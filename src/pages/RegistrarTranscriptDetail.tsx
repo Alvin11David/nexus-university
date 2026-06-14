@@ -60,17 +60,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  orderBy,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface TranscriptRequest {
   id: string;
@@ -147,15 +137,13 @@ export default function RegistrarTranscriptDetail() {
       setLoading(true);
       if (!id) return;
 
-      const requestDoc = await getDoc(doc(db, "transcript_requests", id));
-
-      if (!requestDoc.exists()) {
+      const data = await getBackend<TranscriptRequest>(`/api/transcript-requests/${id}/`);
+      if (!data) {
         throw new Error("Transcript request not found");
       }
 
-      const data = { id: requestDoc.id, ...requestDoc.data() } as TranscriptRequest;
       setRequest(data);
-      setProcessingNotes((data as any)?.notes || "");
+      setProcessingNotes(data?.notes || "");
     } catch (error: any) {
       console.error("Error fetching request:", error);
       toast({
@@ -172,48 +160,22 @@ export default function RegistrarTranscriptDetail() {
   const fetchEnrollments = async () => {
     try {
       if (!id) return;
-      const requestDoc = await getDoc(doc(db, "transcript_requests", id));
-      if (!requestDoc.exists()) return;
+      const requestData = await getBackend<TranscriptRequest>(`/api/transcript-requests/${id}/`);
+      if (!requestData) return;
 
-      const studentId = requestDoc.data().student_id;
+      const studentId = requestData.student_id;
       if (!studentId) return;
 
-      const enrollmentsRef = collection(db, "enrollments");
-      const q = query(
-        enrollmentsRef,
-        where("student_id", "==", studentId),
-        where("status", "==", "completed"),
-        orderBy("enrolled_at", "asc")
-      );
-
-      const enrollSnap = await getDocs(q);
-      const enrollData = enrollSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-      const mapped = await Promise.all(enrollData.map(async (row: any) => {
-        let courseInfo = { code: "", title: "", credits: 0, semester: "", academic_year: "" };
-        if (row.course_id) {
-          const courseDoc = await getDoc(doc(db, "courses", row.course_id));
-          if (courseDoc.exists()) {
-            const cd = courseDoc.data();
-            courseInfo = {
-              code: cd.code || "",
-              title: cd.title || "",
-              credits: cd.credits || 0,
-              semester: cd.semester || "",
-              academic_year: cd.academic_year || "",
-            };
-          }
-        }
-        return {
-          id: row.id,
-          course_code: courseInfo.code,
-          course_title: courseInfo.title,
-          credits: courseInfo.credits,
-          grade: row.grade ?? "",
-          semester: courseInfo.semester,
-          academic_year: courseInfo.academic_year,
-          enrollment_date: row.enrolled_at || row.enrollment_date || "",
-        };
+      const enrollData = await getBackend<any[]>(`/api/enrollments/?student_id=${studentId}&status=completed`);
+      const mapped: Enrollment[] = (enrollData || []).map((row: any) => ({
+        id: row.id,
+        course_code: row.course_code || row.course?.code || "",
+        course_title: row.course_title || row.course?.title || "",
+        credits: row.credits || row.course?.credits || 0,
+        grade: row.grade ?? "",
+        semester: row.semester || row.course?.semester || "",
+        academic_year: row.academic_year || row.course?.academic_year || "",
+        enrollment_date: row.enrolled_at || row.enrollment_date || "",
       }));
 
       setEnrollments(mapped);
@@ -230,7 +192,6 @@ export default function RegistrarTranscriptDetail() {
       const updates: any = {
         status: newStatus,
         notes: processingNotes,
-        updated_at: new Date().toISOString(),
       };
 
       if (newStatus === "processing") {
@@ -240,7 +201,7 @@ export default function RegistrarTranscriptDetail() {
         updates.copies_issued = (request.copies_issued || 0) + 1;
       }
 
-      await updateDoc(doc(db, "transcript_requests", id), updates);
+      await postBackend(`/api/transcript-requests/${id}/update/`, updates);
 
       toast({
         title: "Success",
@@ -265,12 +226,11 @@ export default function RegistrarTranscriptDetail() {
 
     setIsProcessing(true);
     try {
-      await updateDoc(doc(db, "transcript_requests", id), {
+      await postBackend(`/api/transcript-requests/${id}/update/`, {
         status: "issued",
         issued_date: new Date().toISOString(),
         copies_issued: (request.copies_issued || 0) + 1,
         notes: processingNotes,
-        updated_at: new Date().toISOString(),
       });
 
       toast({
@@ -304,11 +264,10 @@ export default function RegistrarTranscriptDetail() {
 
     setIsProcessing(true);
     try {
-      await updateDoc(doc(db, "transcript_requests", id), {
+      await postBackend(`/api/transcript-requests/${id}/update/`, {
         status: "rejected",
         rejection_reason: rejectionReason,
         notes: processingNotes,
-        updated_at: new Date().toISOString(),
       });
 
       toast({
@@ -336,9 +295,8 @@ export default function RegistrarTranscriptDetail() {
 
     setIsProcessing(true);
     try {
-      await updateDoc(doc(db, "transcript_requests", id), {
+      await postBackend(`/api/transcript-requests/${id}/update/`, {
         fees_paid: !request.fees_paid,
-        updated_at: new Date().toISOString(),
       });
 
       toast({
@@ -849,9 +807,8 @@ export default function RegistrarTranscriptDetail() {
                     onClick={async () => {
                       if (!id) return;
                       try {
-                        await updateDoc(doc(db, "transcript_requests", id), {
+                        await postBackend(`/api/transcript-requests/${id}/update/`, {
                           notes: processingNotes,
-                          updated_at: new Date().toISOString(),
                         });
                         toast({
                           title: "Success",

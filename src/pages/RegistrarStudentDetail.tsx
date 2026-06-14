@@ -35,17 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 interface StudentRecord {
   id: string;
@@ -113,38 +103,13 @@ export default function RegistrarStudentDetail() {
       setLoading(true);
       if (!id) return;
 
-      const studentDoc = await getDoc(doc(db, "student_records", id));
-
-      if (!studentDoc.exists()) {
+      const studentData = await getBackend<StudentRecord>(`/api/students/${id}/`);
+      if (!studentData) {
         throw new Error("Student record not found");
       }
 
-      const studentData = { id: studentDoc.id, ...studentDoc.data() } as StudentRecord;
-
-      // Fetch profile for avatar URL
-      let avatar_url = null;
-      try {
-        const profilesRef = collection(db, "profiles");
-        const q = query(
-          profilesRef,
-          where("student_record_id", "==", id),
-          limit(1)
-        );
-        const profileSnap = await getDocs(q);
-        if (!profileSnap.empty) {
-          avatar_url = profileSnap.docs[0].data().avatar_url;
-        }
-      } catch (profileError) {
-        console.warn("Could not fetch profile:", profileError);
-      }
-
-      const studentWithAvatar = {
-        ...studentData,
-        avatar_url,
-      };
-
-      setStudent(studentWithAvatar);
-      setFormData(studentWithAvatar);
+      setStudent(studentData);
+      setFormData(studentData);
     } catch (error: any) {
       console.error("Error fetching student:", error);
       toast({
@@ -163,20 +128,13 @@ export default function RegistrarStudentDetail() {
 
     setIsSaving(true);
     try {
-      const studentRef = doc(db, "student_records", id);
       const updateData = { ...formData };
-
-      // Remove ID from data to be saved to avoid overwriting or errors
       // @ts-ignore
       delete updateData.id;
-      // Also remove avatar_url if it's not part of the student_record table in DB
       // @ts-ignore
       delete updateData.avatar_url;
 
-      await updateDoc(studentRef, {
-        ...updateData,
-        updated_at: new Date().toISOString(),
-      });
+      await postBackend(`/api/students/${id}/update/`, updateData);
 
       setStudent(formData);
       setIsEditing(false);

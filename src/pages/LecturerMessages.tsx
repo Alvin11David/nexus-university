@@ -36,9 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
-import { storage } from "@/integrations/firebase/client";
 import { getBackend, postBackend } from "@/lib/backendApi";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 interface Message {
   id: string;
@@ -104,13 +102,11 @@ export default function LecturerMessages() {
     attachmentName: string,
   ) => {
     try {
-      const storageRef = ref(storage, attachmentPath);
-      const url = await getDownloadURL(storageRef);
-
+      const url = await getBackend<string>(`/api/messages/attachment/?path=${encodeURIComponent(attachmentPath)}`);
       const a = document.createElement("a");
       a.href = url;
       a.download = attachmentName;
-      a.target = "_blank"; // Open in new tab if download is not forced by browser
+      a.target = "_blank";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -213,14 +209,7 @@ export default function LecturerMessages() {
       // Upload attachment if present
       if (attachmentFile) {
         setUploadingAttachment(true);
-        const fileExt = attachmentFile.name.split(".").pop();
-        const fileName = `message-attachments/${user.uid}/${Date.now()}.${fileExt}`;
-        const storageRef = ref(storage, fileName);
-
-        await uploadBytes(storageRef, attachmentFile);
-        const downloadUrl = await getDownloadURL(storageRef);
-
-        attachmentUrl = fileName;
+        console.log("Attachment upload not yet implemented via Django API");
         attachmentName = attachmentFile.name;
         attachmentSize = attachmentFile.size;
         setUploadingAttachment(false);

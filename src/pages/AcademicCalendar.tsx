@@ -1,6 +1,4 @@
 import { useMemo, useState, useEffect } from "react";
-import { addDoc } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
 import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -91,18 +89,8 @@ export default function AcademicCalendar() {
     fetchCalendarData();
   }, []);
 
-  // Handler to save academic calendar data to Firestore
   const handleSaveCalendar = async () => {
-    try {
-      await addDoc(collection(db, "AcademicCalendar"), {
-        ...calendarData,
-        savedAt: new Date().toISOString(),
-      });
-      // Optionally show a success message
-      alert("Academic calendar saved to Firestore.");
-    } catch (e) {
-      alert("Failed to save academic calendar.");
-    }
+    alert("Academic calendar data is loaded from the server.");
   };
 
   const matchesFilter = (semesterStatus: string, eventStatus: string) => {

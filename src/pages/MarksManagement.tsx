@@ -1,23 +1,12 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Edit2, Save, X, Calculator, Download, Upload } from "lucide-react";
-import { db } from "@/firebase";
-import {
-  collection,
-  query,
-  limit,
-  getDocs,
-  where,
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { getBackend, postBackend } from "@/lib/backendApi";
 
 import { LecturerBottomNav } from "@/components/layout/LecturerBottomNav";
 import { useToast } from "@/hooks/use-toast";
@@ -90,15 +79,8 @@ export default function MarksManagement() {
 
   const loadCourses = async () => {
     try {
-      const coursesRef = collection(db, "courses");
-      const q = query(coursesRef, limit(10));
-      const querySnapshot = await getDocs(q);
-      const data = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Course[];
-
-      setCourses(data);
+      const data = await getBackend<Course[]>("/api/courses/");
+      setCourses(data || []);
       if (data && data.length > 0) {
         loadStudents(data[0]);
         setSelectedCourse(data[0]);
@@ -112,40 +94,25 @@ export default function MarksManagement() {
 
   const loadStudents = async (course: Course) => {
     try {
-      const enrollmentsRef = collection(db, "enrollments");
-      const q = query(enrollmentsRef, where("course_id", "==", course.id));
-      const querySnapshot = await getDocs(q);
-      const studentIds = querySnapshot.docs.map((doc) => doc.data().student_id);
+      const enrollments = await getBackend<any[]>("/api/enrollments/?course_id=" + course.id);
+      const studentIds: string[] = enrollments.map((e) => e.student_id).filter(Boolean);
 
       if (studentIds.length === 0) {
         setStudents([]);
         return;
       }
 
-      const profiles = await Promise.all(
-        studentIds.map(async (id) => {
-          const docRef = doc(db, "profiles", id);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            return { id: docSnap.id, ...docSnap.data() };
-          }
-          return null;
-        }),
-      );
+      const profiles = await getBackend<any[]>("/api/profiles/");
+      const profileMap = new Map<string, any>();
+      profiles.forEach((p) => profileMap.set(p.id, p));
 
-      const validProfiles = profiles.filter((p) => p !== null) as any[];
-
-      const gradesRef = collection(db, "student_grades");
-      const gradesQuery = query(gradesRef, where("course_id", "==", course.id));
-      const gradesSnapshot = await getDocs(gradesQuery);
+      const grades = await getBackend<any[]>("/api/student-grades/?course_id=" + course.id);
       const gradesMap = new Map<string, any>();
-      gradesSnapshot.docs.forEach((gradeDoc) => {
-        const gradeData = gradeDoc.data();
-        gradesMap.set(gradeData.student_id, { id: gradeDoc.id, ...gradeData });
-      });
+      grades.forEach((g) => gradesMap.set(g.student_id, g));
 
-      const marks = validProfiles.map((p) => {
-        const existingGrade = gradesMap.get(p.id);
+      const marks = studentIds.map((sid) => {
+        const p = profileMap.get(sid);
+        const existingGrade = gradesMap.get(sid);
         const coursework = Number(existingGrade?.assignment1 ?? 0);
         const test = Number(existingGrade?.assignment2 ?? 0);
         const quiz = Number(existingGrade?.participation ?? 0);
@@ -162,9 +129,9 @@ export default function MarksManagement() {
         const computed = calculateGrade(total);
 
         return {
-          id: p.id,
-          student_id: p.id,
-          student_name: p.full_name || "Unknown Student",
+          id: sid,
+          student_id: sid,
+          student_name: p?.full_name || "Unknown Student",
           coursework,
           test,
           quiz,
@@ -217,43 +184,20 @@ export default function MarksManagement() {
     };
 
     try {
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
-      const semester =
-        currentMonth >= 9 || currentMonth <= 2 ? "Fall" : "Spring";
-      const academicYear =
-        currentMonth >= 9
-          ? `${currentYear}-${currentYear + 1}`
-          : `${currentYear - 1}-${currentYear}`;
-
-      const gradeRef = doc(
-        db,
-        "student_grades",
-        `${student.student_id}_${selectedCourse.id}`,
-      );
-
-      await setDoc(
-        gradeRef,
-        {
-          student_id: student.student_id,
-          course_id: selectedCourse.id,
-          lecturer_id: user.uid,
-          assignment1: cw,
-          assignment2: test,
-          participation: quiz,
-          coursework_extra: assign,
-          midterm: mid,
-          final_exam: final,
-          total,
-          grade,
-          gp,
-          semester,
-          academic_year: academicYear,
-          updated_at: serverTimestamp(),
-        },
-        { merge: true },
-      );
+      await postBackend("/api/student-grades/", {
+        student_id: student.student_id,
+        course_id: selectedCourse.id,
+        lecturer_id: user.uid,
+        assignment1: cw,
+        assignment2: test,
+        participation: quiz,
+        coursework_extra: assign,
+        midterm: mid,
+        final_exam: final,
+        total,
+        grade,
+        gp,
+      });
 
       setStudents(students.map((s) => (s.id === student.id ? updated : s)));
       setEditing(null);

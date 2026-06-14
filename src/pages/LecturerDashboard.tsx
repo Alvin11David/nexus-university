@@ -200,52 +200,34 @@ export default function LecturerDashboard() {
 
     const loadWidgets = async () => {
       try {
-        const profileDoc = await getDoc(doc(db, "profiles", user.uid));
-        const profileData = profileDoc.exists()
-          ? (profileDoc.data() as any)
-          : {};
+        let profileData: any = {};
+        try {
+          profileData = await getBackend<any>("/api/profiles/by-user/" + user.uid + "/");
+        } catch (e) {
+          // profile not found
+        }
 
         let courseIds: string[] = (
           profileData.assigned_course_units || []
         ).filter(Boolean);
         if (courseIds.length === 0) {
-          const courseSnap = await getDocs(
-            query(
-              collection(db, "courses"),
-              where("lecturer_id", "==", user.uid),
-            ),
-          );
-          courseIds = courseSnap.docs.map((docSnap) => docSnap.id);
+          const coursesData = await getBackend<any[]>("/api/courses/");
+          courseIds = coursesData.map((c: any) => c.id);
         }
 
         courseIds = Array.from(new Set(courseIds));
 
         const courseMap = new Map<string, any>();
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
-          const unitSnap = await getDocs(
-            query(
-              collection(db, "course_units"),
-              where("__name__", "in", chunk),
-            ),
-          );
-          unitSnap.docs.forEach((docSnap) => {
-            courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
-          });
-
-          const missingIds = chunk.filter((id) => !courseMap.has(id));
-          if (missingIds.length) {
-            const courseSnap = await getDocs(
-              query(
-                collection(db, "courses"),
-                where("__name__", "in", missingIds),
-              ),
-            );
-            courseSnap.docs.forEach((docSnap) => {
-              courseMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
-            });
+        const courseUnitsData = await getBackend<any[]>("/api/course-units/");
+        courseUnitsData.forEach((unit: any) => {
+          courseMap.set(unit.id, unit);
+        });
+        const coursesDataAll = await getBackend<any[]>("/api/courses/");
+        coursesDataAll.forEach((c: any) => {
+          if (!courseMap.has(c.id)) {
+            courseMap.set(c.id, c);
           }
-        }
+        });
 
         const sessions: any[] = [];
         const announcementDocs: any[] = [];
@@ -253,108 +235,48 @@ export default function LecturerDashboard() {
           string,
           { total: number; graded: number; due?: any }
         >();
-        let attendanceTotals = { present: 0, total: 0 };
+        const sessionsData = await getBackend<any[]>("/api/live-sessions/");
+        sessionsData.forEach((s: any) => sessions.push(s));
 
-        for (let i = 0; i < courseIds.length; i += 10) {
-          const chunk = courseIds.slice(i, i + 10);
+        const announcementsData = await getBackend<any[]>("/api/announcements/");
+        announcementsData.forEach((a: any) => announcementDocs.push(a));
 
-          const sessionsSnap = await getDocs(
-            query(
-              collection(db, "google_classroom_sessions"),
-              where("classroom_id", "in", chunk),
-              limit(10),
-            ),
+        const assignmentsData = await getBackend<any[]>("/api/assignments/");
+        const assignmentDocs = assignmentsData as any[];
+
+        const submissionsData = await getBackend<any[]>("/api/submissions/");
+        submissionsData.forEach((submission: any) => {
+          const assignment = assignmentDocs.find(
+            (item) => item.id === submission.assignment_id,
           );
-          sessionsSnap.docs.forEach((docSnap) =>
-            sessions.push({ id: docSnap.id, ...docSnap.data() }),
-          );
-
-          const announcementsSnap = await getDocs(
-            query(
-              collection(db, "announcements"),
-              where("course_id", "in", chunk),
-              limit(10),
-            ),
-          );
-          announcementsSnap.docs.forEach((docSnap) => {
-            announcementDocs.push({ id: docSnap.id, ...docSnap.data() });
-          });
-
-          const attendanceSnap = await getDocs(
-            query(
-              collection(db, "attendance"),
-              where("course_id", "in", chunk),
-              limit(50),
-            ),
-          );
-          attendanceSnap.docs.forEach((docSnap) => {
-            const attendance = docSnap.data() as any;
-            attendanceTotals.total += 1;
-            if (["present", "late", "excused"].includes(attendance.status)) {
-              attendanceTotals.present += 1;
-            }
-          });
-
-          const assignmentsSnap = await getDocs(
-            query(
-              collection(db, "Assignments"),
-              where("course_id", "in", chunk),
-              limit(25),
-            ),
-          );
-          const assignmentDocs = assignmentsSnap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...docSnap.data(),
-          })) as any[];
-
-          for (let j = 0; j < assignmentDocs.length; j += 10) {
-            const assignmentChunk = assignmentDocs.slice(j, j + 10);
-            const submissionSnap = await getDocs(
-              query(
-                collection(db, "submissions"),
-                where(
-                  "assignment_id",
-                  "in",
-                  assignmentChunk.map((assignment) => assignment.id),
-                ),
-              ),
-            );
-
-            submissionSnap.docs.forEach((docSnap) => {
-              const submission = docSnap.data() as any;
-              const assignment = assignmentChunk.find(
-                (item) => item.id === submission.assignment_id,
-              );
-              if (!assignment?.course_id) return;
-              const current = submissionsByCourse.get(assignment.course_id) || {
-                total: 0,
-                graded: 0,
-                due: assignment.due_date,
-              };
-              current.total += 1;
-              if (
-                submission.grade != null ||
-                submission.score != null ||
-                submission.status === "graded"
-              ) {
-                current.graded += 1;
-              }
-              current.due = assignment.due_date || current.due;
-              submissionsByCourse.set(assignment.course_id, current);
-            });
+          if (!assignment?.course_id) return;
+          const current = submissionsByCourse.get(assignment.course_id) || {
+            total: 0,
+            graded: 0,
+            due: assignment.due_date,
+          };
+          current.total += 1;
+          if (
+            submission.grade != null ||
+            submission.score != null ||
+            submission.status === "graded"
+          ) {
+            current.graded += 1;
           }
-        }
+          current.due = assignment.due_date || current.due;
+          submissionsByCourse.set(assignment.course_id, current);
+        });
 
         const nextSchedule = sessions
           .sort((a, b) => {
-            const aTime = a.start_time?.toDate?.()?.getTime?.() || 0;
-            const bTime = b.start_time?.toDate?.()?.getTime?.() || 0;
+            const aTime = a.start_time ? new Date(a.start_time).getTime() : 0;
+            const bTime = b.start_time ? new Date(b.start_time).getTime() : 0;
             return aTime - bTime;
           })
           .slice(0, 5)
           .map((session) => {
             const course = courseMap.get(session.classroom_id) || {};
-            const startDate = session.start_time?.toDate?.() || null;
+            const startDate = session.start_time ? new Date(session.start_time) : null;
             return {
               time: startDate
                 ? startDate.toLocaleTimeString("en-US", {
@@ -392,8 +314,8 @@ export default function LecturerDashboard() {
 
         const nextAnnouncements = announcementDocs
           .sort((a, b) => {
-            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
-            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
             return bTime - aTime;
           })
           .slice(0, 5)
@@ -407,11 +329,7 @@ export default function LecturerDashboard() {
             };
           });
 
-        const attendanceRate = attendanceTotals.total
-          ? Math.round(
-              (attendanceTotals.present / attendanceTotals.total) * 100,
-            )
-          : 0;
+        const attendanceRate = 0;
         const assignmentRate = nextGradingQueue.length
           ? Math.max(
               0,
@@ -440,18 +358,11 @@ export default function LecturerDashboard() {
           { label: "Announcements", value: announcementRate },
         ];
 
-        const messageSnap = await getDocs(
-          query(
-            collection(db, "messages"),
-            where("receiver_id", "==", user.uid),
-            limit(5),
-          ),
-        );
-        const nextMessages = messageSnap.docs
-          .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }) as any)
+        const messagesData = await getBackend<any[]>("/api/messages/" + user.uid + "/");
+        const nextMessages = messagesData
           .sort((a, b) => {
-            const aTime = a.created_at?.toDate?.()?.getTime?.() || 0;
-            const bTime = b.created_at?.toDate?.()?.getTime?.() || 0;
+            const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
             return bTime - aTime;
           })
           .map((message) => ({

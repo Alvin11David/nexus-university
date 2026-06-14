@@ -38,6 +38,7 @@ import { StudentHeader } from "@/components/layout/StudentHeader";
 import { StudentBottomNav } from "@/components/layout/StudentBottomNav";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow, format } from "date-fns";
+import { postBackend } from "@/lib/backendApi";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -131,13 +132,10 @@ export default function Webmail() {
     attachmentName: string,
   ) => {
     try {
-      const storageRef = ref(storage, attachmentUrl);
-      const url = await getDownloadURL(storageRef);
-
       const a = document.createElement("a");
-      a.href = url;
+      a.href = attachmentUrl;
       a.download = attachmentName;
-      a.target = "_blank"; // Firebase URLs can be opened in new tab or downloaded
+      a.target = "_blank";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -462,9 +460,9 @@ export default function Webmail() {
 
   const handleArchive = async (messageId: string, currentValue: boolean) => {
     try {
-      await updateDoc(doc(db, "messages", messageId), {
-        is_archived: !currentValue,
-        updated_at: serverTimestamp(),
+      await postBackend("/api/messages/" + messageId + "/action/", {
+        action: "archive",
+        user_id: user?.uid,
       });
       fetchMessages();
       if (selectedMessage?.id === messageId) {

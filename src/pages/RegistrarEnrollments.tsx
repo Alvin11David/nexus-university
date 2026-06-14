@@ -14,16 +14,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import {
-  collection,
-  query,
-  getDocs,
-  doc,
-  updateDoc,
-  orderBy,
-  getDoc,
-} from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
+import { getBackend, postBackend } from "@/lib/backendApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -104,56 +95,8 @@ export default function RegistrarEnrollments() {
   const fetchEnrollments = async () => {
     try {
       setLoading(true);
-      const enrollmentsRef = collection(db, "enrollments");
-      const q = query(enrollmentsRef, orderBy("enrolled_at", "desc"));
-      const querySnapshot = await getDocs(q);
-
-      const enrollData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-
-      // In a real app with many records, we'd batch these fetches.
-      // For this migration, we'll fetch associated data for the visible enrollments.
-      const enrichedEnrollments = await Promise.all(enrollData.map(async (enrollment: any) => {
-        let studentData = null;
-        let courseData = null;
-
-        if (enrollment.student_id) {
-          const studentDoc = await getDoc(doc(db, "student_records", enrollment.student_id));
-          if (studentDoc.exists()) {
-            const sd = studentDoc.data();
-            studentData = {
-              full_name: sd.full_name || "Unknown",
-              student_number: sd.student_number || "N/A",
-              email: sd.email || "N/A",
-            };
-          }
-        }
-
-        if (enrollment.course_id) {
-          const courseDoc = await getDoc(doc(db, "courses", enrollment.course_id));
-          if (courseDoc.exists()) {
-            const cd = courseDoc.data();
-            courseData = {
-              id: courseDoc.id,
-              code: cd.code || "N/A",
-              title: cd.title || "N/A",
-              credits: cd.credits || 0,
-              semester: cd.semester || "N/A",
-              capacity: cd.capacity || null,
-            };
-          }
-        }
-
-        return {
-          ...enrollment,
-          student: studentData,
-          course: courseData,
-        } as EnrollmentRow;
-      }));
-
-      setEnrollments(enrichedEnrollments);
+      const enrollData = await getBackend<any[]>("/api/enrollments/");
+      setEnrollments(enrollData || []);
     } catch (error: any) {
       console.error("Error fetching enrollments:", error);
       toast({
@@ -200,10 +143,7 @@ export default function RegistrarEnrollments() {
   const updateStatus = async (id: string, status: EnrollmentRow["status"]) => {
     setUpdatingId(id);
     try {
-      await updateDoc(doc(db, "enrollments", id), {
-        status,
-        updated_at: new Date().toISOString(),
-      });
+      await postBackend(`/api/enrollments/${id}/update/`, { status });
       toast({ title: "Updated", description: `Enrollment marked ${status}.` });
       fetchEnrollments();
     } catch (error: any) {

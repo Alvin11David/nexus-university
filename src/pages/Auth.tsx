@@ -34,8 +34,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSiteSettings } from "@/contexts/SiteSettingsContext";
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "@/integrations/firebase/client";
 
 type AuthStep =
   | "signin"
@@ -159,18 +157,23 @@ export default function Auth() {
     }
   }, [initialMode]);
 
-  // Fetch unique colleges and initial courses from collection
+  // Fetch unique colleges and initial courses from Django API
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const querySnapshot = await getDocs(collection(db, "courses"));
+        const accessToken = localStorage.getItem("accessToken");
+        const headers: Record<string, string> = {};
+        if (accessToken) {
+          headers["Authorization"] = `Token ${accessToken}`;
+        }
+        const res = await fetch("/api/courses/", { headers });
+        const coursesData = await res.json();
         const collegeList = new Set<string>();
         const courses: any[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          courses.push(data);
-          if (data.college) {
-            collegeList.add(data.college);
+        coursesData.forEach((course: any) => {
+          courses.push(course);
+          if (course.college) {
+            collegeList.add(course.college);
           }
         });
         setAllCourses(courses);

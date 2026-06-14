@@ -442,8 +442,6 @@ export default function LecturerAssignments() {
       };
 
       await postBackend(`/api/assignments/${editing.id}/update/`, payload);
-
-      const course = courses.find((c) => c.id === editFormData.courseId);
       const updated: Assignment = {
         id: editing.id,
         title: editFormData.title,
